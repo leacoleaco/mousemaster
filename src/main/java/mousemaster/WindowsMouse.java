@@ -119,7 +119,12 @@ public class WindowsMouse {
     }
 
     public static void synchronousMoveTo(int x, int y) {
-        WinDef.POINT mousePosition = findMousePosition();
+        WinDef.POINT mousePosition = tryFindMousePosition();
+        // GetCursorPos can fail on the Win+L lock screen.
+        if (mousePosition == null) {
+            logger.warn("Unable to find mouse position for synchronous move");
+            return;
+        }
         Screen activeScreen = WindowsScreen.findActiveScreen(mousePosition);
         // TODO What if the move is across multiple screens?
         double scaledDeltaX = Math.abs(x - mousePosition.x) / activeScreen.scale();
