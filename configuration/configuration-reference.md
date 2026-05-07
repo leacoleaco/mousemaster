@@ -251,6 +251,17 @@ When shift is released, the property reverts to its default. Mutations are most 
 normal-mode.indicator.idle.color=#00FF00 | _{leftctrl} -> #FF0000
 ```
 
+Mutations can also be driven by [variables](combo-reference.md#variables) (boolean flags settable from combos) instead of held keys, so the value persists across mode switches and survives key releases:
+
+```properties
+# Toggle iszoom on/off with z, change zoom percent based on the variable
+hint-mode.set-variable.iszoom=_{!iszoom} +z
+hint-mode.unset-variable.iszoom=_{iszoom} +z
+hint-mode.zoom.percent=1 | _{iszoom} -> 30
+```
+
+When mutating an indicator or hint font property, related properties are automatically updated. For example, mutating `font-color` also mutates `selected-font-color`, `focused-font-color`, and the corresponding prefix variants (unless they were explicitly set in the configuration). Mutating `indicator.idle.color` also mutates `move`, `wheel`, `mouse-press`, etc.
+
 ### Mouse properties
 
 ```properties
@@ -392,6 +403,20 @@ normal-mode.indicator.idle.label-font-shadow-vertical-offset=0
 - **`label-font-weight`**: Font weight (e.g. normal, bold)
 - **`label-font-color`**: Hex color of the label text
 - **`label-font-opacity`**: Opacity of the label text (0.0-1.0)
+
+#### Fade animation
+
+When the indicator appears, disappears, or changes color (e.g. when switching modes), it fades in and out instead of popping abruptly.
+
+```properties
+normal-mode.indicator.fade-animation-enabled=true
+normal-mode.indicator.fade-animation-duration-millis=100
+```
+
+- **`fade-animation-enabled`**: Whether to fade the indicator (default `true`).
+- **`fade-animation-duration-millis`**: Duration of the fade in/out in milliseconds (default `100`).
+
+The fade animation is automatically suppressed when the surrounding mode change also changes zoom, to avoid the faded indicator clashing with the zoom screenshot.
 
 ### Cursor properties
 
@@ -654,7 +679,11 @@ hint-mode.hint.prefix-in-background=true
 # Animation
 hint-mode.hint.transition-animation-enabled=true
 hint-mode.hint.transition-animation-duration-millis=100
- 
+
+# Fade animation (when hints appear or disappear)
+hint-mode.hint.fade-animation-enabled=true
+hint-mode.hint.fade-animation-duration-millis=100
+
 # Background (for UI hints and position history hints only)
 hint-mode.hint.background-color=#000000
 hint-mode.hint.background-opacity=0
@@ -674,7 +703,11 @@ hint-mode.hint.background-opacity=0
 
 - Font appearance: controls how hint labels appear
     - `font-spacing-percent`: Controls character spacing (0=touching, 1=evenly distributed, 0.5=minimal spacing with alignment)
- 
+
+- Animation:
+    - `transition-animation-enabled` / `transition-animation-duration-millis`: animates hint boxes sliding to their new positions when the hint set changes (e.g. after typing a key in a multi-level hint mode). Default enabled, 100ms.
+    - `fade-animation-enabled` / `fade-animation-duration-millis`: fades hints in when they first appear and out when they disappear. Default enabled, 100ms. Suppressed when the surrounding mode change also changes zoom.
+
 ### Hint prefix
 
 A hint is made of several keys (letters). For example, hint JKK is made of 3 keys: J, K and K.
