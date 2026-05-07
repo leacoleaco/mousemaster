@@ -10,7 +10,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -218,16 +220,25 @@ public class WindowsUiAutomation {
         return false;
     }
 
-    // Queries UI elements from the given window and all visible windows on the same thread
-    // (e.g. popup menus are separate windows on the same thread).
+    /**
+     * Queries UI elements from the given window and all visible windows on the same thread
+     * (e.g. popup menus are separate windows on the same thread).
+     * Thread-windows that aren't owned by the foreground window and aren't on a
+     * monitor the foreground window touches are skipped. Without this filter,
+     * Chromium-based browsers which share a UI thread across multiple top-level browser windows,
+     * would surface elements from unrelated browser windows on other monitors and
+     * scatter hints onto the wrong screen.
+     */
     private static List<UiElement> queryUiElementsOfWindowAndChildren(HWND foregroundHwnd) {
         int threadId = User32.INSTANCE.GetWindowThreadProcessId(foregroundHwnd, null);
+        long foregroundKey = Pointer.nativeValue(foregroundHwnd.getPointer());
+        Set<Long> foregroundMonitors = monitorsIntersectingWindow(foregroundHwnd);
         List<HWND> windows = new ArrayList<>();
         windows.add(foregroundHwnd);
-        long foregroundKey = Pointer.nativeValue(foregroundHwnd.getPointer());
         ExtendedUser32.INSTANCE.EnumThreadWindows(threadId, (hwnd, data) -> {
             if (Pointer.nativeValue(hwnd.getPointer()) != foregroundKey &&
-                User32.INSTANCE.IsWindowVisible(hwnd))
+                User32.INSTANCE.IsWindowVisible(hwnd) &&
+                shouldIncludeThreadWindow(hwnd, foregroundKey, foregroundMonitors))
                 windows.add(hwnd);
             return true;
         }, null);
@@ -240,6 +251,37 @@ public class WindowsUiAutomation {
                 uiElements.size(), foregroundKey, windows.size(),
                 (long) ((System.nanoTime() - before) / 1e6));
         return uiElements;
+    }
+
+    private static Set<Long> monitorsIntersectingWindow(HWND hwnd) {
+        WinDef.RECT windowRect = new WinDef.RECT();
+        if (!User32.INSTANCE.GetWindowRect(hwnd, windowRect))
+            return Set.of();
+        Set<Long> monitors = new HashSet<>();
+        User32.INSTANCE.EnumDisplayMonitors(null, windowRect,
+                (hMonitor, hdcMonitor, lprcMonitor, dwData) -> {
+                    monitors.add(Pointer.nativeValue(hMonitor.getPointer()));
+                    return 1;
+                }, null);
+        return monitors;
+    }
+
+    private static boolean shouldIncludeThreadWindow(HWND hwnd, long foregroundKey,
+                                                     Set<Long> foregroundMonitors) {
+        // Owned popups (menus, dropdowns, dialogs anchored to the focused window)
+        // are kept regardless of which monitor they land on.
+        HWND owner = User32.INSTANCE.GetWindow(hwnd, new WinDef.DWORD(User32.GW_OWNER));
+        if (owner != null &&
+            Pointer.nativeValue(owner.getPointer()) == foregroundKey)
+            return true;
+        WinDef.RECT rect = new WinDef.RECT();
+        if (!User32.INSTANCE.GetWindowRect(hwnd, rect))
+            return false;
+        WinUser.HMONITOR monitor = User32.INSTANCE.MonitorFromRect(rect,
+                WinUser.MONITOR_DEFAULTTONULL);
+        if (monitor == null)
+            return false;
+        return foregroundMonitors.contains(Pointer.nativeValue(monitor.getPointer()));
     }
 
     private static void queryUiElementsOfWindow(HWND hwnd,
