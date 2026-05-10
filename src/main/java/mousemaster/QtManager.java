@@ -85,6 +85,7 @@ public class QtManager {
         logger.trace("highDpiScaleFactorRoundingPolicy is " + QApplication.highDpiScaleFactorRoundingPolicy());
         // Default font engine on Windows is directwrite. Antialiasing seems better with gdi.
         QApplication.initialize(new String[] { "-platform", "windows:fontengine=gdi" });
+        QApplication.setQuitOnLastWindowClosed(false);
 //        QApplication.initialize(new String[] { });
     }
 

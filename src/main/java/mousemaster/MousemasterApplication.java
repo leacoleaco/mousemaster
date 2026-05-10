@@ -82,6 +82,19 @@ public class MousemasterApplication {
                                        .findFirst()
                                        .map(Paths::get)
                                        .orElse(Paths.get("mousemaster.properties"));
+        if (Stream.of(args).anyMatch("--visual-settings"::equals)) {
+            logger.info("mousemaster v" + version + " (" + commitId + ")");
+            try {
+                QtManager.initialize();
+                VisualSettingsWindow dialog = new VisualSettingsWindow(configurationPath);
+                dialog.exec();
+            } catch (Throwable e) {
+                shutdownAfterException(e, null, false, pauseOnError);
+            } finally {
+                QtManager.stop();
+            }
+            return;
+        }
         boolean multipleInstancesAllowed =
                 Stream.of(args)
                       .filter(arg -> arg.startsWith("--multiple-instances-allowed="))

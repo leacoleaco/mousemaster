@@ -27,17 +27,26 @@ public class Mousemaster {
     private List<String> configurationProperties;
     private KeyboardLayout activeKeyboardLayout;
     private KeyboardLayout forcedActiveKeyboardLayout;
+    private MousemasterTray tray;
 
     public Mousemaster(Path configurationPath, Platform platform) throws IOException {
         this.configurationPath = configurationPath;
         this.platform = platform;
         this.activeKeyboardLayout = platform.activeKeyboardLayout();
+        MousemasterApplication.hideConsole();
         QtManager.initialize();
-        loadConfiguration(true);
+        loadConfiguration(true, false);
         watchService = FileSystems.getDefault().newWatchService();
         configurationPath.toAbsolutePath()
                          .getParent()
                          .register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
+        tray = new MousemasterTray(this);
+        if (!tray.isActive()) {
+            if (configuration.hideConsole())
+                MousemasterApplication.hideConsole();
+            else
+                MousemasterApplication.showConsole();
+        }
     }
 
     public void run() throws InterruptedException {
@@ -142,14 +151,18 @@ public class Mousemaster {
 
     private void tryLoadConfiguration(boolean reReadFile) {
         try {
-            loadConfiguration(reReadFile);
+            loadConfiguration(reReadFile, true);
         } catch (Exception e) {
             logger.error(
                     "Unable to load configuration file " + configurationPath, e);
         }
     }
 
-    private void loadConfiguration(boolean readFile) throws IOException {
+    /**
+     * @param applyHideConsoleFromConfig when {@code false} (initial load before tray), skip
+     *                                     show/hide console so the tray can apply tray-only startup.
+     */
+    private void loadConfiguration(boolean readFile, boolean applyHideConsoleFromConfig) throws IOException {
         boolean reload = configuration != null;
         if (readFile) {
             try (BufferedReader reader = Files.newBufferedReader(configurationPath,
@@ -171,10 +184,12 @@ public class Mousemaster {
             MousemasterApplication.enableLogToFile();
         else
             MousemasterApplication.disableLogToFile();
-        if (configuration.hideConsole())
-            MousemasterApplication.hideConsole();
-        else
-            MousemasterApplication.showConsole();
+        if (applyHideConsoleFromConfig) {
+            if (configuration.hideConsole())
+                MousemasterApplication.hideConsole();
+            else
+                MousemasterApplication.showConsole();
+        }
         logger.info((reload ? "Reloaded" : "Loaded") + " configuration " +
                     (readFile ? "file " + configurationPath + " " : "") +
                     "with active keyboard layout " + activeKeyboardLayout);
@@ -234,6 +249,26 @@ public class Mousemaster {
                 configuration.modeMap(),
                 List.of(mouseController, gridManager, hintManager, screenManager,
                         zoomManager), activeKeyboardLayout);
+        if (tray != null && tray.isActive())
+            tray.applySavedConsoleVisibility();
+    }
+
+    Path configurationPath() {
+        return configurationPath;
+    }
+
+    Configuration configuration() {
+        return configuration;
+    }
+
+    void exitFromTray() {
+        if (tray != null) {
+            tray.hide();
+            tray = null;
+        }
+        platform.shutdown();
+        QtManager.stop();
+        System.exit(0);
     }
 
 }
