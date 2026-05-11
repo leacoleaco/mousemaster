@@ -228,13 +228,14 @@ public class Mousemaster {
         KeyboardState keyboardState = new KeyboardState(keyboardManager);
         indicatorManager = new IndicatorManager(mouseState, keyboardState);
         zoomManager = new ZoomManager(screenManager, hintManager);
+        CursorPingManager cursorPingManager = new CursorPingManager();
         // ComboWatcher is the sole broadcaster to ModeListeners: it broadcasts
         // on mode switch (delegated from ModeController) and on mode mutation.
         // ZoomManager must be notified after HintManager because it calls
         // lastSelectedHintPoint() which is updated by HintManager#modeChanged.
         comboWatcher.setModeListeners(
                 List.of(platform, mouseController, indicatorManager, gridManager,
-                        hintManager, zoomManager));
+                        hintManager, zoomManager, cursorPingManager));
         modeController =
                 new ModeController(configuration.modeMap(), mouseController, mouseState,
                         keyboardState,

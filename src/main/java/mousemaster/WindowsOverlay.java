@@ -49,6 +49,11 @@ public class WindowsOverlay {
     private static boolean zoomAfterHintMeshEndAnimation;
     private static Zoom afterHintMeshEndAnimationZoom;
     private static HintMesh currentHintMesh;
+    private static CursorPingHost cursorPingHost;
+    private static boolean cursorPingAnimating;
+    private static double cursorPingElapsed;
+    private static final double CURSOR_PING_PULSE_SECONDS = 0.36;
+    private static final double CURSOR_PING_GAP_SECONDS = 0.06;
     private static ZoomWindow zoomWindow, standByZoomWindow;
     private static Zoom currentZoom;
     private static boolean mustUpdateMagnifierSource;
@@ -78,6 +83,106 @@ public class WindowsOverlay {
         messagePump = pump;
     }
 
+    /**
+     * Brief expanding ring(s) at the cursor, for example when entering normal mode from idle.
+     */
+    public static void startCursorPing(int screenX, int screenY) {
+        WinDef.POINT point = new WinDef.POINT();
+        point.x = screenX;
+        point.y = screenY;
+        Screen screen = WindowsScreen.findActiveScreen(point);
+        Set<Screen> screens = WindowsScreen.findScreens();
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (Screen s : screens) {
+            Rectangle r = s.rectangle();
+            minX = Math.min(minX, r.x());
+            minY = Math.min(minY, r.y());
+            maxX = Math.max(maxX, r.x() + r.width());
+            maxY = Math.max(maxY, r.y() + r.height());
+        }
+        int width = Math.max(1, maxX - minX);
+        int height = Math.max(1, maxY - minY);
+        int cx = screenX - minX;
+        int cy = screenY - minY;
+        double scale = screen.scale();
+        int maxR = (int) Math.round(170 * scale * zoomPercent());
+        int penW = Math.max(2, (int) Math.round(3 * scale * zoomPercent()));
+        if (cursorPingHost == null)
+            createCursorPingWindow();
+        cursorPingHost.window.move(minX, minY);
+        cursorPingHost.window.resize(width, height);
+        cursorPingHost.widget.setGeometry(0, 0, width, height);
+        cursorPingHost.widget.setGeometryParams(cx, cy, maxR, penW);
+        cursorPingHost.widget.setRingRgb(0, 190, 255);
+        cursorPingHost.widget.setPulseState(-1, -1);
+        cursorPingElapsed = 0;
+        cursorPingAnimating = true;
+        cursorPingHost.window.show();
+        cursorPingHost.widget.show();
+        cursorPingHost.widget.raise();
+        cursorPingHost.widget.repaint();
+        updateZoomExcludedWindows();
+        setTopmost();
+    }
+
+    private static void createCursorPingWindow() {
+        TransparentWindow window = new TransparentWindow();
+        CursorPingWidget widget = new CursorPingWidget(window);
+        widget.setGeometry(0, 0, 1, 1);
+        WinDef.HWND hwnd = new WinDef.HWND(new Pointer(window.winId()));
+        long currentStyle =
+                User32.INSTANCE.GetWindowLongPtr(hwnd, WinUser.GWL_EXSTYLE)
+                               .longValue();
+        long newStyle = currentStyle | User32.WS_EX_TOPMOST |
+                ExtendedUser32.WS_EX_NOACTIVATE |
+                ExtendedUser32.WS_EX_TOOLWINDOW |
+                ExtendedUser32.WS_EX_LAYERED | ExtendedUser32.WS_EX_TRANSPARENT;
+        User32.INSTANCE.SetWindowLongPtr(hwnd, WinUser.GWL_EXSTYLE,
+                new Pointer(newStyle));
+        cursorPingHost = new CursorPingHost(hwnd, window, widget);
+    }
+
+    private static void updateCursorPing(double delta) {
+        if (!cursorPingAnimating || cursorPingHost == null)
+            return;
+        cursorPingElapsed += delta;
+        double d = CURSOR_PING_PULSE_SECONDS;
+        double g = CURSOR_PING_GAP_SECONDS;
+        double p0 = -1;
+        double p1 = -1;
+        if (cursorPingElapsed < d)
+            p0 = cursorPingElapsed / d;
+        else if (cursorPingElapsed < d + g) {
+            // Quiet gap between the two ripples.
+        }
+        else if (cursorPingElapsed < d + g + d)
+            p1 = (cursorPingElapsed - d - g) / d;
+        else {
+            stopCursorPing();
+            return;
+        }
+        cursorPingHost.widget.setPulseState(p0, p1);
+        cursorPingHost.widget.repaint();
+    }
+
+    private static void stopCursorPing() {
+        cursorPingAnimating = false;
+        cursorPingElapsed = 0;
+        if (cursorPingHost != null) {
+            cursorPingHost.window.hide();
+            cursorPingHost.widget.setPulseState(-1, -1);
+        }
+        setTopmost();
+    }
+
+    /** Stops any in-progress ping (e.g. before configuration reload). */
+    public static void cancelCursorPing() {
+        stopCursorPing();
+    }
+
     public static void update(double delta) {
         if (setUncachedHintMeshWindowRunnable != null) {
             pumpDuringHintBuild = true;
@@ -92,6 +197,7 @@ public class WindowsOverlay {
             cacheQtHintWindowIntoPixmapRunnable.run();
             cacheQtHintWindowIntoPixmapRunnable = null;
         }
+        updateCursorPing(delta);
         updateZoomWindow();
         // Deferred screenshot hide: the magnifier was shown by updateZoomWindow
         // on the previous frame (or by setZoom inside endScreenshotZoomAnimation).
@@ -148,6 +254,7 @@ public class WindowsOverlay {
         for (HintMeshWindow hintMeshWindow : hintMeshWindows.values()) {
             hintMeshWindow.lastHintMeshKeyReference().set(null);
         }
+        cancelCursorPing();
     }
 
     public static Rectangle activeWindowRectangle(double windowWidthPercent,
@@ -192,6 +299,8 @@ public class WindowsOverlay {
         }
         if (indicatorWindow != null)
             hwnds.add(indicatorWindow.hwnd);
+        if (cursorPingHost != null && cursorPingAnimating)
+            hwnds.add(cursorPingHost.hwnd);
         if (screenshotAnimating) {
             if (screenshotHwnd != null)
                 hwnds.add(screenshotHwnd);
@@ -245,6 +354,89 @@ public class WindowsOverlay {
     private record IndicatorWindow(WinDef.HWND hwnd, TransparentWindow window,
                                    IndicatorWidget widget,
                                    IndicatorLabelWidget labelWidget) {
+    }
+
+    private record CursorPingHost(WinDef.HWND hwnd, TransparentWindow window,
+                                  CursorPingWidget widget) {
+    }
+
+    private static final class CursorPingWidget extends QWidget {
+
+        private int centerX;
+        private int centerY;
+        private int maxRadius;
+        private int penWidth;
+        private int ringRed = 0;
+        private int ringGreen = 200;
+        private int ringBlue = 255;
+        private double pulse0T = -1;
+        private double pulse1T = -1;
+
+        CursorPingWidget(QWidget parent) {
+            super(parent);
+            setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground);
+            setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);
+        }
+
+        void setRingRgb(int red, int green, int blue) {
+            ringRed = red;
+            ringGreen = green;
+            ringBlue = blue;
+        }
+
+        void setGeometryParams(int centerX, int centerY, int maxRadius, int penWidth) {
+            this.centerX = centerX;
+            this.centerY = centerY;
+            this.maxRadius = maxRadius;
+            this.penWidth = penWidth;
+        }
+
+        void setPulseState(double pulse0T, double pulse1T) {
+            this.pulse0T = pulse0T;
+            this.pulse1T = pulse1T;
+        }
+
+        @Override
+        protected void paintEvent(QPaintEvent event) {
+            QPainter painter = new QPainter(this);
+            painter.setCompositionMode(
+                    QPainter.CompositionMode.CompositionMode_Clear);
+            QRect bounds = rect();
+            QColor clear = new QColor(0, 0, 0, 0);
+            painter.fillRect(bounds, clear);
+            clear.dispose();
+            bounds.dispose();
+            painter.setCompositionMode(
+                    QPainter.CompositionMode.CompositionMode_SourceOver);
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, true);
+            if (pulse0T >= 0)
+                drawPulse(painter, pulse0T);
+            if (pulse1T >= 0)
+                drawPulse(painter, pulse1T);
+            painter.end();
+            painter.dispose();
+            super.paintEvent(event);
+        }
+
+        private void drawPulse(QPainter painter, double t) {
+            double clampedT = Math.max(0, Math.min(1, t));
+            double ease = 1.0 - Math.pow(1.0 - clampedT, 2.0);
+            int radius = (int) Math.round(maxRadius * ease);
+            if (radius < 1)
+                return;
+            int alpha = (int) Math.round(220 * (1.0 - clampedT));
+            QColor strokeColor = new QColor(ringRed, ringGreen, ringBlue, alpha);
+            QPen pen = new QPen(strokeColor);
+            pen.setWidth(penWidth);
+            painter.setPen(pen);
+            pen.dispose();
+            strokeColor.dispose();
+            painter.setBrush(Qt.BrushStyle.NoBrush);
+            QRectF ellipse = new QRectF(centerX - radius, centerY - radius,
+                    2.0 * radius, 2.0 * radius);
+            painter.drawEllipse(ellipse);
+            ellipse.dispose();
+        }
     }
 
     private static class IndicatorWidget extends QWidget {
@@ -4239,6 +4431,8 @@ public class WindowsOverlay {
         }
         if (indicatorWindow != null)
             hwnds.add(indicatorWindow.hwnd);
+        if (cursorPingHost != null && cursorPingAnimating)
+            hwnds.add(cursorPingHost.hwnd);
         if (standByZoomWindow != null)
             hwnds.add(standByZoomWindow.hwnd);
         if (screenshotHwnd != null)

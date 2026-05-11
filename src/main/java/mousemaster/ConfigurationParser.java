@@ -417,6 +417,8 @@ public class ConfigurationParser {
                 throw e2;
             }
         }
+        applyIdleDoubleTapToNormal(modeByName, modeReferences, defaultComboMoveDuration,
+                keyAliases, appAliases, keyResolver, allVariableNames);
         // Verify mode name references are valid.
         for (String modeNameReference : modeReferences) {
             if (modeNameReference.equals(Mode.PREVIOUS_MODE_FROM_HISTORY_STACK_IDENTIFIER))
@@ -1443,6 +1445,31 @@ public class ConfigurationParser {
                         commandsByCombo -> setCommand(mode.comboMap.clearVariables.builder, propertyValue, new Command.ClearVariables(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                         childPropertiesByParentProperty, nonRootPropertyKeys);
             }
+            case "double-tap-to-normal" -> {
+                if (!modeName.equals(Mode.IDLE_MODE_NAME))
+                    throw new IllegalArgumentException(
+                            propertyKey + ": double-tap-to-normal is only valid on idle-mode");
+                if (keyMatcher.group(4) == null)
+                    throw new IllegalArgumentException(
+                            propertyKey + ": expected idle-mode.double-tap-to-normal.<key-alias|target-mode|...>");
+                if (keyMatcher.group(7) != null)
+                    throw new IllegalArgumentException(
+                            propertyKey + ": too many property segments");
+                String subKey = keyMatcher.group(5);
+                IdleDoubleTapToNormal cfg = mode.idleDoubleTapToNormal;
+                switch (subKey) {
+                    case "key-alias" -> cfg.keyAlias = propertyValue.strip();
+                    case "target-mode" -> cfg.targetModeName = checkModeReference(propertyValue.strip());
+                    case "max-millis-between-taps" -> cfg.maxMillisBetweenTaps =
+                            parseUnsignedInteger(propertyValue, 1, 10_000);
+                    case "max-millis-per-tap" -> cfg.maxMillisPerTap =
+                            parseUnsignedInteger(propertyValue, 1, 10_000);
+                    case "leading-debounce-millis" -> cfg.leadingDebounceMillis =
+                            parseUnsignedInteger(propertyValue, 0, 10_000);
+                    default -> throw new IllegalArgumentException(
+                            "Unknown idle-mode.double-tap-to-normal property: " + subKey);
+                }
+            }
             // @formatter:on
             default -> throw new IllegalArgumentException(
                     "Invalid mode property key");
@@ -1887,6 +1914,50 @@ public class ConfigurationParser {
                     "Referencing an abstract mode (a mode starting with _) is not allowed: " +
                     modeNameReference);
         return modeNameReference;
+    }
+
+    /**
+     * Appends a double-tap {@link Command.SwitchMode} combo to {@code idle-mode.to} when
+     * {@code idle-mode.double-tap-to-normal.key-alias} is set.
+     */
+    private static void applyIdleDoubleTapToNormal(
+            Map<String, ModeBuilder> modeByName,
+            Set<String> modeReferences,
+            ComboMoveDuration defaultComboMoveDuration,
+            Map<String, KeyAlias> keyAliases,
+            Map<String, AppAlias> appAliases,
+            KeyResolver keyResolver,
+            Set<String> allVariableNames) {
+        ModeBuilder idle = modeByName.get(Mode.IDLE_MODE_NAME);
+        if (idle == null)
+            return;
+        IdleDoubleTapToNormal cfg = idle.idleDoubleTapToNormal;
+        if (cfg.keyAlias == null || cfg.keyAlias.isBlank())
+            return;
+        if (!keyAliases.containsKey(cfg.keyAlias))
+            throw new IllegalArgumentException(
+                    "idle-mode.double-tap-to-normal.key-alias='" + cfg.keyAlias +
+                    "' but key-alias." + cfg.keyAlias + " is not defined");
+        String alias = cfg.keyAlias;
+        int between = cfg.maxMillisBetweenTaps;
+        int lead = cfg.leadingDebounceMillis;
+        String targetMode = cfg.targetModeName;
+        modeReferences.add(checkModeReference(targetMode));
+        String comboCore;
+        if (cfg.maxMillisPerTap != null) {
+            int per = cfg.maxMillisPerTap;
+            comboCore = "+" + alias + "-0-" + per + " -" + alias + "-0-" + between +
+                    " +" + alias + "-0-" + per + " -" + alias;
+        }
+        else {
+            comboCore = "+" + alias + " -" + alias + "-0-" + between +
+                    " +" + alias + " -" + alias;
+        }
+        String comboString = lead > 0 ? "#!{" + alias + "}-" + lead + " " + comboCore : comboCore;
+        String label = Mode.IDLE_MODE_NAME + ".double-tap-to-normal(generated)";
+        setCommand(idle.comboMap.to.builder, comboString, new SwitchMode(targetMode),
+                label, defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
+                allVariableNames);
     }
 
     private static void recursivelyExtendProperty(Property<?> parentProperty, PropertyNode propertyNode,
@@ -2730,6 +2801,18 @@ public class ConfigurationParser {
                                 List<PropertyNode> childProperties) {
     }
 
+    /**
+     * Settings for {@code idle-mode.double-tap-to-normal.*}. When {@link #keyAlias} is set,
+     * a double-tap {@link Command.SwitchMode} combo is appended during parsing.
+     */
+    private static final class IdleDoubleTapToNormal {
+        String keyAlias;
+        String targetModeName = "normal-mode";
+        int maxMillisBetweenTaps = 400;
+        int leadingDebounceMillis = 200;
+        Integer maxMillisPerTap;
+    }
+
     @SuppressWarnings("unchecked")
     private static final class ModeBuilder {
         final String modeName;
@@ -2745,6 +2828,11 @@ public class ConfigurationParser {
         Property<IndicatorConfigurationBuilder> indicator;
         Property<HideCursorBuilder> hideCursor;
         Property<ZoomConfigurationBuilder> zoom;
+        /**
+         * Optional: {@code idle-mode.double-tap-to-normal.*} is turned into an extra
+         * {@link Command.SwitchMode} combo on {@link Mode#IDLE_MODE_NAME}.
+         */
+        IdleDoubleTapToNormal idleDoubleTapToNormal = new IdleDoubleTapToNormal();
 
         private ModeBuilder(String modeName,
                             Map<PropertyKey, Property<?>> propertyByKey) {
