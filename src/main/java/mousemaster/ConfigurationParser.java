@@ -135,6 +135,7 @@ public class ConfigurationParser {
                 .boxHeightPercent(1d)
                 .cellHorizontalPadding(0d)
                 .cellVerticalPadding(0d)
+                .hintCenterOffsetX(0d)
                 .subgridRowCount(1)
                 .subgridColumnCount(1)
                 .subgridBorderThickness(1d)
@@ -2251,7 +2252,7 @@ public class ConfigurationParser {
             case "font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().name(v));
             case "font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().weight(v));
             case "font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().size(v));
-            case "font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().hexColor(v));
+            case "font-color", "tip-font-color", "hint-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().hexColor(v));
             case "font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().opacity(v));
             case "font-spacing-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "spacingPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().spacingPercent(v));
             case "font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().outlineThickness(v));
@@ -2264,7 +2265,7 @@ public class ConfigurationParser {
             case "font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().horizontalOffset(v));
             case "font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().verticalOffset(v));
             // Style: selected font
-            case "selected-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().hexColor(v));
+            case "selected-font-color", "tip-selected-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().hexColor(v));
             case "selected-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().opacity(v));
             case "selected-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().name(v));
             case "selected-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().weight(v));
@@ -2279,7 +2280,7 @@ public class ConfigurationParser {
             case "selected-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().horizontalOffset(v));
             case "selected-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().verticalOffset(v));
             // Style: focused font
-            case "focused-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().hexColor(v));
+            case "focused-font-color", "tip-focused-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().hexColor(v));
             case "focused-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().opacity(v));
             case "focused-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().name(v));
             case "focused-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().weight(v));
@@ -2365,6 +2366,7 @@ public class ConfigurationParser {
             case "box-height-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxHeightPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).boxHeightPercent(v));
             case "cell-horizontal-padding", "box-horizontal-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "cellHorizontalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).cellHorizontalPadding(v));
             case "cell-vertical-padding", "box-vertical-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "cellVerticalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).cellVerticalPadding(v));
+            case "center-offset-x", "hint-center-offset-x" -> ModePropertyHandler.of(prefix.append("styleByFilter", "hintCenterOffsetX"), v -> parseDouble(v, true, -5000, 5000), v -> hintMeshBuilder.style(viewportFilter).hintCenterOffsetX(v));
             // Style: subgrid
             case "subgrid-row-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridRowCount"), v -> parseUnsignedInteger(v, 1, 1_000), v -> hintMeshBuilder.style(viewportFilter).subgridRowCount(v));
             case "subgrid-column-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridColumnCount"), v -> parseUnsignedInteger(v, 1, 1_000), v -> hintMeshBuilder.style(viewportFilter).subgridColumnCount(v));
@@ -3064,6 +3066,10 @@ public class ConfigurationParser {
                             HintMeshStyleBuilder::cellVerticalPadding,
                             childStyleByFilter, filter))
                         childStyle.cellVerticalPadding(parentStyle.cellVerticalPadding());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::hintCenterOffsetX,
+                            childStyleByFilter, filter))
+                        childStyle.hintCenterOffsetX(parentStyle.hintCenterOffsetX());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::subgridRowCount, childStyleByFilter,
                             filter))

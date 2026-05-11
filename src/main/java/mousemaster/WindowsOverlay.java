@@ -1844,7 +1844,9 @@ public class WindowsOverlay {
                     lineHeight) + 2 * cellVerticalPadding;
             int fullBoxWidth = (int) cellWidth;
             int fullBoxHeight = (int) cellHeight;
-            int x = hintRoundedX(hint.centerX(), cellWidth, qtScaleFactor);
+            double layoutCenterX = hint.centerX() +
+                    (!isHintPartOfGrid ? style.hintCenterOffsetX() : 0);
+            int x = hintRoundedX(layoutCenterX, cellWidth, qtScaleFactor);
             int y = hintRoundedY(hint.centerY(), cellHeight, qtScaleFactor);
             if (isHintPartOfGrid
                 && hintIndex + 1 < hints.size()

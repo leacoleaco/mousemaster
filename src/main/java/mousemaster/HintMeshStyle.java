@@ -22,6 +22,7 @@ public record HintMeshStyle(HintFontStyle fontStyle,
                             double boxHeightPercent,
                             double cellHorizontalPadding,
                             double cellVerticalPadding,
+                            double hintCenterOffsetX,
                             int subgridRowCount,
                             int subgridColumnCount,
                             double subgridBorderThickness,
@@ -60,6 +61,7 @@ public record HintMeshStyle(HintFontStyle fontStyle,
         private Double boxHeightPercent;
         private Double cellHorizontalPadding;
         private Double cellVerticalPadding;
+        private Double hintCenterOffsetX;
         private Integer subgridRowCount;
         private Integer subgridColumnCount;
         private Double subgridBorderThickness;
@@ -98,6 +100,7 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             this.boxHeightPercent = style.boxHeightPercent;
             this.cellHorizontalPadding = style.cellHorizontalPadding;
             this.cellVerticalPadding = style.cellVerticalPadding;
+            this.hintCenterOffsetX = style.hintCenterOffsetX;
             this.subgridRowCount = style.subgridRowCount;
             this.subgridColumnCount = style.subgridColumnCount;
             this.subgridBorderThickness = style.subgridBorderThickness;
@@ -195,6 +198,11 @@ public record HintMeshStyle(HintFontStyle fontStyle,
 
         public HintMeshStyleBuilder cellVerticalPadding(Double cellVerticalPadding) {
             this.cellVerticalPadding = cellVerticalPadding;
+            return this;
+        }
+
+        public HintMeshStyleBuilder hintCenterOffsetX(Double hintCenterOffsetX) {
+            this.hintCenterOffsetX = hintCenterOffsetX;
             return this;
         }
 
@@ -338,6 +346,10 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return cellVerticalPadding;
         }
 
+        public Double hintCenterOffsetX() {
+            return hintCenterOffsetX;
+        }
+
         public Integer subgridRowCount() {
             return subgridRowCount;
         }
@@ -411,6 +423,7 @@ public record HintMeshStyle(HintFontStyle fontStyle,
                     boxHeightPercent == null ? defaultStyle.boxHeightPercent : boxHeightPercent,
                     cellHorizontalPadding == null ? defaultStyle.cellHorizontalPadding : cellHorizontalPadding,
                     cellVerticalPadding == null ? defaultStyle.cellVerticalPadding : cellVerticalPadding,
+                    hintCenterOffsetX == null ? defaultStyle.hintCenterOffsetX : hintCenterOffsetX,
                     subgridRowCount == null ? defaultStyle.subgridRowCount : subgridRowCount,
                     subgridColumnCount == null ? defaultStyle.subgridColumnCount : subgridColumnCount,
                     subgridBorderThickness == null ? defaultStyle.subgridBorderThickness : subgridBorderThickness,

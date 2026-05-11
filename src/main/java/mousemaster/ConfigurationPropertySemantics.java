@@ -156,7 +156,7 @@ public final class ConfigurationPropertySemantics {
                 return "使用哪组 key-alias 名称作为提示选择键。";
             if (k.contains("font-name") || k.contains("font-size") || k.contains("font-weight"))
                 return "提示文字的字体、字号或粗细。";
-            if (k.contains("font-color") || k.contains("box-color") || k.contains(".color"))
+            if (k.contains("font-color") || k.contains("tip-font-color") || k.contains("box-color") || k.contains(".color"))
                 return "提示或边框颜色；支持条件着色时用多行/原文编辑。";
             if (k.contains("opacity"))
                 return "透明度（0–1 小数）。";
