@@ -54,6 +54,7 @@ public class WindowsPlatform implements Platform {
     private final Set<Key> keysPressedInHook = new HashSet<>();
     private Mode currentMode;
     private double stuckKeyCheckTimer;
+    private boolean suppressCapsLockOsPassthrough;
 
     public WindowsPlatform(boolean multipleInstancesAllowed, boolean keyRegurgitationEnabled) {
         this.keyRegurgitationEnabled = keyRegurgitationEnabled;
@@ -130,7 +131,9 @@ public class WindowsPlatform implements Platform {
     public void reset(MouseController mouseController, KeyboardManager keyboardManager,
                       ModeMap newModeMap,
                       List<MousePositionListener> mousePositionListeners,
-                      KeyboardLayout activeKeyboardLayout) {
+                      KeyboardLayout activeKeyboardLayout,
+                      boolean suppressCapsLockOsPassthrough) {
+        this.suppressCapsLockOsPassthrough = suppressCapsLockOsPassthrough;
         ModeMap oldModeMap = this.modeMap;
         Set<HintMeshConfiguration> oldHintMeshConfigurations = new HashSet<>();
         if (oldModeMap != null) {
@@ -169,6 +172,8 @@ public class WindowsPlatform implements Platform {
         WindowsOverlay.setMessagePump(this::windowsMessagePump);
         if (keyboardHookCallback == null)
             installHooks();
+        if (suppressCapsLockOsPassthrough)
+            WindowsKeyboard.clearCapsLockToggleStateIfOn();
     }
 
     /**
@@ -394,6 +399,9 @@ public class WindowsPlatform implements Platform {
                         boolean eaten = keyEvent.isPress() &&
                             keysPressedInHook.contains(keyEvent.key()) &&
                             !currentlyPressedNotEatenKeys.containsKey(keyEvent.key());
+                        if (suppressCapsLockOsPassthrough &&
+                            keyEvent.key().equals(Key.capslock))
+                            eaten = true;
                         reentrantKeyEvents.add(
                                 new ReentrantKeyEvent(keyEvent, info.flags, altgrLeftctrl, eaten));
                         if (eaten) {
@@ -452,6 +460,17 @@ public class WindowsPlatform implements Platform {
                                             keyEvent.key().equals(Key.rightalt))
                                             altgrRightaltPressEaten = true;
                                         eaten = true;
+                                    }
+                                }
+                                // Eat by virtual key as well: some layouts can fail scan-code mapping
+                                // while the OS still toggles caps lock for VK_CAPITAL (0x14).
+                                if (suppressCapsLockOsPassthrough &&
+                                    info.vkCode == WindowsVirtualKey.VK_CAPITAL.virtualKeyCode) {
+                                    eaten = true;
+                                    if (keyEvent == null) {
+                                        int wp = wParam.intValue();
+                                        if (wp == WinUser.WM_KEYUP || wp == WinUser.WM_SYSKEYUP)
+                                            WindowsKeyboard.clearCapsLockToggleStateIfOn();
                                     }
                                 }
                             }
@@ -580,6 +599,11 @@ public class WindowsPlatform implements Platform {
                 keysPressedInHook.add(Key.leftctrl);
         }
         if (lastKeyEvent != null && lastKeyEvent.equals(keyEvent)) {
+            if (suppressCapsLockOsPassthrough && key.equals(Key.capslock)) {
+                // Never forward duplicate or repeated capslock hook deliveries: the OS
+                // could still apply the toggle if we returned false here.
+                return true;
+            }
             logger.info("Key event ignored because it is equal to the last event: " + keyEvent);
             lastKeyEvent = keyEvent;
             return false;
@@ -614,6 +638,12 @@ public class WindowsPlatform implements Platform {
             }
             mustEatNextReleaseOfRightalt = false;
             altgrRightaltPressEaten = false;
+        }
+        if (suppressCapsLockOsPassthrough && key.equals(Key.capslock)) {
+            currentlyPressedNotEatenKeys.remove(Key.capslock);
+            eventMustBeEaten = true;
+            if (keyEvent.isRelease())
+                WindowsKeyboard.clearCapsLockToggleStateIfOn();
         }
         if (!eventMustBeEaten)
             lastKeyEvent = keyEvent;

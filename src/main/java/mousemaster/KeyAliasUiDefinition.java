@@ -75,7 +75,7 @@ public record KeyAliasUiDefinition(
                     "在提示选择时按住可进入更细的第二次提示网格。"),
             new KeyAliasUiDefinition("uihintmod", true,
                     "UI 提示 — 修饰键",
-                    "与「提示」键组合，进入界面元素（UI）提示模式。"),
+                    "与「提示」键组合进入 UI 提示模式；默认用 Shift（可与 hint2mod 同为 leftshift）。"),
             new KeyAliasUiDefinition("screenselection", true,
                     "跨屏选择",
                     "进入跨屏幕区域选择的按键。"),

@@ -392,4 +392,28 @@ public class WindowsKeyboard {
                 pInputs[0].size());
     }
 
+    /**
+     * If the OS caps-lock toggle is on, synthesize a tap on VK_CAPITAL so the LED
+     * and keyboard state turn off. Used when physical caps lock is remapped and
+     * must not leave caps-word mode engaged.
+     */
+    public static void clearCapsLockToggleStateIfOn() {
+        short state =
+                User32.INSTANCE.GetAsyncKeyState(
+                        WindowsVirtualKey.VK_CAPITAL.virtualKeyCode);
+        if ((state & 1) == 0)
+            return;
+        WinUser.INPUT[] pInputs =
+                (WinUser.INPUT[]) new WinUser.INPUT().toArray(2);
+        for (int i = 0; i < 2; i++) {
+            pInputs[i].type = new WinDef.DWORD(WinUser.INPUT.INPUT_KEYBOARD);
+            pInputs[i].input.setType(WinUser.KEYBDINPUT.class);
+            pInputs[i].input.ki.wVk =
+                    new WinDef.WORD(WindowsVirtualKey.VK_CAPITAL.virtualKeyCode);
+            int flags = i == 0 ? 0 : WinUser.KEYBDINPUT.KEYEVENTF_KEYUP;
+            pInputs[i].input.ki.dwFlags = new WinDef.DWORD(flags);
+        }
+        User32.INSTANCE.SendInput(new WinDef.DWORD(2), pInputs, pInputs[0].size());
+    }
+
 }

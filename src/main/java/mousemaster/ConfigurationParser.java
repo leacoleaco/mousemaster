@@ -419,6 +419,7 @@ public class ConfigurationParser {
         }
         applyIdleDoubleTapToNormal(modeByName, modeReferences, defaultComboMoveDuration,
                 keyAliases, appAliases, keyResolver, allVariableNames);
+        applyIdleCapslockHoldHintShortcuts(modeByName, modeReferences, keyAliases);
         // Verify mode name references are valid.
         for (String modeNameReference : modeReferences) {
             if (modeNameReference.equals(Mode.PREVIOUS_MODE_FROM_HISTORY_STACK_IDENTIFIER))
@@ -537,9 +538,20 @@ public class ConfigurationParser {
                                     .stream()
                                     .map(ModeBuilder::build)
                                     .collect(Collectors.toSet());
+        boolean suppressCapsLockOsPassthrough = false;
+        IdleDoubleTapToNormal idleDoubleTapCfg =
+                modeByName.get(Mode.IDLE_MODE_NAME) == null ? null :
+                modeByName.get(Mode.IDLE_MODE_NAME).idleDoubleTapToNormal;
+        if (idleDoubleTapCfg != null && idleDoubleTapCfg.keyAlias != null &&
+            !idleDoubleTapCfg.keyAlias.isBlank()) {
+            KeyAlias doubleTapKeys = keyAliases.get(idleDoubleTapCfg.keyAlias);
+            if (doubleTapKeys != null && doubleTapKeys.keys().contains(Key.capslock))
+                suppressCapsLockOsPassthrough = true;
+        }
         return new Configuration(maxPositionHistorySize,
                 new ModeMap(modes), logLevel, logRedactKeys, logToFile, hideConsole,
-                forcedActiveAndConfigurationKeyboardLayouts.forcedActiveKeyboardLayout);
+                forcedActiveAndConfigurationKeyboardLayouts.forcedActiveKeyboardLayout,
+                suppressCapsLockOsPassthrough);
     }
 
     private static List<Combo> deriveSelectCombosFromHintSelectionKeys(ModeBuilder mode,
@@ -1958,6 +1970,80 @@ public class ConfigurationParser {
         setCommand(idle.comboMap.to.builder, comboString, new SwitchMode(targetMode),
                 label, defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
                 allVariableNames);
+    }
+
+    /**
+     * When the double-tap-to-normal key alias includes capslock, adds idle-mode transitions
+     * that mirror {@code normal-mode}'s grid-hint and UI-hint entry combos except an extra
+     * {@code capslock} must be held (e.g. capslock+f enters hint1-mode from idle without
+     * entering normal mode first). Targets are mode names {@code hint1-mode} and
+     * {@code ui-hint-mode} as in the stock layout.
+     */
+    private static void applyIdleCapslockHoldHintShortcuts(
+            Map<String, ModeBuilder> modeByName,
+            Set<String> modeReferences,
+            Map<String, KeyAlias> keyAliases) {
+        ModeBuilder idle = modeByName.get(Mode.IDLE_MODE_NAME);
+        ModeBuilder normal = modeByName.get("normal-mode");
+        if (idle == null || normal == null)
+            return;
+        IdleDoubleTapToNormal cfg = idle.idleDoubleTapToNormal;
+        if (cfg.keyAlias == null || cfg.keyAlias.isBlank())
+            return;
+        KeyAlias doubleTapAlias = keyAliases.get(cfg.keyAlias);
+        if (doubleTapAlias == null || !doubleTapAlias.keys().contains(Key.capslock))
+            return;
+        Map<Combo, List<Command>> normalTo = normal.comboMap.to.builder;
+        Map<Combo, List<Command>> idleTo = idle.comboMap.to.builder;
+        for (Map.Entry<Combo, List<Command>> entry : normalTo.entrySet()) {
+            List<Command> commands = entry.getValue();
+            boolean copy = false;
+            for (Command command : commands) {
+                if (command instanceof SwitchMode sm &&
+                    isIdleCapslockChordHintTarget(sm.modeName())) {
+                    copy = true;
+                    break;
+                }
+            }
+            if (!copy)
+                continue;
+            Combo idleCombo = comboWithHeldPhysicalKey(entry.getKey(), Key.capslock);
+            idleTo.computeIfAbsent(idleCombo, c -> new ArrayList<>())
+                  .addAll(commands);
+            for (Command command : commands) {
+                if (command instanceof SwitchMode sm &&
+                    isIdleCapslockChordHintTarget(sm.modeName()))
+                    modeReferences.add(sm.modeName());
+            }
+        }
+    }
+
+    private static boolean isIdleCapslockChordHintTarget(String modeName) {
+        return "hint1-mode".equals(modeName) || "ui-hint-mode".equals(modeName);
+    }
+
+    private static Combo comboWithHeldPhysicalKey(Combo base, Key heldKey) {
+        ComboPrecondition pre = base.precondition();
+        ComboPrecondition.ComboKeyPrecondition keyPre = pre.keyPrecondition();
+        List<ComboPrecondition.PressedKeyGroup> groups =
+                keyPre.pressedKeyPrecondition().groups();
+        if (groups.isEmpty())
+            groups = List.of(new ComboPrecondition.PressedKeyGroup(List.of()));
+        List<ComboPrecondition.PressedKeyGroup> newGroups = new ArrayList<>();
+        for (ComboPrecondition.PressedKeyGroup group : groups) {
+            List<Set<Key>> newKeySets = new ArrayList<>();
+            for (Set<Key> ks : group.keySets())
+                newKeySets.add(Set.copyOf(ks));
+            newKeySets.add(Set.of(heldKey));
+            newGroups.add(new ComboPrecondition.PressedKeyGroup(newKeySets));
+        }
+        ComboPrecondition newPrecondition = new ComboPrecondition(
+                new ComboPrecondition.ComboKeyPrecondition(keyPre.unpressedKeySet(),
+                        new ComboPrecondition.PressedKeyPrecondition(newGroups)),
+                pre.appPrecondition(),
+                pre.variablePrecondition());
+        return new Combo(base.label() + ".idle-capslock-hold", newPrecondition,
+                base.sequence());
     }
 
     private static void recursivelyExtendProperty(Property<?> parentProperty, PropertyNode propertyNode,

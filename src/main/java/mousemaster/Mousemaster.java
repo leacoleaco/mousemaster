@@ -249,7 +249,8 @@ public class Mousemaster {
         platform.reset(mouseController, keyboardManager,
                 configuration.modeMap(),
                 List.of(mouseController, gridManager, hintManager, screenManager,
-                        zoomManager), activeKeyboardLayout);
+                        zoomManager), activeKeyboardLayout,
+                configuration.suppressCapsLockOsPassthrough());
         if (tray != null && tray.isActive())
             tray.applySavedConsoleVisibility();
     }

@@ -13,7 +13,8 @@ public interface Platform extends ModeListener {
     void reset(MouseController mouseController, KeyboardManager keyboardManager,
                ModeMap modeMap,
                List<MousePositionListener> mousePositionListeners,
-               KeyboardLayout activeKeyboardLayout);
+               KeyboardLayout activeKeyboardLayout,
+               boolean suppressCapsLockOsPassthrough);
 
     void shutdown();
 
