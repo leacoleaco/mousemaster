@@ -287,6 +287,7 @@ public class WindowsKeyboard {
 
     private static void sendInputKeys(List<ResolvedKeyMacroMove> moves, boolean triggerKeyRepeating) {
 //        triggerKeyRepeating = false;
+        clearCapsLockToggleStateIfOn();
         // Send a press event for the key to regurgitate.
         WinUser.INPUT[] pInputs =
                 (WinUser.INPUT[]) new WinUser.INPUT().toArray(moves.size());
@@ -352,6 +353,7 @@ public class WindowsKeyboard {
 
     public static void sendInputString(String string) {
         logger.trace("Sending input string: " + string);
+        clearCapsLockToggleStateIfOn();
         int inputCount = string.length() * 2; // down + up per character
         WinUser.INPUT[] pInputs =
                 (WinUser.INPUT[]) new WinUser.INPUT().toArray(inputCount);

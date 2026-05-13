@@ -538,18 +538,7 @@ public class ConfigurationParser {
                                     .stream()
                                     .map(ModeBuilder::build)
                                     .collect(Collectors.toSet());
-        boolean suppressCapsLockOsPassthrough = allComboAndMacroKeys.contains(Key.capslock);
-        if (!suppressCapsLockOsPassthrough) {
-            IdleDoubleTapToNormal idleDoubleTapCfg =
-                    modeByName.get(Mode.IDLE_MODE_NAME) == null ? null :
-                    modeByName.get(Mode.IDLE_MODE_NAME).idleDoubleTapToNormal;
-            if (idleDoubleTapCfg != null && idleDoubleTapCfg.keyAlias != null &&
-                !idleDoubleTapCfg.keyAlias.isBlank()) {
-                KeyAlias doubleTapKeys = keyAliases.get(idleDoubleTapCfg.keyAlias);
-                if (doubleTapKeys != null && doubleTapKeys.keys().contains(Key.capslock))
-                    suppressCapsLockOsPassthrough = true;
-            }
-        }
+        boolean suppressCapsLockOsPassthrough = true;
         return new Configuration(maxPositionHistorySize,
                 new ModeMap(modes), logLevel, logRedactKeys, logToFile, hideConsole,
                 forcedActiveAndConfigurationKeyboardLayouts.forcedActiveKeyboardLayout,

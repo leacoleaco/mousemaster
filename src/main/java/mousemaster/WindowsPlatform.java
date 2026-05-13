@@ -79,6 +79,8 @@ public class WindowsPlatform implements Platform {
             // Every 200ms.
             enforceWindowsTopmostTimer = 0.2;
             WindowsOverlay.setTopmost();
+            if (suppressCapsLockOsPassthrough)
+                WindowsKeyboard.clearCapsLockToggleStateIfOn();
         }
         WindowsOverlay.update(delta);
     }
