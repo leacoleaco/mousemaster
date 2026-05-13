@@ -396,10 +396,12 @@ public class WindowsKeyboard {
      * If the OS caps-lock toggle is on, synthesize a tap on VK_CAPITAL so the LED
      * and keyboard state turn off. Used when physical caps lock is remapped and
      * must not leave caps-word mode engaged.
+     * GetKeyState low bit is the toggle state; GetAsyncKeyState low bit is
+     * "pressed since last call" which is unreliable for toggle detection.
      */
     public static void clearCapsLockToggleStateIfOn() {
         short state =
-                User32.INSTANCE.GetAsyncKeyState(
+                ExtendedUser32.INSTANCE.GetKeyState(
                         WindowsVirtualKey.VK_CAPITAL.virtualKeyCode);
         if ((state & 1) == 0)
             return;

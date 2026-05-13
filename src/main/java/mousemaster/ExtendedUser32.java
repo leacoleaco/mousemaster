@@ -116,6 +116,13 @@ public interface ExtendedUser32 extends User32 {
 
     boolean EnumThreadWindows(int dwThreadId, WinUser.WNDENUMPROC lpfn, Pointer lParam);
 
+    /**
+     * Returns the key state as of the last message retrieved from the thread's message queue.
+     * For toggle keys (e.g. VK_CAPITAL), the low-order bit is 1 when the key is toggled on.
+     * Unlike GetAsyncKeyState, this correctly reflects the toggle state.
+     */
+    short GetKeyState(int nVirtKey);
+
     boolean SetWindowDisplayAffinity(WinDef.HWND hWnd, int dwAffinity);
     int WDA_NONE = 0x00000000;
     int WDA_EXCLUDEFROMCAPTURE = 0x00000011;
