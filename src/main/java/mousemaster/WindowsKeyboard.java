@@ -1,5 +1,6 @@
 package mousemaster;
 
+import com.sun.jna.platform.win32.BaseTSD;
 import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinUser;
@@ -395,6 +396,14 @@ public class WindowsKeyboard {
     }
 
     /**
+     * Sentinel value placed in dwExtraInfo of the synthetic VK_CAPITAL tap that we
+     * inject to clear the OS toggle state.  The keyboard hook recognises this value
+     * and lets the event pass through to the OS (so the toggle actually clears),
+     * while still eating any *other* injected VK_CAPITAL events from external apps.
+     */
+    public static final long CAPS_LOCK_CLEAR_EXTRA_INFO = 0xCAFECAFEL;
+
+    /**
      * If the OS caps-lock toggle is on, synthesize a tap on VK_CAPITAL so the LED
      * and keyboard state turn off. Used when physical caps lock is remapped and
      * must not leave caps-word mode engaged.
@@ -416,6 +425,8 @@ public class WindowsKeyboard {
                     new WinDef.WORD(WindowsVirtualKey.VK_CAPITAL.virtualKeyCode);
             int flags = i == 0 ? 0 : WinUser.KEYBDINPUT.KEYEVENTF_KEYUP;
             pInputs[i].input.ki.dwFlags = new WinDef.DWORD(flags);
+            pInputs[i].input.ki.dwExtraInfo =
+                    new BaseTSD.ULONG_PTR(CAPS_LOCK_CLEAR_EXTRA_INFO);
         }
         User32.INSTANCE.SendInput(new WinDef.DWORD(2), pInputs, pInputs[0].size());
     }

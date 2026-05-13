@@ -74,13 +74,13 @@ public class WindowsPlatform implements Platform {
         WindowsOverlay.waitForZoomBeforeRepainting = false;
         WindowsKeyboard.update(delta);
         sanityCheckCurrentlyPressedKeys(delta);
+        if (suppressCapsLockOsPassthrough)
+            WindowsKeyboard.clearCapsLockToggleStateIfOn();
         enforceWindowsTopmostTimer -= delta;
         if (enforceWindowsTopmostTimer < 0) {
             // Every 200ms.
             enforceWindowsTopmostTimer = 0.2;
             WindowsOverlay.setTopmost();
-            if (suppressCapsLockOsPassthrough)
-                WindowsKeyboard.clearCapsLockToggleStateIfOn();
         }
         WindowsOverlay.update(delta);
     }
@@ -443,6 +443,16 @@ public class WindowsPlatform implements Platform {
                                     if (WindowsKeyboard.shouldSuppressExternalLeftalt(keyEvent, true)) {
                                         logger.trace("Suppressing external +leftalt");
                                         eaten = true;
+                                    }
+                                    else if (suppressCapsLockOsPassthrough &&
+                                             keyEvent.key().equals(Key.capslock) &&
+                                             info.dwExtraInfo.longValue() !=
+                                                     WindowsKeyboard.CAPS_LOCK_CLEAR_EXTRA_INFO) {
+                                        logger.trace("Suppressing externally injected capslock");
+                                        eaten = true;
+                                        int wp = wParam.intValue();
+                                        if (wp == WinUser.WM_KEYUP || wp == WinUser.WM_SYSKEYUP)
+                                            WindowsKeyboard.clearCapsLockToggleStateIfOn();
                                     }
                                     else
                                         trackNotEatenKey(keyEvent);
