@@ -385,6 +385,13 @@ public class WindowsPlatform implements Platform {
                             logger.trace("Suppressing external +leftalt (reentrant)");
                             return new WinDef.LRESULT(1);
                         }
+                        if (suppressCapsLockOsPassthrough &&
+                            keyEvent.key().equals(Key.capslock) &&
+                            info.dwExtraInfo.longValue() ==
+                                    WindowsKeyboard.CAPS_LOCK_CLEAR_EXTRA_INFO &&
+                            keyEvent.isRelease()) {
+                            WindowsKeyboard.onCapsLockClearTapReleaseAcknowledged();
+                        }
                         trackNotEatenKey(keyEvent);
                     }
                     // Queue for deferred KeyboardManager state tracking, applying the
@@ -454,8 +461,16 @@ public class WindowsPlatform implements Platform {
                                         if (wp == WinUser.WM_KEYUP || wp == WinUser.WM_SYSKEYUP)
                                             WindowsKeyboard.clearCapsLockToggleStateIfOn();
                                     }
-                                    else
+                                    else {
+                                        if (suppressCapsLockOsPassthrough &&
+                                            keyEvent.key().equals(Key.capslock) &&
+                                            info.dwExtraInfo.longValue() ==
+                                                    WindowsKeyboard.CAPS_LOCK_CLEAR_EXTRA_INFO &&
+                                            keyEvent.isRelease()) {
+                                            WindowsKeyboard.onCapsLockClearTapReleaseAcknowledged();
+                                        }
                                         trackNotEatenKey(keyEvent);
+                                    }
                                 }
                             }
                             else if (info.vkCode == WindowsVirtualKey.VK_LMENU.virtualKeyCode &&

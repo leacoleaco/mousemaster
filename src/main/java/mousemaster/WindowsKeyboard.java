@@ -47,6 +47,7 @@ public class WindowsKeyboard {
         durationUntilNextKeyPressRepeat = 0;
         repeatStartedDuringCurrentTick = false;
         suppressExternalLeftalt = false;
+        capsLockClearTapInFlight = false;
     }
 
     /**
@@ -404,6 +405,18 @@ public class WindowsKeyboard {
     public static final long CAPS_LOCK_CLEAR_EXTRA_INFO = 0xCAFECAFEL;
 
     /**
+     * True while a synthetic CAPS_LOCK_CLEAR_EXTRA_INFO tap is in flight (SendInput
+     * called but the hook has not yet processed the release). Prevents re-injecting
+     * a second tap before the first one clears the toggle, which would flip it back on.
+     */
+    private static boolean capsLockClearTapInFlight;
+
+    /** Called by the hook when our synthetic clear-tap release is acknowledged. */
+    public static void onCapsLockClearTapReleaseAcknowledged() {
+        capsLockClearTapInFlight = false;
+    }
+
+    /**
      * If the OS caps-lock toggle is on, synthesize a tap on VK_CAPITAL so the LED
      * and keyboard state turn off. Used when physical caps lock is remapped and
      * must not leave caps-word mode engaged.
@@ -416,6 +429,11 @@ public class WindowsKeyboard {
                         WindowsVirtualKey.VK_CAPITAL.virtualKeyCode);
         if ((state & 1) == 0)
             return;
+        // If a clear-tap is already in flight, don't inject another one.
+        // A second tap before the first is processed would flip the toggle back ON.
+        if (capsLockClearTapInFlight)
+            return;
+        capsLockClearTapInFlight = true;
         WinUser.INPUT[] pInputs =
                 (WinUser.INPUT[]) new WinUser.INPUT().toArray(2);
         for (int i = 0; i < 2; i++) {
