@@ -457,9 +457,7 @@ public class WindowsPlatform implements Platform {
                                                      WindowsKeyboard.CAPS_LOCK_CLEAR_EXTRA_INFO) {
                                         logger.trace("Suppressing externally injected capslock");
                                         eaten = true;
-                                        int wp = wParam.intValue();
-                                        if (wp == WinUser.WM_KEYUP || wp == WinUser.WM_SYSKEYUP)
-                                            WindowsKeyboard.clearCapsLockToggleStateIfOn();
+                                        WindowsKeyboard.clearCapsLockToggleStateIfOn();
                                     }
                                     else {
                                         if (suppressCapsLockOsPassthrough &&
@@ -495,9 +493,7 @@ public class WindowsPlatform implements Platform {
                                     info.vkCode == WindowsVirtualKey.VK_CAPITAL.virtualKeyCode) {
                                     eaten = true;
                                     if (keyEvent == null) {
-                                        int wp = wParam.intValue();
-                                        if (wp == WinUser.WM_KEYUP || wp == WinUser.WM_SYSKEYUP)
-                                            WindowsKeyboard.clearCapsLockToggleStateIfOn();
+                                        WindowsKeyboard.clearCapsLockToggleStateIfOn();
                                     }
                                 }
                             }
@@ -669,8 +665,7 @@ public class WindowsPlatform implements Platform {
         if (suppressCapsLockOsPassthrough && key.equals(Key.capslock)) {
             currentlyPressedNotEatenKeys.remove(Key.capslock);
             eventMustBeEaten = true;
-            if (keyEvent.isRelease())
-                WindowsKeyboard.clearCapsLockToggleStateIfOn();
+            WindowsKeyboard.clearCapsLockToggleStateIfOn();
         }
         if (!eventMustBeEaten)
             lastKeyEvent = keyEvent;

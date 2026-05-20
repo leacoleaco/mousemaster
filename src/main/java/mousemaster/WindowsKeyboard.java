@@ -48,6 +48,7 @@ public class WindowsKeyboard {
         repeatStartedDuringCurrentTick = false;
         suppressExternalLeftalt = false;
         capsLockClearTapInFlight = false;
+        capsLockClearTapInFlightTicks = 0;
     }
 
     /**
@@ -410,10 +411,13 @@ public class WindowsKeyboard {
      * a second tap before the first one clears the toggle, which would flip it back on.
      */
     private static boolean capsLockClearTapInFlight;
+    private static int capsLockClearTapInFlightTicks;
+    private static final int CAPS_LOCK_CLEAR_TAP_TIMEOUT_TICKS = 10;
 
     /** Called by the hook when our synthetic clear-tap release is acknowledged. */
     public static void onCapsLockClearTapReleaseAcknowledged() {
         capsLockClearTapInFlight = false;
+        capsLockClearTapInFlightTicks = 0;
     }
 
     /**
@@ -431,8 +435,17 @@ public class WindowsKeyboard {
             return;
         // If a clear-tap is already in flight, don't inject another one.
         // A second tap before the first is processed would flip the toggle back ON.
-        if (capsLockClearTapInFlight)
-            return;
+        if (capsLockClearTapInFlight) {
+            capsLockClearTapInFlightTicks++;
+            if (capsLockClearTapInFlightTicks >= CAPS_LOCK_CLEAR_TAP_TIMEOUT_TICKS) {
+                logger.warn("CapsLock clear tap in-flight timeout, resetting flag");
+                capsLockClearTapInFlight = false;
+                capsLockClearTapInFlightTicks = 0;
+            }
+            else {
+                return;
+            }
+        }
         capsLockClearTapInFlight = true;
         WinUser.INPUT[] pInputs =
                 (WinUser.INPUT[]) new WinUser.INPUT().toArray(2);
