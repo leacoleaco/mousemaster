@@ -3,6 +3,7 @@ package mousemaster.platform.windows;
 import mousemaster.*;
 
 import com.sun.jna.Memory;
+import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.*;
 import com.sun.jna.ptr.PointerByReference;
@@ -152,59 +153,39 @@ public class WindowsMouseController implements MouseController {
     }
 
     /**
-     * Windows keyboard events can be called when we call SendInput()
-     * (JNA uses our call to SendInput() as an opportunity to run callbacks?).
-     * That is why we execute some SendInput() in a thread other than the main thread.
-     * That seems to be enough to prevent the unwanted behavior.
-     * java.lang.IllegalStateException: singleKeyEventInProgress = true
-     * 	at mousemaster.KeyboardManager.singleKeyEvent(KeyboardManager.java:83)
-     * 	at mousemaster.KeyboardManager.keyEvent(KeyboardManager.java:76)
-     * 	at mousemaster.WindowsPlatform.keyEvent(WindowsPlatform.java:282)
-     * 	at mousemaster.WindowsPlatform.keyboardHookCallback(WindowsPlatform.java:265)
-     * 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
-     * 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-     * 	at com.sun.jna.CallbackReference$DefaultCallbackProxy.invokeCallback(CallbackReference.java:585)
-     * 	at com.sun.jna.CallbackReference$DefaultCallbackProxy.callback(CallbackReference.java:616)
-     * 	at com.sun.jna.Native.invokeInt(Native Method)
-     * 	at com.sun.jna.Function.invoke(Function.java:426)
-     * 	at com.sun.jna.Function.invoke(Function.java:361)
-     * 	at com.sun.jna.Library$Handler.invoke(Library.java:270)
-     * 	at jdk.proxy2/jdk.proxy2.$Proxy6.SendInput(Unknown Source)
-     * 	at mousemaster.platform.windows.WindowsMouseController.sendInput(WindowsMouse.java:175)
-     * 	at mousemaster.platform.windows.WindowsMouseController.pressLeft(WindowsMouse.java:120)
-     * 	at mousemaster.MouseController.pressLeft(MouseController.java:237)
-     * 	at mousemaster.CommandRunner.run(CommandRunner.java:38)
+     * Button changes are sent on the calling thread. SendInput reenters the keyboard
+     * hook synchronously; that hook ignores the reentrant call. A background thread
+     * recorded the press (the indicator turned green) without the click reaching the
+     * window under the cursor.
      */
-    private static final Executor buttonExecutor = Executors.newSingleThreadExecutor();
-
     @Override
     public void pressLeft() {
-        buttonExecutor.execute(() -> sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_LEFTDOWN));
+        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_LEFTDOWN);
     }
 
     @Override
     public void pressMiddle() {
-        buttonExecutor.execute(() -> sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_MIDDLEDOWN));
+        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_MIDDLEDOWN);
     }
 
     @Override
     public void pressRight() {
-        buttonExecutor.execute(() -> sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_RIGHTDOWN));
+        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_RIGHTDOWN);
     }
 
     @Override
     public void releaseLeft() {
-        buttonExecutor.execute(() -> sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_LEFTUP));
+        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_LEFTUP);
     }
 
     @Override
     public void releaseMiddle() {
-        buttonExecutor.execute(() -> sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_MIDDLEUP));
+        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_MIDDLEUP);
     }
 
     @Override
     public void releaseRight() {
-        buttonExecutor.execute(() -> sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_RIGHTUP));
+        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_RIGHTUP);
     }
 
     /**
@@ -241,7 +222,11 @@ public class WindowsMouseController implements MouseController {
         WinDef.DWORD nInputs = new WinDef.DWORD(1);
         WinUser.INPUT[] pInputs = {input};
         int size = input.size();
-        User32.INSTANCE.SendInput(nInputs, pInputs, size);
+        WinDef.DWORD sent = User32.INSTANCE.SendInput(nInputs, pInputs, size);
+        if (sent.intValue() == 0)
+            logger.warn("SendInput mouse flag 0x{} failed, error {}",
+                    Integer.toHexString(eventFlag),
+                    Integer.toHexString(Native.getLastError()));
     }
 
     private boolean setMousePosition(WinDef.POINT mousePosition) {
