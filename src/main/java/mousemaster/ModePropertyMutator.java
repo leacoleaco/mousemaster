@@ -1,6 +1,7 @@
 package mousemaster;
 
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
 import java.lang.reflect.RecordComponent;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,29 +17,44 @@ public class ModePropertyMutator {
     public static Mode mutateModeProperty(Mode mode, ModePropertyPath propertyPath,
                                            Object newPropertyValue) {
         return (Mode) mutateModeProperty(mode, propertyPath.fieldNames(),
-                newPropertyValue, propertyPath.viewportFilter());
+                newPropertyValue, propertyPath.screenFilter());
+    }
+
+    static Object getModeProperty(Object obj, List<String> fieldNames) {
+        for (String fieldName : fieldNames) {
+            if (obj == null)
+                return null;
+            obj = obj instanceof Map<?, ?> map ? map.get(fieldName) : getField(obj, fieldName);
+        }
+        return obj;
     }
 
     @SuppressWarnings("unchecked")
-    private static Object mutateModeProperty(Object obj, List<String> fieldNames,
+    static Object mutateModeProperty(Object obj, List<String> fieldNames,
                                              Object newPropertyValue,
-                                             ViewportFilter targetViewportFilter) {
+                                             ScreenFilter targetScreenFilter) {
         if (fieldNames.isEmpty()) {
             if (newPropertyValue instanceof Function<?, ?> function)
                 return ((Function<Object, Object>) function).apply(obj);
             return newPropertyValue;
         }
         String fieldName = fieldNames.getFirst();
-        Object child = getField(obj, fieldName);
-        if (child == null)
-            return obj; // Field not found on this sealed type, skip mutation.
         List<String> remaining = fieldNames.subList(1, fieldNames.size());
+        if (!hasField(obj, fieldName))
+            // A decoration is named by its depth (decoration0, decoration1, ...) but held in a list.
+            return mutateDecoration(obj, fieldName, remaining, newPropertyValue,
+                    targetScreenFilter);
+        Object child = getField(obj, fieldName);
+        // A null field can be replaced, since the path ends on it and the new value just takes its
+        // place, but it cannot be descended into to reach a field deeper in the path.
+        if (child == null && !remaining.isEmpty())
+            return obj;
         Object mutatedChild;
-        if (child instanceof ViewportFilterMap<?> viewportFilterMap) {
-            Map<ViewportFilter, Object> mutatedMap = new LinkedHashMap<>();
-            for (var entry : viewportFilterMap.map().entrySet()) {
-                if (targetViewportFilter != null &&
-                    !entry.getKey().equals(targetViewportFilter)) {
+        if (child instanceof ScreenFilterMap<?> screenFilterMap) {
+            Map<ScreenFilter, Object> mutatedMap = new LinkedHashMap<>();
+            for (var entry : screenFilterMap.map().entrySet()) {
+                if (targetScreenFilter != null &&
+                    !entry.getKey().equals(targetScreenFilter)) {
                     mutatedMap.put(entry.getKey(), entry.getValue());
                 }
                 else {
@@ -47,13 +63,34 @@ public class ModePropertyMutator {
                                     newPropertyValue, null));
                 }
             }
-            mutatedChild = new ViewportFilterMap<>(mutatedMap);
+            mutatedChild = new ScreenFilterMap<>(mutatedMap);
+        }
+        else if (child instanceof Map<?, ?> map) {
+            String key = remaining.getFirst();
+            Map<Object, Object> mutatedMap = new LinkedHashMap<>(map);
+            mutatedMap.put(key, mutateModeProperty(map.get(key),
+                    remaining.subList(1, remaining.size()), newPropertyValue,
+                    targetScreenFilter));
+            mutatedChild = mutatedMap;
         }
         else {
             mutatedChild = mutateModeProperty(child, remaining,
-                    newPropertyValue, targetViewportFilter);
+                    newPropertyValue, targetScreenFilter);
         }
         return createWithField(obj, fieldName, mutatedChild);
+    }
+
+    private static Object mutateDecoration(Object obj, String fieldName,
+                                           List<String> remaining, Object newPropertyValue,
+                                           ScreenFilter targetScreenFilter) {
+        if (!fieldName.startsWith("decoration")
+            || !(getField(obj, "decorations") instanceof List<?> decorations))
+            return obj;
+        int index = Integer.parseInt(fieldName.substring("decoration".length()));
+        List<Object> mutatedDecorations = new ArrayList<>(decorations);
+        mutatedDecorations.set(index, mutateModeProperty(decorations.get(index), remaining,
+                newPropertyValue, targetScreenFilter));
+        return createWithField(obj, "decorations", List.copyOf(mutatedDecorations));
     }
 
     static Object createWithField(Object record, String fieldName,
@@ -77,10 +114,16 @@ public class ModePropertyMutator {
         }
     }
 
-    /**
-     * Returns the value of the named field, or {@code null} if the field does
-     * not exist on this record type (a sealed type that does not declare this field).
-     */
+    private static boolean hasField(Object obj, String fieldName) {
+        for (RecordComponent component : getComponents(obj.getClass()))
+            if (component.getName().equals(fieldName))
+                return true;
+        return false;
+    }
+
+    /** Returns the value of the named field, or {@code null} if it is unset or not a field of this
+     *  record type (a sealed type that does not declare it): ask {@link #hasField} to tell those
+     *  apart. */
     private static Object getField(Object obj, String fieldName) {
         try {
             RecordComponent[] components = getComponents(obj.getClass());
@@ -97,8 +140,14 @@ public class ModePropertyMutator {
         }
     }
 
+    private static final RecordComponent[] NO_COMPONENTS = new RecordComponent[0];
+
+    /** A non-record has no component to descend into: a path reaching one does not apply. */
     private static RecordComponent[] getComponents(Class<?> clazz) {
-        return componentCache.computeIfAbsent(clazz, Class::getRecordComponents);
+        return componentCache.computeIfAbsent(clazz, clazz1 -> {
+            RecordComponent[] components = clazz1.getRecordComponents();
+            return components == null ? NO_COMPONENTS : components;
+        });
     }
 
     private static Constructor<?> getCanonicalConstructor(

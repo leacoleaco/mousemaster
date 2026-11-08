@@ -11,13 +11,33 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public record ComboSequence(List<MoveSet> moveSets) {
+/**
+ * modifierKeys are the keys held to type the sequence's typed keys, except the keys the
+ * sequence names: on us-qwerty, +a +questionmark has leftshift and rightshift, and
+ * +leftshift +questionmark has only rightshift. The sequence ignores their key events.
+ */
+public record ComboSequence(List<MoveSet> moveSets, Set<Key> modifierKeys) {
 
     public boolean isEmpty() {
         return moveSets.isEmpty();
     }
 
+    public boolean allWaitMoveSets() {
+        return allWaitMoveSets(moveSets);
+    }
+
+    static boolean allWaitMoveSets(List<MoveSet> moveSets) {
+        for (MoveSet moveSet : moveSets)
+            if (!(moveSet instanceof WaitMoveSet))
+                return false;
+        return true;
+    }
+
     public Set<Key> allKeys() {
+        return allKeys(moveSets);
+    }
+
+    static Set<Key> allKeys(List<MoveSet> moveSets) {
         Set<Key> keys = new HashSet<>();
         for (MoveSet moveSet : moveSets) {
             switch (moveSet) {
@@ -102,7 +122,7 @@ public record ComboSequence(List<MoveSet> moveSets) {
         for (KeyComboMove move : moves) {
             moveSets.add(new KeyMoveSet(List.of(move), List.of()));
         }
-        return new ComboSequence(moveSets);
+        return new ComboSequence(moveSets, Set.of());
     }
 
     @Override

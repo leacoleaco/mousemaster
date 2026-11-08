@@ -1,0 +1,44 @@
+# mouseable configuration for mousemaster ([mouseable.properties](../configuration/mouseable.properties))
+
+## Overview
+
+- [mouseable](https://github.com/wirekang/mouseable/), the mousemaster way.
+- 3 main modes: normal, hint, and grid mode.
+- Normal mode uses vi-like bindings for local mouse movement.
+- Hint and grid modes assist in larger screen movements and are used with normal mode for comprehensive navigation.
+
+![mouseable layout](assets/mouseable-layout.png)
+
+The layout above shows normal mode.
+
+## Normal Mode (_leftctrl, leftctrl_)
+
+- Used for short-distance mouse manipulation.
+- Useful for manipulating menus and selecting text.
+- Vi-like behavior with directional keys (_h_, _j_, _k_, _l_) for continuous mouse movement.
+- Press mouse buttons with _a_ (left button), _s_ (right button), _d_ (middle button).
+- Warp to screen edges with _leftalt + h_, _leftalt + j_, _leftalt + k_, _leftalt + l_.
+- Warp to screen center with _leftshift + m_.
+- Scroll vertically or horizontally (wheel) with _y_, _u_, _i_, _o_.
+- Slow down mouse movement by holding _space_ while moving the mouse (slow mode, called sniper mode in original mouseable).
+- Accelerate mouse movement by holding _f_ while moving the mouse.
+- Show a cheatsheet of the keys while holding _f1_.
+- Exit with _;_ or _esc_.
+
+## Hint Mode (_leftalt, leftalt_)
+
+- Display labels on the screen for direct mouse warping.
+- Similar to Vimium-like browser extensions, but applicable to the entire screen.
+- Automatically switch back to the previous mode (idle mode or normal mode) after hint selection.
+- Trigger a left button click by holding _leftshift_ while selecting a hint.
+- Trigger a second hint pass, subdividing the cell you selected into a finer grid, by holding _leftctrl_ while selecting a hint.
+- A balance between hint size, number and screen space is crucial and can be configured: see `overlay.font-size`, `overlay.grid-max-row-count`, and `overlay.grid-max-column-count` in [mouseable.properties](../configuration/mouseable.properties).
+- Exit with _leftalt_, _esc_, or _backspace_.
+
+## Grid Mode (_leftshift, leftshift_)
+
+- Divide screen into a 2x2 grid, refining target area with each key press.
+- Move mouse to the middle of the targeted grid section.
+- Shrink the grid in one direction with _h_, _j_, _k_, _l_.
+- Move the grid in one direction with _leftshift + h_, _leftshift + j_, _leftshift + k_, _leftshift + l_.
+- Exit with _leftshift_, _;_, or _esc_.

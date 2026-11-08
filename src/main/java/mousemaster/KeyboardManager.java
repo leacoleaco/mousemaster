@@ -4,6 +4,8 @@ import mousemaster.ComboWatcher.ComboWatcherUpdateResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -18,6 +20,12 @@ public class KeyboardManager {
 
     private final ComboWatcher comboWatcher;
     private final KeyRegurgitator keyRegurgitator;
+    private final Clock clock;
+    private static final Duration maxOsAutoRepeatDelay = Duration.ofSeconds(1);
+    private KeyEvent lastOsAutoRepeat;
+    private static final Duration lastKeyEventsRetainDuration = Duration.ofSeconds(15);
+    private static final int lastKeyEventsMinRetainCount = 128;
+    private final List<KeyEventAndEaten> lastKeyEvents = new ArrayList<>();
     /**
      * LinkedHashMap preserves insertion (press) order for correct regurgitation order
      * (e.g. shift before a, not a before shift).
@@ -35,15 +43,16 @@ public class KeyboardManager {
      * key releases so that briefly-pressed unhandled keys are not missed by the
      * poll-based check in ModeController.update().
      */
-    private boolean hadUnhandledKeyPressInCurrentMode;
+    private boolean unhandledKeyJustPressedInCurrentMode;
 
     private record Eat(boolean released, PressKeyEventProcessingSet processingSet) {
     }
 
     public KeyboardManager(ComboWatcher comboWatcher, HintManager hintManager,
-                           KeyRegurgitator keyRegurgitator) {
+                           KeyRegurgitator keyRegurgitator, Clock clock) {
         this.comboWatcher = comboWatcher;
         this.keyRegurgitator = keyRegurgitator;
+        this.clock = clock;
     }
 
     public void setMacroPlayer(MacroPlayer macroPlayer) {
@@ -56,31 +65,43 @@ public class KeyboardManager {
             reset();
         }
         else {
-            ComboWatcherUpdateResult watcherUpdateResult = comboWatcher.update(delta);
-            if (!watcherUpdateResult.completedCombos().isEmpty()) {
-                markOtherKeysOfTheseCombosAsCompleted(
-                        watcherUpdateResult.completedCombos(),
-                        watcherUpdateResult.hasComboPreparationBreaker());
-                clearFullyCompletedEatenKeys();
+            updateCombos(delta);
+            runEntryCombos();
+        }
+    }
+
+    /** The entry combos of a mode switched to run at once, before the indicator is drawn. */
+    private void runEntryCombos() {
+        if (comboWatcher.entryCombosPending())
+            updateCombos(0);
+    }
+
+    private void updateCombos(double delta) {
+        releaseKeyTheOsStoppedRepeating();
+        ComboWatcherUpdateResult watcherUpdateResult = comboWatcher.update(delta);
+        if (!watcherUpdateResult.completedCombos().isEmpty()) {
+            markOtherKeysOfTheseCombosAsCompleted(
+                    watcherUpdateResult.completedCombos(),
+                    watcherUpdateResult.hasComboPreparationBreaker());
+            clearFullyCompletedEatenKeys();
+        }
+        if (!watcherUpdateResult.expiredCombos().isEmpty()) {
+            List<Regurgitate> deadComboRegurgitates =
+                    handleDeadEatingCombos(watcherUpdateResult.expiredCombos(), null);
+            for (Regurgitate regurgitate : deadComboRegurgitates) {
+                keyRegurgitator.regurgitate(regurgitate, !regurgitate.alsoRelease());
             }
-            if (!watcherUpdateResult.expiredCombos().isEmpty()) {
-                List<Regurgitate> deadComboRegurgitates =
-                        handleDeadEatingCombos(watcherUpdateResult.expiredCombos(), null);
-                for (Regurgitate regurgitate : deadComboRegurgitates) {
-                    keyRegurgitator.regurgitate(regurgitate, !regurgitate.alsoRelease());
-                }
-            }
-            if (watcherUpdateResult.preparationIsNotPrefixAnymore()) {
-                regurgitatePressedKeys();
-            }
-            if (watcherUpdateResult.hasComboPreparationBreaker()) {
-                regurgitatePressedKeys();
-                if (!watcherUpdateResult.comboPreparationAlreadyBroken()) {
-                    if (watcherUpdateResult.comboPreparationBreakerKey() != null)
-                        comboWatcher.reset(watcherUpdateResult.comboPreparationBreakerKey());
-                    else
-                        comboWatcher.breakComboPreparation();
-                }
+        }
+        if (watcherUpdateResult.preparationIsNotPrefixAnymore()) {
+            regurgitatePressedKeys();
+        }
+        if (watcherUpdateResult.hasComboPreparationBreaker()) {
+            regurgitatePressedKeys();
+            if (!watcherUpdateResult.comboPreparationAlreadyBroken()) {
+                if (watcherUpdateResult.comboPreparationBreakerKey() != null)
+                    comboWatcher.reset(watcherUpdateResult.comboPreparationBreakerKey());
+                else
+                    comboWatcher.breakComboPreparation();
             }
         }
     }
@@ -90,12 +111,29 @@ public class KeyboardManager {
     }
 
     public void reset() {
-        regurgitatePressedKeys();
+        reset(true);
+    }
+
+    public void reset(boolean regurgitate) {
+        if (regurgitate)
+            regurgitatePressedKeys();
         currentlyPressedKeys.clear();
         eatenKeys.clear();
-        hadUnhandledKeyPressInCurrentMode = false;
+        lastOsAutoRepeat = null;
+        unhandledKeyJustPressedInCurrentMode = false;
         comboWatcher.reset();
         macroPlayer.reset();
+    }
+
+    private void releaseKeyTheOsStoppedRepeating() {
+        if (lastOsAutoRepeat == null ||
+            !lastOsAutoRepeat.time().plus(maxOsAutoRepeatDelay).isBefore(clock.now()))
+            return;
+        logger.info("Releasing a key the OS stopped repeating");
+        EatAndRegurgitates eatAndRegurgitates = keyEvent(
+                new KeyEvent.ReleaseKeyEvent(clock.now(), lastOsAutoRepeat.key()));
+        for (Regurgitate regurgitate : eatAndRegurgitates.regurgitates())
+            keyRegurgitator.regurgitate(regurgitate, !regurgitate.alsoRelease());
     }
 
     public void regurgitatePressedKeys() {
@@ -118,7 +156,37 @@ public class KeyboardManager {
             mustBeEatenOnly = new EatAndRegurgitates(true, List.of());
 
     public EatAndRegurgitates keyEvent(KeyEvent keyEvent) {
-        return singleKeyEvent(keyEvent);
+        boolean osAutoRepeat = keyEvent.isPress() &&
+                               currentlyPressedKeys.containsKey(keyEvent.key());
+        lastOsAutoRepeat = osAutoRepeat ? keyEvent : null;
+        EatAndRegurgitates eatAndRegurgitates = singleKeyEvent(keyEvent);
+        if (!osAutoRepeat) {
+            lastKeyEvents.add(
+                    new KeyEventAndEaten(keyEvent, eatAndRegurgitates.mustBeEaten()));
+            Instant cutoff = keyEvent.time().minus(lastKeyEventsRetainDuration);
+            while (lastKeyEvents.size() > lastKeyEventsMinRetainCount &&
+                   lastKeyEvents.getFirst().event().time().isBefore(cutoff))
+                lastKeyEvents.removeFirst();
+        }
+        runEntryCombos();
+        return eatAndRegurgitates;
+    }
+
+    public record KeyEventAndEaten(KeyEvent event, boolean eaten) {
+        @Override
+        public String toString() {
+            return prefix() + event.key();
+        }
+
+        private String prefix() {
+            if (event.isRelease())
+                return "-";
+            return eaten ? "+" : "#";
+        }
+    }
+
+    public List<KeyEventAndEaten> lastKeyEvents() {
+        return lastKeyEvents;
     }
 
     private EatAndRegurgitates singleKeyEvent(KeyEvent keyEvent) {
@@ -150,7 +218,7 @@ public class KeyboardManager {
                 }
                 currentlyPressedKeys.put(key, processingSet);
                 if (pressingUnhandledKeyInCurrentMode())
-                    hadUnhandledKeyPressInCurrentMode = true;
+                    unhandledKeyJustPressedInCurrentMode = true;
                 macroPlayer.clearEarlyRelease(key);
                 macroPlayer.clearDeferredRelease(key);
                 if (processingSet.mustBeEaten()) {
@@ -425,12 +493,12 @@ public class KeyboardManager {
         return false;
     }
 
-    public boolean pollHadUnhandledKeyPressInCurrentMode() {
+    public boolean pollUnhandledKeyJustPressedInCurrentMode() {
         try {
-            return hadUnhandledKeyPressInCurrentMode;
+            return unhandledKeyJustPressedInCurrentMode;
         }
         finally {
-            hadUnhandledKeyPressInCurrentMode = false;
+            unhandledKeyJustPressedInCurrentMode = false;
         }
     }
 

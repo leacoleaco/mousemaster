@@ -5,40 +5,51 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>mousemaster</groupId>
     <artifactId>mousemaster</artifactId>
-    <version>88</version>
+    <version>95</version>
     <name>mousemaster</name>
     <!--
     See https://graalvm.github.io/native-build-tools/latest/maven-plugin-quickstart.html
-    JAVA_HOME=~/Documents/tools/graalvm-jdk-21.0.1+12.1/ ./mvnw clean package
-    JAVA_HOME=~/Documents/tools/graalvm-jdk-21.0.1+12.1/ ./mvnw -Pnative -Dagent exec:exec@java-agent
-    JAVA_HOME=~/Documents/tools/graalvm-jdk-21.0.1+12.1/ ./mvnw -Pnative -Dagent package -DskipTests
+    JAVA_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ ./mvnw clean package
+    GRAALVM_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ JAVA_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ ./mvnw -Pnative -Dagent exec:exec@java-agent
+    GRAALVM_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ JAVA_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ ./mvnw -Pnative -Dagent package -DskipTests
+    The GRAALVM_HOME environment variable takes precedence over JAVA_HOME for native-maven-plugin.
     https://github.com/oracle/graal/issues/1762#issuecomment-1297370039
-    ./pefrmdllembed/pefrmdllembed.exe -impinj target/mousemaster.exe ./pefrmdllembed/VCRUNTIME140.dll target/mousemaster-with-vcruntime140.exe
+    ./windows/pefrmdllembed/pefrmdllembed.exe -impinj -nores target/mousemaster.exe ./windows/pefrmdllembed/VCRUNTIME140.dll target/mousemaster-with-vcruntime140.exe
+
+    On macOS, with JAVA_HOME set to a GraalVM, the same two builds then the bundle that carries
+    the Qt frameworks the image links against:
+    ./mvnw clean package
+    ./mvnw -Pnative -Dagent package -DskipTests
+    QT=~/Qt/6.8.2/macos ./macos/build-app.sh
+    Outside a git checkout, add -Dmaven.gitcommitid.skip=true to both builds.
+    macos/build-libdriverkit.sh rebuilds the committed Karabiner shim, which rarely changes.
     -->
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <native.maven.plugin.version>0.9.28</native.maven.plugin.version>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+        <!-- 1.1.x fails with a missing org.apache.maven.shared.utils.logging.MessageUtils. -->
+        <native.maven.plugin.version>1.0.0</native.maven.plugin.version>
         <imageName>mousemaster</imageName>
-        <mainClass>mousemaster.MousemasterApplication</mainClass>
+        <mainClass>mousemaster.platform.windows.WindowsMain</mainClass>
         <jna.version>5.13.0</jna.version> <!-- Check https://www.graalvm.org/latest/reference-manual/native-image/metadata/ -->
+        <qtjambi.version>6.8.2</qtjambi.version>
     </properties>
     <dependencies>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.15</version>
+            <version>1.6.6</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-core</artifactId>
-            <version>1.5.15</version>
+            <version>1.6.6</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>jul-to-slf4j</artifactId>
-            <version>2.0.13</version>
+            <version>2.0.19</version>
         </dependency>
         <dependency>
             <groupId>net.java.dev.jna</groupId>
@@ -53,12 +64,7 @@
         <dependency>
             <groupId>io.qtjambi</groupId>
             <artifactId>qtjambi</artifactId>
-            <version>6.8.2</version>
-        </dependency>
-        <dependency>
-            <groupId>io.qtjambi</groupId>
-            <artifactId>qtjambi-native-windows-x64</artifactId>
-            <version>6.8.2</version>
+            <version>${qtjambi.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -69,7 +75,7 @@
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
-            <version>1.19.1</version>
+            <version>1.24.1</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -80,6 +86,133 @@
     </dependencies>
 
     <profiles>
+        <profile>
+            <id>windows</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                </os>
+            </activation>
+            <properties>
+                <platformResources>src/main/resources-windows</platformResources>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>io.qtjambi</groupId>
+                    <artifactId>qtjambi-native-windows-x64</artifactId>
+                    <version>${qtjambi.version}</version>
+                </dependency>
+            </dependencies>
+            <!-- Here rather than in the native profile, which macOS activates too. -->
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <configuration>
+                            <!-- native-image has no option for the executable's VERSIONINFO
+                            resource, so the compiled resource is handed to the linker. See
+                            windows/versioninfo/mousemaster.rc. The profiles come from an
+                            instrumented build: a session of use, and vision scans of the test
+                            screens. -->
+                            <buildArgs>
+                                <buildArg>-H:NativeLinkerOption=${project.build.directory}/mousemaster.res</buildArg>
+                                <buildArg>--pgo=${project.basedir}/windows/pgo/session.iprof.gz,${project.basedir}/windows/pgo/vision.iprof.gz</buildArg>
+                            </buildArgs>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>compress-qt-resources</id>
+                                <phase>process-classes</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <!-- The QtJambi libraries are not committed like the Qt
+                                        ones: they come out of the native jar, whose bin
+                                        directory lands next to the Qt one. -->
+                                        <unzip dest="${project.build.outputDirectory}/qt"
+                                               src="${settings.localRepository}/io/qtjambi/qtjambi-native-windows-x64/${qtjambi.version}/qtjambi-native-windows-x64-${qtjambi.version}.jar">
+                                            <patternset>
+                                                <include name="bin/QtJambi6.dll"/>
+                                                <include name="bin/QtJambiCore6.dll"/>
+                                                <include name="bin/QtJambiGui6.dll"/>
+                                                <include name="bin/QtJambiWidgets6.dll"/>
+                                            </patternset>
+                                        </unzip>
+                                        <gzip src="${project.build.outputDirectory}/qt/bin/QtJambi6.dll" destfile="${project.build.outputDirectory}/qt/bin/QtJambi6.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt/bin/QtJambiCore6.dll" destfile="${project.build.outputDirectory}/qt/bin/QtJambiCore6.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt/bin/QtJambiGui6.dll" destfile="${project.build.outputDirectory}/qt/bin/QtJambiGui6.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt/bin/QtJambiWidgets6.dll" destfile="${project.build.outputDirectory}/qt/bin/QtJambiWidgets6.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt/bin/Qt6Core.dll" destfile="${project.build.outputDirectory}/qt/bin/Qt6Core.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt/bin/Qt6Gui.dll" destfile="${project.build.outputDirectory}/qt/bin/Qt6Gui.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt/bin/Qt6Widgets.dll" destfile="${project.build.outputDirectory}/qt/bin/Qt6Widgets.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt/plugins/platforms/qwindows.dll" destfile="${project.build.outputDirectory}/qt/plugins/platforms/qwindows.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt-msvcp/msvcp140.dll" destfile="${project.build.outputDirectory}/qt-msvcp/msvcp140.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt-msvcp/msvcp140_1.dll" destfile="${project.build.outputDirectory}/qt-msvcp/msvcp140_1.dll.gz"/>
+                                        <gzip src="${project.build.outputDirectory}/qt-msvcp/msvcp140_2.dll" destfile="${project.build.outputDirectory}/qt-msvcp/msvcp140_2.dll.gz"/>
+                                        <delete>
+                                            <fileset dir="${project.build.outputDirectory}" includes="**/*.dll"/>
+                                        </delete>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>compile-versioninfo</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>powershell</executable>
+                                    <arguments>
+                                        <argument>-NoProfile</argument>
+                                        <argument>-ExecutionPolicy</argument>
+                                        <argument>Bypass</argument>
+                                        <argument>-File</argument>
+                                        <argument>${project.basedir}/windows/versioninfo/compile.ps1</argument>
+                                        <argument>-version</argument>
+                                        <argument>${project.version}</argument>
+                                        <argument>-outputFile</argument>
+                                        <argument>${project.build.directory}/mousemaster.res</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>macos</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <properties>
+                <mainClass>mousemaster.platform.macos.MacosMain</mainClass>
+                <platformResources>src/main/resources-macos</platformResources>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>io.qtjambi</groupId>
+                    <artifactId>qtjambi-native-macos</artifactId>
+                    <version>${qtjambi.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
         <profile>
             <id>native</id>
             <build>
@@ -107,6 +240,12 @@
                         </executions>
                         <configuration>
                             <fallback>false</fallback>
+                            <!-- The repository refuses to run on GraalVM 25.0.1, the last release
+                            built for macOS Intel. What it contributed for jna and logback, the
+                            agent already writes into the json files below. -->
+                            <metadataRepository>
+                                <enabled>false</enabled>
+                            </metadataRepository>
                             <!-- https://graalvm.github.io/native-build-tools/latest/maven-plugin.html#agent-support-configuring-options -->
                             <!-- https://medium.com/graalvm/simplifying-native-image-generation-with-maven-plugin-and-embeddable-configuration-d5b283b92f57 -->
                             <!-- ./mvnw -Pnative -Dagent package will read the json files from the jar's META-INF/native-image. -->
@@ -125,6 +264,14 @@
     </profiles>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${platformResources}</directory>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>io.github.git-commit-id</groupId>
@@ -161,10 +308,35 @@
                                     <directory>src/main/resources</directory>
                                     <filtering>true</filtering>
                                     <excludes>
-                                        <exclude>**/*.dll</exclude> <!-- Exclude DLLs from filtering. -->
+                                        <exclude>**/*.gz</exclude> <!-- Exclude compressed resources from filtering. -->
+                                        <exclude>licenses/**</exclude> <!-- Exclude license texts from filtering. -->
                                     </excludes>
                                 </resource>
                             </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- The native image stores resources uncompressed, so the large ones are gzipped
+            here and read back through MousemasterApplication.resourceStream. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>compress-resources</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <gzip src="${project.build.outputDirectory}/keyboard-layouts.json"
+                                      destfile="${project.build.outputDirectory}/keyboard-layouts.json.gz"/>
+                                <delete file="${project.build.outputDirectory}/keyboard-layouts.json"/>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
@@ -226,6 +398,10 @@
                             <addClasspath>true</addClasspath>
                             <mainClass>${mainClass}</mainClass>
                         </manifest>
+                        <!-- JNA loads native libraries, which warns without this. -->
+                        <manifestEntries>
+                            <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                        </manifestEntries>
                     </archive>
                 </configuration>
             </plugin>
@@ -247,6 +423,10 @@
                             <addClasspath>true</addClasspath>
                             <mainClass>${mainClass}</mainClass>
                         </manifest>
+                        <!-- JNA loads native libraries, which warns without this. -->
+                        <manifestEntries>
+                            <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                        </manifestEntries>
                     </archive>
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>

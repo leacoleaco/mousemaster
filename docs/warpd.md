@@ -1,0 +1,79 @@
+# warpd configuration for mousemaster ([warpd.properties](../configuration/warpd.properties))
+
+## Overview
+
+- [warpd](https://github.com/rvaiya/warpd), the mousemaster way.
+- 3 main modes: normal, hint, and grid mode.
+- Normal mode uses vi-like bindings for local mouse movement.
+- Hint and grid modes assist in larger screen movements and are used with normal mode for comprehensive navigation.
+
+![warpd layout](assets/warpd-layout.png)
+
+The layout above shows normal mode.
+
+## Normal Mode (_leftalt + c_)
+
+- Used for short-distance mouse manipulation.
+- Useful for manipulating menus and selecting text.
+- Vi-like behavior with directional keys (_h_, _j_, _k_, _l_) for continuous mouse movement.
+- Press mouse buttons with _m_ (left button), _,_ (middle button), _._ (right button).
+- Press mouse buttons then exit ("oneshot" clicks) with _n_ (left button), _-_ (middle button), _/_ (right button).
+- Warp to screen edges with _leftshift + h_ (top), _leftshift + l_ (bottom), _0_ (left) and _leftshift + 4_ (right), following vi's `H`/`L`/`0`/`$`.
+- Scroll vertically or horizontally (wheel) with _w_, _e_, _r_, _t_.
+- Slow down mouse movement (decelerate) by holding _d_ while moving the mouse.
+- Accelerate mouse movement by holding _a_ while moving the mouse.
+- Copy and exit with _c_.
+- Show a cheatsheet of the keys while holding _f1_.
+- Exit with _esc_.
+
+## Hint Mode (_leftalt + x_ or _x_ in normal mode)
+
+- Display labels on the screen for direct mouse warping.
+- Similar to Vimium-like browser extensions, but applicable to the entire screen.
+- Automatically switch back to the previous mode (idle mode or normal mode) after hint selection.
+- Trigger a second hint pass, subdividing the cell you selected into a finer grid, with _leftalt + leftshift + x_ (or _leftshift + x_ in normal mode).
+- A balance between hint size, number and screen space is crucial and can be configured: see `overlay.font-size`, `overlay.grid-max-row-count`, and `overlay.grid-max-column-count` in [warpd.properties](../configuration/warpd.properties).
+- Exit with _esc_.
+
+## History Mode (_leftalt + h_ or _;_ in normal mode)
+
+- Similar to hint mode, but shows hints over saved mouse positions.
+- Exit with _esc_ or _;_.
+- Save the current position with one of the hint selection keys _h_, _j_, _k_, _l_, _a_, _s_, _d_, _f_.
+- Unsave the current position by holding one of the hint selection keys for 500ms.
+- Clear the saved positions by holding _;_ for 500ms.
+- Cycle through the saved positions from normal mode with _leftctrl + i_ and _leftctrl + o_.
+
+## Grid Mode (_leftalt + g_ or _g_ in normal mode)
+
+- Divide screen into a 2x2 grid, refining target area with each key press.
+- Move mouse to the middle of the targeted grid section.
+- Shrink the grid to one quadrant with _u_, _i_, _j_, _k_ (see illustration below).
+- Move the grid in one direction with _w_, _a_, _s_, _d_.
+- Switch to normal mode with _c_.
+- Exit (to idle mode) with _esc_.
+
+```
+                 +--------+--------+            +--------+--------+
+                 |        |        |            |  u |  i |       |
+                 |   u    |   i    |            |----m----+       |
+ leftalt + g     |        |        |     u      |  j |  k |       |
+------------->   +--------m--------+   ----->   +---------+       |
+                 |        |        |            |                 |
+                 |   j    |   k    |            |                 |
+                 |        |        |            |                 |
+                 +--------+--------+            +--------+--------+
+```
+
+## Screen Selection Mode (_leftalt + s_ or _s_ in normal mode)
+
+- Provide hints for moving the mouse to the center of a monitor.
+- Suitable for multi-screen setups.
+- Exit with _esc_.
+
+## Drag Mode (_v_ in normal mode)
+
+- Allow for selecting text and dragging objects around.
+- Switch to normal mode with _v_ or a mouse button click (_m_, _,_, _._).
+- Copy and exit with _c_.
+- Exit (to idle mode) with _esc_.

@@ -2,6 +2,7 @@ package mousemaster;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import mousemaster.platform.windows.WindowsVirtualKey;
 import org.jsoup.Jsoup;
 import org.jsoup.select.Elements;
 import org.slf4j.Logger;
@@ -23,8 +24,11 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class KbdlayoutinfoParser {
 
@@ -37,7 +41,7 @@ public class KbdlayoutinfoParser {
             Map.entry("0000040C", "fr-azerty"),
             Map.entry("00000407", "de-qwertz"),
             Map.entry("00000410", "it-qwerty"),
-            Map.entry("00000411", "jp-kana"),
+            Map.entry("00000411", "jp-kana-ansi"),
             Map.entry("00010416", "pt-qwerty-abnt2"),
             Map.entry("00000419", "ru-jcuken"),
             Map.entry("0000040A", "es-qwerty"),
@@ -46,6 +50,9 @@ public class KbdlayoutinfoParser {
             Map.entry("00010409", "us-dvorak"),
             Map.entry("0000041D", "sv-qwerty")
     );
+
+    private static final Set<Set<String>> keyboardLayoutShortNamesWithSameKeys =
+            Set.of(Set.of("us-qwerty", "zh-qwerty-pinyin", "jp-kana-ansi"));
 
     private static final Map<WindowsVirtualKey, Key> keyboardLayoutIndependentWithTextVirtualKeys = Map.ofEntries(
             Map.entry(WindowsVirtualKey.VK_SPACE, Key.space)
@@ -157,12 +164,17 @@ public class KbdlayoutinfoParser {
         }
         for (KeyboardLayout keyboardLayout : keyboardLayouts) {
             logger.info("Parsing keyboard layout XML for processing " + keyboardLayout);
-            parseKeyboardLayoutXmlForProcessing(keyboardLayout);
+            parseKeyboardLayoutXmlForProcessing(keyboardLayout, keyboardLayout.identifier());
         }
         fixKoreanKeyboardLayout(keyboardLayouts);
+        addJapaneseJisKeyboardLayout(keyboardLayouts);
         addCustomKeyboardLayouts(keyboardLayouts);
+        separateNumpadEnter(keyboardLayouts);
+        checkShortNamedKeyboardLayoutsAreDistinct(keyboardLayouts);
         String filePath = Paths.get("src", "main", "resources", "keyboard-layouts.json").toString();
-        Gson gson = new GsonBuilder().create();
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(Key.class, new KeyboardLayout.KeySerializer())
+                .create();
         try (FileWriter writer = new FileWriter(filePath)) {
             gson.toJson(keyboardLayouts, writer);
             logger.info("Save keyboard layouts: " + filePath);
@@ -204,14 +216,14 @@ public class KbdlayoutinfoParser {
         if (displayName == null || driverName == null)
             throw new IllegalStateException();
         return new KeyboardLayout(keyboardLayoutIdentifier, displayName, driverName,
-                keyboardLayoutShortNameByIdentifier.get(keyboardLayoutIdentifier),
+                keyboardLayoutShortNameByIdentifier.get(keyboardLayoutIdentifier), null,
                 new ArrayList<>());
     }
 
     private static void parseKeyboardLayoutXmlForProcessing(
-            KeyboardLayout keyboardLayout)
+            KeyboardLayout keyboardLayout, String page)
             throws IOException, ParserConfigurationException, SAXException {
-        String urlString = "https://kbdlayout.info/" + keyboardLayout.identifier() + "/download/xml";
+        String urlString = "https://kbdlayout.info/" + page + "/download/xml";
         URL url = URI.create(urlString).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
@@ -233,6 +245,8 @@ public class KbdlayoutinfoParser {
             NodeList children = pk.getChildNodes();
             boolean noText = children.getLength() == 0;
             String text = null;
+            String shiftText = null;
+            String altgrText = null;
             for (int j = 0; j < children.getLength(); j++) {
                 Node child = children.item(j);
                 if (child.getNodeType() == Node.ELEMENT_NODE && child.getNodeName().equals("Result")) {
@@ -260,7 +274,7 @@ public class KbdlayoutinfoParser {
                                 Element dkResult = (Element) dkResults.item(m);
                                 String dkText = dkResult.getAttribute("Text");
                                 String dkWith = dkResult.getAttribute("With");
-                                log("      DeadKey Result: " + dkWith + " → " +
+                                log("      DeadKey Result: " + dkWith + " -> " +
                                     dkText);
                                 if (dkWith.isBlank() && with.isEmpty())
                                     text = dkText;
@@ -277,6 +291,10 @@ public class KbdlayoutinfoParser {
                                 noText = true;
                             text = resultText;
                         }
+                        else if (with.equals("VK_SHIFT") && !resultText.isBlank())
+                            shiftText = resultText;
+                        else if (with.equals("VK_CONTROL VK_MENU") && !resultText.isBlank())
+                            altgrText = resultText;
                         log(
                                 "    Text=" + resultText + ", Codepoints=" + codepoints);
                     }
@@ -301,6 +319,7 @@ public class KbdlayoutinfoParser {
                 keyboardLayout.keys()
                               .add(new KeyboardLayout.KeyboardLayoutKey(sc, vk, key,
                                       text == null || text.isBlank() ? null : text,
+                                      shiftText, altgrText,
                                       name.isBlank() ? null : name));
         }
         noTextVirtualKeys.addAll(
@@ -356,12 +375,56 @@ public class KbdlayoutinfoParser {
                     sameCharacterUsQwertyKey.virtualKey(),
                     sameCharacterUsQwertyKey.key(),
                     sameCharacterUsQwertyKey.text(),
+                    sameCharacterUsQwertyKey.shiftText(),
+                    sameCharacterUsQwertyKey.altgrText(),
                     sameCharacterUsQwertyKey.name()
             );
             usHalmakKeys.add(usHalmakKey);
         }
         keyboardLayouts.add(
-                new KeyboardLayout(null, null, null, "us-halmak", usHalmakKeys));
+                new KeyboardLayout(null, null, null, "us-halmak", null, usHalmakKeys));
+    }
+
+    private static void addJapaneseJisKeyboardLayout(List<KeyboardLayout> keyboardLayouts)
+            throws IOException, ParserConfigurationException, SAXException {
+        // A JIS keyboard (keyboard type 7) uses kbd106, not the kbdjpn that
+        // https://kbdlayout.info/00000411 redirects to, which is for a 101-key keyboard.
+        KeyboardLayout japaneseKeyboardLayout =
+                keyboardLayouts.stream()
+                               .filter(keyboardLayout -> keyboardLayout.identifier()
+                                                                       .equals("00000411"))
+                               .findFirst()
+                               .orElseThrow();
+        KeyboardLayout jisKeyboardLayout =
+                new KeyboardLayout(japaneseKeyboardLayout.identifier(),
+                        japaneseKeyboardLayout.displayName(), "kbd106", "jp-kana-jis", 7,
+                        new ArrayList<>());
+        parseKeyboardLayoutXmlForProcessing(jisKeyboardLayout, "kbd106");
+        keyboardLayouts.add(jisKeyboardLayout);
+    }
+
+    private static void checkShortNamedKeyboardLayoutsAreDistinct(
+            List<KeyboardLayout> keyboardLayouts) {
+        Map<List<String>, Set<String>> shortNamesByKeys = new HashMap<>();
+        for (KeyboardLayout keyboardLayout : keyboardLayouts) {
+            if (keyboardLayout.shortName() == null)
+                continue;
+            List<String> keys = keyboardLayout.keys()
+                                              .stream()
+                                              .map(key -> key.scanCode() + " " +
+                                                          key.virtualKey() + " " +
+                                                          key.key())
+                                              .sorted()
+                                              .toList();
+            shortNamesByKeys.computeIfAbsent(keys, sameKeys -> new HashSet<>())
+                            .add(keyboardLayout.shortName());
+        }
+        for (Set<String> shortNames : shortNamesByKeys.values()) {
+            if (shortNames.size() > 1 &&
+                !keyboardLayoutShortNamesWithSameKeys.contains(shortNames))
+                throw new IllegalStateException(
+                        "Keyboard layouts have the same keys: " + shortNames);
+        }
     }
 
     private static void fixKoreanKeyboardLayout(List<KeyboardLayout> keyboardLayouts) {
@@ -374,8 +437,18 @@ public class KbdlayoutinfoParser {
                                .orElseThrow();
         koreanKeyboardLayout.keys()
                             .add(new KeyboardLayout.KeyboardLayoutKey(57400,
-                                    WindowsVirtualKey.VK_RMENU, Key.rightalt, null,
-                                    "Right Alt"));
+                                    WindowsVirtualKey.VK_RMENU, Key.rightalt, null, null,
+                                    null, "Right Alt"));
+    }
+
+    private static void separateNumpadEnter(List<KeyboardLayout> keyboardLayouts) {
+        // The numpad enter is VK_RETURN too: only its scan code tells it apart.
+        for (KeyboardLayout keyboardLayout : keyboardLayouts) {
+            keyboardLayout.keys().replaceAll(key -> key.scanCode() != 0xE01C ? key :
+                    new KeyboardLayout.KeyboardLayoutKey(key.scanCode(), key.virtualKey(),
+                            Key.numpadenter, key.text(), key.shiftText(), key.altgrText(),
+                            key.name()));
+        }
     }
 
     private static void log(String string) {

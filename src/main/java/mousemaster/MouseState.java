@@ -2,30 +2,38 @@ package mousemaster;
 
 public class MouseState {
 
-    private final MouseController mouseController;
+    private final MouseManager mouseManager;
 
-    public MouseState(MouseController mouseController) {
-        this.mouseController = mouseController;
+    public MouseState(MouseManager mouseManager) {
+        this.mouseManager = mouseManager;
     }
 
     public boolean moving() {
-        return mouseController.moving();
+        return mouseManager.moving();
     }
 
     public boolean leftPressing() {
-        return mouseController.leftPressing();
+        return mouseManager.leftPressing();
     }
 
     public boolean middlePressing() {
-        return mouseController.middlePressing();
+        return mouseManager.middlePressing();
     }
 
     public boolean rightPressing() {
-        return mouseController.rightPressing();
+        return mouseManager.rightPressing();
     }
 
     public boolean wheeling() {
-        return mouseController.wheeling();
+        return mouseManager.wheeling();
+    }
+
+    public boolean pressing() {
+        return leftPressing() || middlePressing() || rightPressing();
+    }
+
+    public boolean idling() {
+        return !moving() && !wheeling() && !pressing();
     }
 
 }

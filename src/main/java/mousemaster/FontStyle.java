@@ -3,23 +3,26 @@ package mousemaster;
 import mousemaster.Shadow.ShadowBuilder;
 
 public record FontStyle(String name, FontWeight weight,
-                        double size, String hexColor,
+                        double size, Color color,
                         double opacity,
-                        double outlineThickness, String outlineHexColor,
+                        double outlineThickness, Color outlineColor,
                         double outlineOpacity,
-                        Shadow shadow) {
+                        Shadow shadow, FontVerticalAlignment verticalAlignment) {
+
+    public static final String defaultName = Os.macos ? "Menlo" : "Consolas";
 
     public static class FontStyleBuilder {
 
         private String name;
         private FontWeight weight;
         private Double size;
-        private String hexColor;
+        private Color color;
         private Double opacity;
         private Double outlineThickness;
-        private String outlineHexColor;
+        private Color outlineColor;
         private Double outlineOpacity;
         private ShadowBuilder shadow = new ShadowBuilder();
+        private FontVerticalAlignment verticalAlignment;
 
         public FontStyleBuilder() {
 
@@ -29,12 +32,13 @@ public record FontStyle(String name, FontWeight weight,
             this.name = fontStyle.name;
             this.weight = fontStyle.weight;
             this.size = fontStyle.size;
-            this.hexColor = fontStyle.hexColor;
+            this.color = fontStyle.color;
             this.opacity = fontStyle.opacity;
             this.outlineThickness = fontStyle.outlineThickness;
-            this.outlineHexColor = fontStyle.outlineHexColor;
+            this.outlineColor = fontStyle.outlineColor;
             this.outlineOpacity = fontStyle.outlineOpacity;
             this.shadow = new ShadowBuilder(fontStyle.shadow);
+            this.verticalAlignment = fontStyle.verticalAlignment;
         }
 
         public String name() {
@@ -49,8 +53,8 @@ public record FontStyle(String name, FontWeight weight,
             return size;
         }
 
-        public String hexColor() {
-            return hexColor;
+        public Color color() {
+            return color;
         }
 
         public Double opacity() {
@@ -61,8 +65,8 @@ public record FontStyle(String name, FontWeight weight,
             return outlineThickness;
         }
 
-        public String outlineHexColor() {
-            return outlineHexColor;
+        public Color outlineColor() {
+            return outlineColor;
         }
 
         public Double outlineOpacity() {
@@ -71,6 +75,15 @@ public record FontStyle(String name, FontWeight weight,
 
         public ShadowBuilder shadow() {
             return shadow;
+        }
+
+        public FontVerticalAlignment verticalAlignment() {
+            return verticalAlignment;
+        }
+
+        public FontStyleBuilder verticalAlignment(FontVerticalAlignment verticalAlignment) {
+            this.verticalAlignment = verticalAlignment;
+            return this;
         }
 
         public FontStyleBuilder name(String fontName) {
@@ -88,8 +101,8 @@ public record FontStyle(String name, FontWeight weight,
             return this;
         }
 
-        public FontStyleBuilder hexColor(String fontHexColor) {
-            this.hexColor = fontHexColor;
+        public FontStyleBuilder color(Color fontColor) {
+            this.color = fontColor;
             return this;
         }
 
@@ -103,8 +116,8 @@ public record FontStyle(String name, FontWeight weight,
             return this;
         }
 
-        public FontStyleBuilder outlineHexColor(String fontOutlineHexColor) {
-            this.outlineHexColor = fontOutlineHexColor;
+        public FontStyleBuilder outlineColor(Color fontOutlineColor) {
+            this.outlineColor = fontOutlineColor;
             return this;
         }
 
@@ -117,11 +130,12 @@ public record FontStyle(String name, FontWeight weight,
             if (name == null) name = defaultStyle.name;
             if (weight == null) weight = defaultStyle.weight;
             if (size == null) size = defaultStyle.size;
-            if (hexColor == null) hexColor = defaultStyle.hexColor;
+            if (color == null) color = defaultStyle.color;
             if (opacity == null) opacity = defaultStyle.opacity;
             if (outlineThickness == null) outlineThickness = defaultStyle.outlineThickness;
-            if (outlineHexColor == null) outlineHexColor = defaultStyle.outlineHexColor;
+            if (outlineColor == null) outlineColor = defaultStyle.outlineColor;
             if (outlineOpacity == null) outlineOpacity = defaultStyle.outlineOpacity;
+            if (verticalAlignment == null) verticalAlignment = defaultStyle.verticalAlignment;
             shadow.extend(defaultStyle.shadow);
         }
 
@@ -130,12 +144,13 @@ public record FontStyle(String name, FontWeight weight,
                     name,
                     weight,
                     size,
-                    hexColor,
+                    color,
                     opacity,
                     outlineThickness,
-                    outlineHexColor,
+                    outlineColor,
                     outlineOpacity,
-                    shadow.build()
+                    shadow.build(),
+                    verticalAlignment
             );
         }
 

@@ -1,0 +1,269 @@
+package mousemaster.qt;
+
+import io.qt.core.Qt;
+import io.qt.gui.*;
+import mousemaster.Color;
+import mousemaster.GradientColor;
+import mousemaster.Point;
+import mousemaster.Rectangle;
+import mousemaster.Shadow;
+
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
+
+public final class QtColorUtil {
+
+    private QtColorUtil() {
+    }
+
+    public static QColor qColor(String hexColor, double opacity) {
+        return QColor.fromRgba(rgba(hexColor, opacity));
+    }
+
+    public static int rgba(String hexColor, double opacity) {
+        return rgba(Color.rgb(hexColor), opacity);
+    }
+
+    /** Constructing a QtJambi object costs ~10us and a screen-sized hint grid paints tens of
+     *  thousands of boxes sharing a few appearances. QPainter copies the state it is given, so one
+     *  brush or pen can back any number of paints. */
+    private static final Map<Integer, QBrush> brushByRgba = new HashMap<>();
+    /** By instance: QBrush equality is a native call, and every brush comes from these caches. */
+    private static final Map<QBrush, Map<PenKey, QPen>> penByKeyByBrush =
+            new IdentityHashMap<>();
+    private static QBrush noBrush;
+    private static QBrush opaqueWhiteBrush;
+
+    private record PenKey(int width, Qt.PenCapStyle capStyle, Qt.PenJoinStyle joinStyle) {
+    }
+
+    public static QBrush qBrush(QColor color) {
+        return qBrush(color.rgba());
+    }
+
+    public static QBrush qBrush(int rgba) {
+        return brushByRgba.computeIfAbsent(rgba, key -> {
+            QColor color = QColor.fromRgba(key);
+            QBrush brush = new QBrush(color);
+            color.dispose();
+            return brush;
+        });
+    }
+
+    private record GradientKey(GradientColor color, int alpha, double startX,
+                               double startY, double endX, double endY) {
+    }
+
+    private static final Map<GradientKey, QBrush> brushByGradient = new HashMap<>();
+
+    /** One sweep inside every shape it fills, whatever that shape's size and position. */
+    public static QBrush qBrush(GradientColor color, double opacity) {
+        Rectangle unit = GradientColor.unitArea;
+        return gradientQBrush(color, opacity, color.direction().start(unit),
+                color.direction().end(unit), QGradient.CoordinateMode.ObjectBoundingMode);
+    }
+
+    private record AreaKey(GradientColor color, int alpha, Rectangle area) {
+    }
+
+    private static final Map<AreaKey, QBrush> brushByArea = new HashMap<>();
+
+    /** The sweep of qBrush(color, opacity) inside area, whatever path it paints. */
+    public static QBrush qBrush(GradientColor color, double opacity, Rectangle area) {
+        return brushByArea.computeIfAbsent(new AreaKey(color, alpha(opacity), area), key -> {
+            Rectangle unit = GradientColor.unitArea;
+            Point start = color.direction().start(unit);
+            Point end = color.direction().end(unit);
+            QBrush brush = gradientBrush(color, key.alpha(), start.x(), start.y(), end.x(),
+                    end.y(), QGradient.CoordinateMode.LogicalMode);
+            QTransform transform = new QTransform();
+            transform.translate(area.x(), area.y());
+            transform.scale(area.width(), area.height());
+            brush.setTransform(transform);
+            transform.dispose();
+            return brush;
+        });
+    }
+
+    /** A round sweep takes its extent from the second point: a radius, or two semi-axes. */
+    private static QGradient gradient(GradientColor color, double startX, double startY,
+                                      double endX, double endY) {
+        return switch (color.direction().shape()) {
+            case STRAIGHT -> new QLinearGradient(startX, startY, endX, endY);
+            case CIRCLE -> new QRadialGradient(startX, startY,
+                    Math.hypot(endX - startX, endY - startY));
+            // An area flat on one axis leaves a circle of the other's extent.
+            case ELLIPSE -> new QRadialGradient(startX, startY,
+                    endX == startX ? endY - startY : endX - startX);
+        };
+    }
+
+    /** Qt has no elliptical gradient, so a circular one is squashed onto the area's shape. */
+    private static void fitToArea(QBrush brush, GradientColor color, double startX,
+                                  double startY, double endX, double endY) {
+        if (color.direction().shape() != GradientColor.GradientShape.ELLIPSE ||
+            endX == startX || endY == startY)
+            return;
+        QTransform transform = new QTransform();
+        transform.translate(startX, startY);
+        transform.scale(1, (endY - startY) / (endX - startX));
+        transform.translate(-startX, -startY);
+        brush.setTransform(transform);
+        transform.dispose();
+    }
+
+    /** One sweep between two points of the painter's space, which shapes take their slice of. */
+    public static QBrush qBrush(GradientColor color, double opacity, Point start,
+                                Point end) {
+        return gradientQBrush(color, opacity, start, end,
+                QGradient.CoordinateMode.LogicalMode);
+    }
+
+    private static QBrush gradientQBrush(GradientColor color, double opacity, Point start,
+                                         Point end, QGradient.CoordinateMode coordinateMode) {
+        return brushByGradient.computeIfAbsent(
+                new GradientKey(color, alpha(opacity), start.x(), start.y(), end.x(), end.y()),
+                key -> gradientBrush(color, key.alpha(), key.startX(), key.startY(), key.endX(),
+                        key.endY(), coordinateMode));
+    }
+
+    private static QBrush gradientBrush(GradientColor color, int alpha, double startX,
+                                        double startY, double endX, double endY,
+                                        QGradient.CoordinateMode coordinateMode) {
+        QGradient gradient = gradient(color, startX, startY, endX,
+                endY);
+        gradient.setCoordinateMode(coordinateMode);
+        // Qt runs a round sweep outward whatever its points, so it reverses its colors.
+        boolean reversed = color.direction().inverted();
+        // Qt copies what it is given, so the temporaries are freed here rather than
+        // on the cleanup thread.
+        QColor stopColor = new QColor();
+        for (int step = 0; step < GradientColor.rampSteps; step++) {
+            double sweepPosition =
+                    (double) step / (GradientColor.rampSteps - 1);
+            stopColor.setRgba(rgba(
+                    color.rgbAt(reversed ? 1 - sweepPosition : sweepPosition),
+                    alpha));
+            gradient.setColorAt(sweepPosition, stopColor);
+        }
+        stopColor.dispose();
+        QBrush brush = new QBrush(gradient);
+        gradient.dispose();
+        fitToArea(brush, color, startX, startY, endX, endY);
+        return brush;
+    }
+
+    private record SweepKey(GradientColor color, int alpha, int step) {
+    }
+
+    private static final Map<SweepKey, QBrush> brushBySweepStep = new HashMap<>();
+
+    public static QBrush qBrush(GradientColor color, double opacity, double sweepPosition) {
+        int step = rampStep(sweepPosition);
+        return brushBySweepStep.computeIfAbsent(new SweepKey(color, alpha(opacity), step),
+                key -> qBrush(rgba(color.rgbAt(
+                        (double) step / (GradientColor.rampSteps - 1)), key.alpha())));
+    }
+
+    /** The color a sampled brush paints at sweepPosition. */
+    public static QColor qColor(GradientColor color, double opacity, double sweepPosition) {
+        return QColor.fromRgba(rgba(color.rgbAt(
+                (double) rampStep(sweepPosition) / (GradientColor.rampSteps - 1)), opacity));
+    }
+
+    private static int rampStep(double sweepPosition) {
+        return (int) Math.round(Math.clamp(sweepPosition, 0, 1) * (GradientColor.rampSteps - 1));
+    }
+
+    /** Dropped rather than freed outright: shown hint boxes hold these, so Qt frees each only once
+     *  nothing refers to it. */
+    public static void clearCaches() {
+        brushByRgba.clear();
+        brushByGradient.clear();
+        brushByArea.clear();
+        brushBySweepStep.clear();
+        penByKeyByBrush.clear();
+        opaqueByRgba.clear();
+    }
+
+    private static final Map<Integer, QColor> opaqueByRgba = new HashMap<>();
+
+    /** The color at full alpha. Shadow sources are drawn opaque so the shadow keeps its strength,
+     *  which asks for the same few variants once per label. */
+    public static QColor opaque(QColor color) {
+        if (color.alpha() == 255)
+            return color;
+        return opaqueByRgba.computeIfAbsent(color.rgba(),
+                rgba -> new QColor(color.red(), color.green(), color.blue(), 255));
+    }
+
+    public static QBrush noBrush() {
+        if (noBrush == null)
+            noBrush = new QBrush(Qt.BrushStyle.NoBrush);
+        return noBrush;
+    }
+
+    public static QBrush opaqueWhiteBrush() {
+        if (opaqueWhiteBrush == null)
+            opaqueWhiteBrush = new QBrush(new QColor(255, 255, 255, 255));
+        return opaqueWhiteBrush;
+    }
+
+    public static QPen qPen(QColor color, int width, Qt.PenCapStyle capStyle,
+                            Qt.PenJoinStyle joinStyle) {
+        return qPen(qBrush(color), width, capStyle, joinStyle);
+    }
+
+    public static QPen qPen(QBrush brush, int width, Qt.PenCapStyle capStyle,
+                            Qt.PenJoinStyle joinStyle) {
+        return penByKeyByBrush.computeIfAbsent(brush, key -> new HashMap<>())
+                              .computeIfAbsent(new PenKey(width, capStyle, joinStyle), key -> {
+                                  QPen pen = new QPen();
+                                  pen.setBrush(brush);
+                                  pen.setCapStyle(capStyle);
+                                  pen.setJoinStyle(joinStyle);
+                                  pen.setWidth(width);
+                                  return pen;
+                              });
+    }
+
+    public static QColor shadow(Shadow shadow, String lastSelectedHintBoxHexColor) {
+        return qColor(shadow.color().hexColor(lastSelectedHintBoxHexColor), shadow.opacity());
+    }
+
+    public static int rgba(int rgb, double opacity) {
+        return rgba(rgb, alpha(opacity));
+    }
+
+    public static int rgba(int rgb, int alpha) {
+        return (alpha << 24) | (rgb & 0xFFFFFF);
+    }
+
+    public static int alpha(double opacity) {
+        return opacity > 0 ? Math.max(1, (int) (opacity * 255) & 0xFF) : 0;
+    }
+
+    public static int alphaMultiplied(int color, double opacity) {
+        int red = (color >> 16) & 0xFF;
+        int green = (color >> 8) & 0xFF;
+        int blue = color & 0xFF;
+        return ((int) Math.round(red * opacity) << 16) | ((int) Math.round(green * opacity) << 8) |
+               (int) Math.round(blue * opacity);
+    }
+
+    // base is background, over is foreground.
+    public static int blend(int base, int over, double overOpacity) {
+        int red1 = (base >> 16) & 0xFF;
+        int green1 = (base >> 8) & 0xFF;
+        int blue1 = base & 0xFF;
+        int red2 = (over >> 16) & 0xFF;
+        int green2 = (over >> 8) & 0xFF;
+        int blue2 = over & 0xFF;
+        int blendedRed = (int) Math.round((red2 * overOpacity) + (red1 * (1 - overOpacity)));
+        int blendedGreen = (int) Math.round((green2 * overOpacity) + (green1 * (1 - overOpacity)));
+        int blendedBlue = (int) Math.round((blue2 * overOpacity) + (blue1 * (1 - overOpacity)));
+        return (blendedRed << 16) | (blendedGreen << 8) | blendedBlue;
+    }
+
+}

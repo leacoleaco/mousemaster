@@ -1,18 +1,17 @@
 package mousemaster;
 
-public record HintGridLayout(int maxRowCount, int maxColumnCount, double cellWidth,
-                             double cellHeight,
+import mousemaster.HintCellSizing.HintCellSizingType;
+
+public record HintGridLayout(int maxRowCount, int maxColumnCount,
+                             HintCellSizing cellSizing,
                              int layoutRowCount, int layoutColumnCount,
                              boolean layoutRowOriented) {
-
-    public HintGridLayoutBuilder builder() {
-        return new HintGridLayoutBuilder(this);
-    }
 
     public static class HintGridLayoutBuilder {
 
         private Integer maxRowCount;
         private Integer maxColumnCount;
+        private HintCellSizingType cellSizingType;
         private Double cellWidth;
         private Double cellHeight;
         private Integer layoutRowCount;
@@ -23,20 +22,16 @@ public record HintGridLayout(int maxRowCount, int maxColumnCount, double cellWid
 
         }
 
-        public HintGridLayoutBuilder(HintGridLayout layout) {
-            this.cellWidth = layout.cellWidth;
-            this.cellHeight = layout.cellHeight;
-            this.layoutRowCount = layout.layoutRowCount;
-            this.layoutColumnCount = layout.layoutColumnCount;
-            this.layoutRowOriented = layout.layoutRowOriented;
-        }
-
         public Integer maxRowCount() {
             return maxRowCount;
         }
 
         public Integer maxColumnCount() {
             return maxColumnCount;
+        }
+
+        public HintCellSizingType cellSizingType() {
+            return cellSizingType;
         }
 
         public Double cellWidth() {
@@ -69,6 +64,11 @@ public record HintGridLayout(int maxRowCount, int maxColumnCount, double cellWid
             return this;
         }
 
+        public HintGridLayoutBuilder cellSizingType(HintCellSizingType cellSizingType) {
+            this.cellSizingType = cellSizingType;
+            return this;
+        }
+
         public HintGridLayoutBuilder cellWidth(Double cellWidth) {
             this.cellWidth = cellWidth;
             return this;
@@ -98,8 +98,12 @@ public record HintGridLayout(int maxRowCount, int maxColumnCount, double cellWid
             return new HintGridLayout(
                     maxRowCount == null ? defaultLayout.maxRowCount : maxRowCount,
                     maxColumnCount == null ? defaultLayout.maxColumnCount : maxColumnCount,
-                    cellWidth == null ? defaultLayout.cellWidth : cellWidth,
-                    cellHeight == null ? defaultLayout.cellHeight : cellHeight,
+                    new HintCellSizing(
+                            cellSizingType == null ? defaultLayout.cellSizing.type() :
+                                    cellSizingType,
+                            cellWidth == null ? defaultLayout.cellSizing.cellWidth() : cellWidth,
+                            cellHeight == null ? defaultLayout.cellSizing.cellHeight() :
+                                    cellHeight),
                     layoutRowCount == null ? defaultLayout.layoutRowCount : layoutRowCount,
                     layoutColumnCount == null ? defaultLayout.layoutColumnCount : layoutColumnCount,
                     layoutRowOriented == null ? defaultLayout.layoutRowOriented : layoutRowOriented

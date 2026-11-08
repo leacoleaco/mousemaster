@@ -5,16 +5,17 @@ import static mousemaster.Command.*;
 public class CommandRunner {
 
     private ModeController modeController;
-    private final MouseController mouseController;
-    private final GridManager gridManager;
+    private final MouseManager mouseManager;
     private final HintManager hintManager;
+    private final Platform platform;
     private MacroPlayer macroPlayer;
+    private AnimationPlayer animationPlayer;
 
-    public CommandRunner(MouseController mouseController, GridManager gridManager,
-                         HintManager hintManager) {
-        this.mouseController = mouseController;
-        this.gridManager = gridManager;
+    public CommandRunner(MouseManager mouseManager, HintManager hintManager,
+                         Platform platform) {
+        this.mouseManager = mouseManager;
         this.hintManager = hintManager;
+        this.platform = platform;
     }
 
     public void setModeController(ModeController modeController) {
@@ -25,8 +26,12 @@ public class CommandRunner {
         this.macroPlayer = macroPlayer;
     }
 
+    public void setAnimationPlayer(AnimationPlayer animationPlayer) {
+        this.animationPlayer = animationPlayer;
+    }
+
     public boolean runningAtomicCommand() {
-        return mouseController.jumping();
+        return mouseManager.jumping();
     }
 
     public void run(Command command, Key eventKey) {
@@ -34,62 +39,85 @@ public class CommandRunner {
             // @formatter:off
             case SwitchMode switchMode -> modeController.switchMode(switchMode.modeName());
 
-            case StartMoveUp startMoveUp -> mouseController.startMoveUp();
-            case StartMoveDown startMoveDown -> mouseController.startMoveDown();
-            case StartMoveLeft startMoveLeft -> mouseController.startMoveLeft();
-            case StartMoveRight startMoveRight -> mouseController.startMoveRight();
+            case StartMoveUp startMoveUp -> mouseManager.startMoveUp();
+            case StartMoveDown startMoveDown -> mouseManager.startMoveDown();
+            case StartMoveLeft startMoveLeft -> mouseManager.startMoveLeft();
+            case StartMoveRight startMoveRight -> mouseManager.startMoveRight();
 
-            case StopMoveUp stopMoveUp -> mouseController.stopMoveUp();
-            case StopMoveDown stopMoveDown -> mouseController.stopMoveDown();
-            case StopMoveLeft stopMoveLeft -> mouseController.stopMoveLeft();
-            case StopMoveRight stopMoveRight -> mouseController.stopMoveRight();
+            case StopMoveUp stopMoveUp -> mouseManager.stopMoveUp();
+            case StopMoveDown stopMoveDown -> mouseManager.stopMoveDown();
+            case StopMoveLeft stopMoveLeft -> mouseManager.stopMoveLeft();
+            case StopMoveRight stopMoveRight -> mouseManager.stopMoveRight();
 
-            case PressLeft pressLeft -> mouseController.pressLeft();
-            case PressMiddle pressMiddle -> mouseController.pressMiddle();
-            case PressRight pressRight -> mouseController.pressRight();
+            case StartMoveTargetUp startMoveTargetUp -> hintManager.startMoveTargetUp();
+            case StartMoveTargetDown startMoveTargetDown -> hintManager.startMoveTargetDown();
+            case StartMoveTargetLeft startMoveTargetLeft -> hintManager.startMoveTargetLeft();
+            case StartMoveTargetRight startMoveTargetRight -> hintManager.startMoveTargetRight();
 
-            case ReleaseLeft releaseLeft -> mouseController.releaseLeft();
-            case ReleaseMiddle releaseMiddle -> mouseController.releaseMiddle();
-            case ReleaseRight releaseRight -> mouseController.releaseRight();
+            case StopMoveTargetUp stopMoveTargetUp -> hintManager.stopMoveTargetUp();
+            case StopMoveTargetDown stopMoveTargetDown -> hintManager.stopMoveTargetDown();
+            case StopMoveTargetLeft stopMoveTargetLeft -> hintManager.stopMoveTargetLeft();
+            case StopMoveTargetRight stopMoveTargetRight -> hintManager.stopMoveTargetRight();
 
-            case ToggleLeft toggleLeft -> mouseController.toggleLeft();
-            case ToggleMiddle toggleMiddle -> mouseController.toggleMiddle();
-            case ToggleRight toggleRight -> mouseController.toggleRight();
+            case PressLeft pressLeft -> mouseManager.pressLeft();
+            case PressMiddle pressMiddle -> mouseManager.pressMiddle();
+            case PressRight pressRight -> mouseManager.pressRight();
 
-            case StartWheelUp startWheelUp -> mouseController.startWheelUp();
-            case StartWheelDown startWheelDown -> mouseController.startWheelDown();
-            case StartWheelLeft startWheelLeft -> mouseController.startWheelLeft();
-            case StartWheelRight startWheelRight -> mouseController.startWheelRight();
+            case ReleaseLeft releaseLeft -> mouseManager.releaseLeft();
+            case ReleaseMiddle releaseMiddle -> mouseManager.releaseMiddle();
+            case ReleaseRight releaseRight -> mouseManager.releaseRight();
 
-            case StopWheelUp stopWheelUp -> mouseController.stopWheelUp();
-            case StopWheelDown stopWheelDown -> mouseController.stopWheelDown();
-            case StopWheelLeft stopWheelLeft -> mouseController.stopWheelLeft();
-            case StopWheelRight stopWheelRight -> mouseController.stopWheelRight();
+            case ToggleLeft toggleLeft -> mouseManager.toggleLeft();
+            case ToggleMiddle toggleMiddle -> mouseManager.toggleMiddle();
+            case ToggleRight toggleRight -> mouseManager.toggleRight();
 
-            case SnapUp snapUp -> gridManager.snapUp();
-            case SnapDown snapDown -> gridManager.snapDown();
-            case SnapLeft snapLeft -> gridManager.snapLeft();
-            case SnapRight snapRight -> gridManager.snapRight();
+            case StartWheelUp startWheelUp -> mouseManager.startWheelUp();
+            case StartWheelDown startWheelDown -> mouseManager.startWheelDown();
+            case StartWheelLeft startWheelLeft -> mouseManager.startWheelLeft();
+            case StartWheelRight startWheelRight -> mouseManager.startWheelRight();
 
-            case ShrinkGridUp shrinkGridUp -> gridManager.shrinkGridUp();
-            case ShrinkGridDown shrinkGridDown -> gridManager.shrinkGridDown();
-            case ShrinkGridLeft shrinkGridLeft -> gridManager.shrinkGridLeft();
-            case ShrinkGridRight shrinkGridRight -> gridManager.shrinkGridRight();
+            case StopWheelUp stopWheelUp -> mouseManager.stopWheelUp();
+            case StopWheelDown stopWheelDown -> mouseManager.stopWheelDown();
+            case StopWheelLeft stopWheelLeft -> mouseManager.stopWheelLeft();
+            case StopWheelRight stopWheelRight -> mouseManager.stopWheelRight();
 
-            case MoveGridUp moveGridUp -> gridManager.moveGridUp();
-            case MoveGridDown moveGridDown -> gridManager.moveGridDown();
-            case MoveGridLeft moveGridLeft -> gridManager.moveGridLeft();
-            case MoveGridRight moveGridRight -> gridManager.moveGridRight();
+            case ShrinkOverlayUp shrinkOverlayUp -> hintManager.shrinkOverlayUp();
+            case ShrinkOverlayDown shrinkOverlayDown -> hintManager.shrinkOverlayDown();
+            case ShrinkOverlayLeft shrinkOverlayLeft -> hintManager.shrinkOverlayLeft();
+            case ShrinkOverlayRight shrinkOverlayRight -> hintManager.shrinkOverlayRight();
 
-            case MoveToGridCenter moveToGridCenter -> gridManager.moveToGridCenter();
+            case MoveOverlayToAreaAbove moveOverlayToAreaAbove -> hintManager.moveOverlayToAreaAbove();
+            case MoveOverlayToAreaBelow moveOverlayToAreaBelow -> hintManager.moveOverlayToAreaBelow();
+            case MoveOverlayToAreaLeft moveOverlayToAreaLeft -> hintManager.moveOverlayToAreaLeft();
+            case MoveOverlayToAreaRight moveOverlayToAreaRight -> hintManager.moveOverlayToAreaRight();
 
+            case MoveToTarget moveToTarget -> hintManager.moveToTarget();
             case MoveToLastSelectedHint moveToLastSelectedHint -> hintManager.moveToLastSelectedHint();
+            case MoveToOverlayCenter moveToOverlayCenter -> hintManager.moveToOverlayCenter();
+            case MoveToCellCenter moveToCellCenter -> hintManager.moveToCellCenter();
+            case MoveToCellTop moveToCellTop -> hintManager.moveToCellTop();
+            case MoveToCellBottom moveToCellBottom -> hintManager.moveToCellBottom();
+            case MoveToCellLeft moveToCellLeft -> hintManager.moveToCellLeft();
+            case MoveToCellRight moveToCellRight -> hintManager.moveToCellRight();
 
-            case SavePosition savePosition -> hintManager.saveCurrentPosition();
-            case UnsavePosition unsavePosition -> hintManager.unsaveCurrentPosition();
-            case ClearPositionHistory clearPositionHistory -> hintManager.clearPositionHistory();
-            case CycleNextPosition cycleNextPosition -> hintManager.cycleNextPosition();
-            case CyclePreviousPosition cyclePreviousPosition -> hintManager.cyclePreviousPosition();
+            case MoveTargetToMouse moveTargetToMouse -> hintManager.moveTargetToMouse();
+            case MoveTargetToLastSelectedHint moveTargetToLastSelectedHint -> hintManager.moveTargetToLastSelectedHint();
+            case MoveTargetToOverlayCenter moveTargetToOverlayCenter -> hintManager.moveTargetToOverlayCenter();
+            case MoveTargetToCellCenter moveTargetToCellCenter -> hintManager.moveTargetToCellCenter();
+            case MoveTargetToCellTop moveTargetToCellTop -> hintManager.moveTargetToCellTop();
+            case MoveTargetToCellBottom moveTargetToCellBottom -> hintManager.moveTargetToCellBottom();
+            case MoveTargetToCellLeft moveTargetToCellLeft -> hintManager.moveTargetToCellLeft();
+            case MoveTargetToCellRight moveTargetToCellRight -> hintManager.moveTargetToCellRight();
+
+            case SavePosition(String positionHistoryName) -> hintManager.saveCurrentPosition(positionHistoryName);
+            case UnsavePosition(String positionHistoryName) -> hintManager.unsaveCurrentPosition(positionHistoryName);
+            case ToggleSavePosition(String positionHistoryName) -> hintManager.toggleSaveCurrentPosition(positionHistoryName);
+            case ClearPositionHistory(String positionHistoryName) -> hintManager.clearPositionHistory(positionHistoryName);
+            case CycleNextPosition(String positionHistoryName) -> hintManager.cyclePosition(positionHistoryName, 1);
+            case CyclePreviousPosition(String positionHistoryName) -> hintManager.cyclePosition(positionHistoryName, -1);
+
+            case StartAnimation(String animationName) -> animationPlayer.start(animationName);
+            case StopAnimation(String animationName) -> animationPlayer.stop(animationName);
 
             case MacroCommand(Macro macro, AliasResolution aliasResolution) ->
                     macroPlayer.submit(macro.resolve(aliasResolution));
@@ -103,14 +131,18 @@ public class CommandRunner {
             // Handled by ComboWatcher directly (it holds the variable state).
             case SetVariable setVariable -> {}
             case UnsetVariable unsetVariable -> {}
-            case ClearVariables clearVariables -> {}
+            case ResetVariables resetVariables -> {}
 
             case BreakMacro breakMacro -> macroPlayer.breakMacro();
+
+            case Exit exit -> platform.requestKillProcess();
+            case Restart restart -> platform.requestRestartProcess();
 
             case Noop noop -> {}
 
             case SelectHintKey selectHintKey -> hintManager.selectHintKey(eventKey);
-            case UnselectHintKey unselectHintKey -> hintManager.unselectHintKey();
+            case DeselectHintKey deselectHintKey -> hintManager.deselectHintKey();
+            case DeselectAllHintKeys deselectAllHintKeys -> hintManager.deselectAllHintKeys();
             // @formatter:on
         }
     }

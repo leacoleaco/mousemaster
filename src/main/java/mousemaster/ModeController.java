@@ -2,51 +2,64 @@ package mousemaster;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-public class ModeController implements ComboListener {
+public class ModeController {
 
     private static final Logger logger = LoggerFactory.getLogger(ModeController.class);
 
     private final ModeMap modeMap;
-    private final MouseController mouseController;
+    private final MouseManager mouseManager;
     private final MouseState mouseState;
     private final KeyboardState keyboardState;
     private final HintManager hintManager;
     private final ComboWatcher comboWatcher;
+    private final AnimationPlayer animationPlayer;
     private boolean currentModeCursorHidden;
     private Mode currentMode;
     private final Deque<Mode> modeHistoryStack = new ArrayDeque<>();
     private double modeTimeoutTimer;
     private double hideCursorIdleTimer;
-    private boolean justCompletedCombo;
     private boolean previousTimeoutEnabled;
     private boolean previousHideCursorEnabled;
 
-    public ModeController(ModeMap modeMap, MouseController mouseController,
+    public ModeController(ModeMap modeMap, MouseManager mouseManager,
                           MouseState mouseState, KeyboardState keyboardState,
                           HintManager hintManager,
-                          ComboWatcher comboWatcher) {
+                          ComboWatcher comboWatcher, AnimationPlayer animationPlayer) {
         this.modeMap = modeMap;
-        this.mouseController = mouseController;
+        this.mouseManager = mouseManager;
         this.mouseState = mouseState;
         this.keyboardState = keyboardState;
         this.hintManager = hintManager;
         this.comboWatcher = comboWatcher;
+        this.animationPlayer = animationPlayer;
+    }
+
+    /** Called again once the tick's key events have run their commands, so that what they
+     *  pressed is seen before anything is rendered. */
+    public void updateBuiltInVirtualKeys() {
+        comboWatcher.updateBuiltInVirtualKeys(mouseState, keyboardState, animationPlayer);
+    }
+
+    public Mode currentMode() {
+        return currentMode;
     }
 
     public void update(double delta) {
         hintManager.completePendingUiHintQuery();
-        Mode mutatedMode = comboWatcher.getMutatedMode();
+        Mode mutatedMode =
+                animationPlayer.animate(comboWatcher.getMutatedMode(), "hideCursor");
         // The flag catches briefly-pressed unhandled keys that are released before this poll.
         // The poll catches held keys that become unhandled due to a mode change (no key event to set the flag).
-        boolean hadUnhandledKeyPress =
-                keyboardState.pollHadUnhandledKeyPressInCurrentMode();
+        boolean unhandledKeyWasJustPressed =
+                keyboardState.pollUnhandledKeyJustPressedInCurrentMode();
         if (keyboardState.pressingUnhandledKeyInCurrentMode() ||
-            hadUnhandledKeyPress) {
+            unhandledKeyWasJustPressed) {
             if (mutatedMode.modeAfterUnhandledKeyPress() != null) {
                 logger.debug("Unhandled key press, switching to " +
                              mutatedMode.modeAfterUnhandledKeyPress());
@@ -54,12 +67,13 @@ public class ModeController implements ComboListener {
                 return;
             }
         }
-        boolean idling = !mouseState.moving() &&
-                         !mouseState.leftPressing() && !mouseState.middlePressing() && !mouseState.rightPressing() &&
-                         !mouseState.wheeling() && !justCompletedCombo;
+        updateBuiltInVirtualKeys();
+        boolean idling = mouseState.idling();
         boolean mustResetHideCursorTimeout = !idling || hintManager.showingHintMesh();
-        justCompletedCombo = false;
-        boolean hideCursorEnabled = mutatedMode.hideCursor().enabled();
+        // render-as-cursor also owns the system cursor; when both are on it takes
+        // precedence and hide-cursor is deferred (the indicator is the cursor).
+        boolean hideCursorEnabled = !renderIndicatorAsCursor(mutatedMode) &&
+                                    mutatedMode.hideCursor().enabled();
         if (!previousHideCursorEnabled && hideCursorEnabled)
             resetHideCursorTimer(mutatedMode);
         else if (previousHideCursorEnabled && !hideCursorEnabled)
@@ -73,10 +87,9 @@ public class ModeController implements ComboListener {
             if (hideCursorEnabled && !currentModeCursorHidden) {
                 hideCursorIdleTimer -= delta;
                 if (hideCursorIdleTimer <= 0) {
-                    logger.debug("Hide cursor timer for " + currentMode.name() +
-                                 " has elapsed");
+                    logger.debug("Hide cursor timer has elapsed");
                     currentModeCursorHidden = true;
-                    mouseController.hideCursor();
+                    mouseManager.hideCursor();
                 }
             }
         }
@@ -93,8 +106,7 @@ public class ModeController implements ComboListener {
             if (timeoutEnabled) {
                 modeTimeoutTimer -= delta;
                 if (modeTimeoutTimer <= 0) {
-                    logger.debug("Current " + mutatedMode.name() +
-                                 " has timed out, switching to " +
+                    logger.debug("Timed out, switching to " +
                                  mutatedMode.timeout().modeName());
                     comboWatcher.modeTimedOut();
                     switchMode(mutatedMode.timeout().modeName());
@@ -104,7 +116,7 @@ public class ModeController implements ComboListener {
     }
 
     public void switchMode(String newModeName) {
-        keyboardState.pollHadUnhandledKeyPressInCurrentMode();
+        keyboardState.pollUnhandledKeyJustPressedInCurrentMode();
         Mode newMode;
         Mode previousMode = modeHistoryStack.peek();
         if (newModeName.equals(Mode.PREVIOUS_MODE_FROM_HISTORY_STACK_IDENTIFIER)) {
@@ -125,8 +137,11 @@ public class ModeController implements ComboListener {
                  !modeHistoryStack.contains(currentMode))
             modeHistoryStack.push(currentMode);
         currentMode = newMode;
+        logger.debug("Switching to " + newMode.name());
+        MDC.put("mode", newMode.name());
         comboWatcher.modeChanged(newMode);
-        Mode mutatedMode = comboWatcher.getMutatedMode();
+        Mode mutatedMode =
+                animationPlayer.animate(comboWatcher.getMutatedMode(), "hideCursor");
         resetCurrentModeCursorHidden(mutatedMode);
         resetHideCursorTimer(mutatedMode);
         resetModeTimeoutTimer(mutatedMode);
@@ -134,21 +149,34 @@ public class ModeController implements ComboListener {
         previousHideCursorEnabled = mutatedMode.hideCursor().enabled();
     }
 
+    private boolean renderIndicatorAsCursor(Mode mode) {
+        return mode.indicator().renderAsCursor() && mouseManager.supportsRenderAsCursor();
+    }
+
     private void resetCurrentModeCursorHidden(Mode mode) {
+        if (renderIndicatorAsCursor(mode)) {
+            currentModeCursorHidden = false;
+            return;
+        }
         if (currentModeCursorHidden) {
             if (!mode.hideCursor().enabled() ||
-                !mode.hideCursor().idleDuration().equals(Duration.ZERO)) {
-                mouseController.showCursor();
-                currentModeCursorHidden = false;
-            }
+                !mode.hideCursor().idleDuration().equals(Duration.ZERO))
+                showCursor();
         }
         else {
             if (mode.hideCursor().enabled() &&
                 mode.hideCursor().idleDuration().equals(Duration.ZERO)) {
-                mouseController.hideCursor();
+                mouseManager.hideCursor();
                 currentModeCursorHidden = true;
             }
         }
+    }
+
+    public void showCursor() {
+        if (!currentModeCursorHidden)
+            return;
+        mouseManager.showCursor();
+        currentModeCursorHidden = false;
     }
 
     private void resetModeTimeoutTimer(Mode mode) {
@@ -160,11 +188,6 @@ public class ModeController implements ComboListener {
         if (mode.hideCursor().enabled())
             hideCursorIdleTimer =
                     mode.hideCursor().idleDuration().toNanos() / 1e9d;
-    }
-
-    @Override
-    public void completedCombo() {
-        justCompletedCombo = true;
     }
 
 }

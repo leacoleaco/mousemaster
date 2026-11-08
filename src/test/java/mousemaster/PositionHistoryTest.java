@@ -1,0 +1,360 @@
+package mousemaster;
+
+import mousemaster.platform.MouseController;
+import mousemaster.platform.Overlay;
+import org.junit.jupiter.api.Test;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
+import java.lang.reflect.Proxy;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class PositionHistoryTest {
+
+    private static Configuration parse(String properties) throws IOException {
+        List<String> lines = PropertiesReader.readPropertiesFile(
+                new BufferedReader(new StringReader(properties)));
+        return ConfigurationParser.parse(lines,
+                KeyboardLayout.keyboardLayoutByShortName.get("uk-qwerty"));
+    }
+
+    private static final String twoHistories = """
+            idle-mode.save.position-history=+f1
+            idle-mode.save.browser-position-history=+f2
+            idle-mode.cycle-next.browser-position-history=+f3
+            idle-mode.to.browser-hint-mode=+m
+            browser-hint-mode.hint.selection-keys=a b c d
+            """;
+
+    private static final String browserHints =
+            "browser-hint-mode.hint.type=browser-position-history\n";
+
+    private static String positionHistoryName(Configuration configuration,
+                                              String modeName) {
+        return positionHistoryName(configuration.modeMap().get(modeName));
+    }
+
+    private static String positionHistoryName(Mode mode) {
+        return mode.hintMesh().type().positionHistoryName();
+    }
+
+    private static List<Command> commands(Configuration configuration,
+                                          String modeName) {
+        List<Command> commands = new ArrayList<>();
+        configuration.modeMap()
+                     .get(modeName)
+                     .comboMap()
+                     .commandsByCombo()
+                     .values()
+                     .forEach(commands::addAll);
+        return commands;
+    }
+
+    @Test
+    void hintsComeFromTheNamedPositionHistory() throws IOException {
+        assertEquals("browser-position-history",
+                positionHistoryName(parse(twoHistories + browserHints), "browser-hint-mode"));
+    }
+
+    @Test
+    void commandsNameTheirPositionHistory() throws IOException {
+        List<Command> commands = commands(parse(twoHistories + browserHints), "idle-mode");
+        assertTrue(commands.contains(
+                new Command.SavePosition("position-history")), commands.toString());
+        assertTrue(commands.contains(
+                new Command.SavePosition("browser-position-history")),
+                commands.toString());
+        assertTrue(commands.contains(
+                new Command.CycleNextPosition("browser-position-history")),
+                commands.toString());
+    }
+
+    @Test
+    void theActiveAppCanDriveTheHintPositionHistory() throws IOException {
+        Configuration configuration = parse("""
+                app-alias.browserapp=firefox.exe chrome.exe
+                idle-mode.save.position-history=+f1
+                idle-mode.save.browser-position-history=+f2
+                idle-mode.hint.selection-keys=a b c d
+                idle-mode.hint.type=position-history | _{browserapp} -> browser-position-history
+                """);
+        App[] activeApp = {new App("notepad.exe")};
+        ComboWatcher comboWatcher =
+                new ComboWatcher(null, null, () -> activeApp[0], null, Instant::now,
+                        Set.of(), Set.of(), new KeyRedactor(KeyRedaction.NONE),
+                        configuration.modeMap(),
+                        configuration.initiallySetVariables(), configuration.virtualKeys(),
+                        configuration.initiallyPressedVirtualKeys(),
+                        configuration.activeKeyboardLayout());
+        comboWatcher.setModeListeners(List.of(new ModeListener() {
+            @Override
+            public void modeChanged(Mode newMode) {
+            }
+
+            @Override
+            public void modeTimedOut() {
+            }
+        }));
+        comboWatcher.modeChanged(configuration.modeMap().get(Mode.IDLE_MODE_NAME));
+        comboWatcher.update(0.01);
+        assertEquals("position-history",
+                positionHistoryName(comboWatcher.getMutatedMode()));
+        activeApp[0] = new App("chrome.exe");
+        comboWatcher.update(0.01);
+        assertEquals("browser-position-history",
+                positionHistoryName(comboWatcher.getMutatedMode()));
+    }
+
+    @Test
+    void maxSizeAndIsolationArePerPositionHistory() throws IOException {
+        Configuration configuration = parse(twoHistories + browserHints + """
+                position-history.isolation=none
+                browser-position-history.max-size=4
+                browser-position-history.isolation=active-app
+                """);
+        assertEquals(Map.of("position-history",
+                        new PositionHistoryConfiguration(16,
+                                PositionHistoryIsolation.NONE),
+                        "browser-position-history",
+                        new PositionHistoryConfiguration(4,
+                                PositionHistoryIsolation.ACTIVE_APP)),
+                configuration.positionHistoryConfigurationByName());
+    }
+
+    private static HintManager hintManager(Configuration configuration,
+                                           App[] activeApp) {
+        ScreenManager screenManager = new ScreenManager(
+                () -> Set.of(new Screen(new Rectangle(0, 0, 1920, 1080), 96, 1)));
+        HintManager hintManager = new HintManager(
+                configuration.positionHistoryConfigurationByName(), screenManager,
+                new MouseManager(screenManager, null),
+                (Overlay) Proxy.newProxyInstance(Overlay.class.getClassLoader(),
+                        new Class<?>[] {Overlay.class}, (proxy, method, args) -> null),
+                null, () -> activeApp[0], new KeyRedactor(KeyRedaction.NONE), null);
+        hintManager.modeChanged(configuration.modeMap().get(Mode.IDLE_MODE_NAME));
+        return hintManager;
+    }
+
+    @Test
+    void aPositionHistoryReadsAsAPressedKeyWhileItIsEmpty() throws IOException {
+        Configuration configuration = parse("""
+                idle-mode.save.drag-position-history=+f1
+                idle-mode.indicator.size=10 | _{isdragpositionhistoryempty} -> 20
+                """);
+        App[] activeApp = {new App("notepad.exe")};
+        HintManager hintManager = hintManager(configuration, activeApp);
+        ComboWatcher comboWatcher =
+                new ComboWatcher(null, hintManager, () -> activeApp[0], null, Instant::now,
+                        Set.of(), Set.of(), new KeyRedactor(KeyRedaction.NONE),
+                        configuration.modeMap(),
+                        configuration.initiallySetVariables(), configuration.virtualKeys(),
+                        configuration.initiallyPressedVirtualKeys(),
+                        configuration.activeKeyboardLayout());
+        comboWatcher.setModeListeners(List.of());
+        comboWatcher.modeChanged(configuration.modeMap().get(Mode.IDLE_MODE_NAME));
+        Runnable tick = () -> {
+            comboWatcher.update(0.01);
+            comboWatcher.updateBuiltInVirtualKeys(
+                    new MouseState(new MouseManager(null, (MouseController) Proxy.newProxyInstance(
+                            MouseController.class.getClassLoader(),
+                            new Class<?>[] {MouseController.class},
+                            (proxy, method, args) -> null))),
+                    new KeyboardState(null) {
+                        @Override
+                        public boolean pressingUnhandledKeyInCurrentMode() {
+                            return false;
+                        }
+                    }, new AnimationPlayer(Map.of()));
+        };
+        tick.run();
+        assertEquals(20, size(comboWatcher));
+        hintManager.mouseMoved(10, 10);
+        hintManager.saveCurrentPosition("drag-position-history");
+        tick.run();
+        assertEquals(10, size(comboWatcher));
+        hintManager.unsaveCurrentPosition("drag-position-history");
+        tick.run();
+        assertEquals(20, size(comboWatcher));
+    }
+
+    private static double size(ComboWatcher comboWatcher) {
+        return comboWatcher.getMutatedMode().indicator().layerByName().get("indicator").size();
+    }
+
+    @Test
+    void toggleSaveSavesTheTargetThenUnsavesIt() throws IOException {
+        Configuration configuration = parse("idle-mode.toggle-save.drag-position-history=+f1\n");
+        assertTrue(commands(configuration, "idle-mode").contains(
+                new Command.ToggleSavePosition("drag-position-history")));
+        HintManager hintManager = hintManager(configuration, new App[] {new App("notepad.exe")});
+        hintManager.mouseMoved(10, 10);
+        hintManager.toggleSaveCurrentPosition("drag-position-history");
+        assertEquals(List.of(new Point(10, 10)),
+                hintManager.positionHistory("drag-position-history").positions());
+        hintManager.toggleSaveCurrentPosition("drag-position-history");
+        assertEquals(List.of(),
+                hintManager.positionHistory("drag-position-history").positions());
+    }
+
+    @Test
+    void anActiveAppIsolatedPositionHistoryHasOneListPerApp() throws IOException {
+        Configuration configuration = parse(twoHistories + browserHints +
+                                            "browser-position-history.isolation=active-app\n");
+        App[] activeApp = {new App("chrome.exe")};
+        HintManager hintManager = hintManager(configuration, activeApp);
+        hintManager.mouseMoved(10, 10);
+        hintManager.saveCurrentPosition("browser-position-history");
+        activeApp[0] = new App("firefox.exe");
+        hintManager.mouseMoved(20, 20);
+        hintManager.saveCurrentPosition("browser-position-history");
+        assertEquals(List.of(new Point(20, 20)),
+                hintManager.positionHistory("browser-position-history").positions());
+        activeApp[0] = new App("chrome.exe");
+        assertEquals(List.of(new Point(10, 10)),
+                hintManager.positionHistory("browser-position-history").positions());
+    }
+
+    @Test
+    void anActiveAppIsolatedPositionHistorySavesWhileNoActiveAppIsFound() throws IOException {
+        Configuration configuration = parse(twoHistories + browserHints +
+                                            "browser-position-history.isolation=active-app\n");
+        HintManager hintManager = hintManager(configuration, new App[] {null});
+        hintManager.mouseMoved(10, 10);
+        hintManager.saveCurrentPosition("browser-position-history");
+        assertEquals(List.of(new Point(10, 10)),
+                hintManager.positionHistory("browser-position-history").positions());
+    }
+
+    @Test
+    void theDefaultPositionHistoryCanBeActiveAppIsolated() throws IOException {
+        Configuration configuration = parse(twoHistories + browserHints +
+                                            "position-history.isolation=active-app\n");
+        App[] activeApp = {new App("chrome.exe")};
+        HintManager hintManager = hintManager(configuration, activeApp);
+        hintManager.mouseMoved(10, 10);
+        hintManager.saveCurrentPosition("position-history");
+        activeApp[0] = new App("firefox.exe");
+        assertEquals(List.of(),
+                hintManager.positionHistory("position-history").positions());
+        activeApp[0] = new App("chrome.exe");
+        assertEquals(List.of(new Point(10, 10)),
+                hintManager.positionHistory("position-history").positions());
+    }
+
+    @Test
+    void aPositionHistoryIsSharedByEveryAppByDefault() throws IOException {
+        Configuration configuration = parse(twoHistories + browserHints);
+        App[] activeApp = {new App("chrome.exe")};
+        HintManager hintManager = hintManager(configuration, activeApp);
+        hintManager.mouseMoved(10, 10);
+        hintManager.saveCurrentPosition("browser-position-history");
+        activeApp[0] = new App("firefox.exe");
+        hintManager.mouseMoved(20, 20);
+        hintManager.saveCurrentPosition("browser-position-history");
+        assertEquals(List.of(new Point(10, 10), new Point(20, 20)),
+                hintManager.positionHistory("browser-position-history").positions());
+    }
+
+    @Test
+    void anUnknownIsolationIsRejected() {
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, () -> parse(
+                        twoHistories + browserHints +
+                        "browser-position-history.isolation=active-window\n"));
+        assertTrue(exception.getMessage().contains("expected one of"),
+                exception.getMessage());
+    }
+
+    @Test
+    void anUnknownPositionHistoryPropertyIsRejected() {
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, () -> parse(
+                        twoHistories + browserHints +
+                        "browser-position-history.maxsize=4\n"));
+        assertTrue(exception.getMessage()
+                            .contains("Invalid position history property key"),
+                exception.getMessage());
+    }
+
+    @Test
+    void hintsCannotComeFromAnUndefinedPositionHistory() {
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, () -> parse(
+                        twoHistories +
+                        "browser-hint-mode.hint.type=browsre-position-history\n"));
+        assertTrue(exception.getMessage().contains("undefined position history"),
+                exception.getMessage());
+    }
+
+    @Test
+    void anUndefinedPositionHistoryHasNoMaxSize() {
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, () -> parse(
+                        twoHistories + browserHints +
+                        "browsre-position-history.max-size=4\n"));
+        assertTrue(exception.getMessage().contains("undefined position history"),
+                exception.getMessage());
+    }
+
+    @Test
+    void maxPositionHistorySizeIsRemoved() {
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, () -> parse(
+                        twoHistories + browserHints +
+                        "max-position-history-size=4\n"));
+        assertTrue(exception.getMessage().contains("position-history.max-size"),
+                exception.getMessage());
+    }
+
+    @Test
+    void aReferenceCopiesTheCommandsOfEveryPositionHistory() throws IOException {
+        List<Command> commands = commands(parse(twoHistories + browserHints +
+                "_other-mode.save=idle-mode.save\n"), "_other-mode");
+        assertTrue(commands.containsAll(List.of(new Command.SavePosition("position-history"),
+                new Command.SavePosition("browser-position-history"))), commands.toString());
+    }
+
+    @Test
+    void afterAnUnsaveTheNextPositionIsTheFirstAndThePreviousOneTheLast() {
+        Point first = new Point(10, 10);
+        Point second = new Point(20, 20);
+        Point third = new Point(30, 30);
+        PositionHistory positionHistory = new PositionHistory(new PositionHistoryKey(
+                "position-history",
+                new PositionHistoryIsolationKey.NonePositionHistoryIsolationKey()), 10);
+        positionHistory.save(first, null);
+        positionHistory.save(second, null);
+        positionHistory.save(third, null);
+        positionHistory.unsave(third);
+        assertEquals(second, positionHistory.cycle(-1, third));
+        positionHistory.unsave(second);
+        assertEquals(first, positionHistory.cycle(1, second));
+    }
+
+    @Test
+    void theFormerNamesOfThePositionHistoryCommandsStillWork() throws IOException {
+        Configuration configuration = parse("""
+                idle-mode.position-history.save-position=+f1
+                idle-mode.position-history.unsave-position=+f2
+                idle-mode.browser-position-history.clear=+f3
+                idle-mode.browser-position-history.cycle-next=+f4
+                idle-mode.browser-position-history.cycle-previous=+f5
+                _other-mode.position-history=idle-mode.position-history
+                """);
+        List<Command> commands = List.of(new Command.SavePosition("position-history"),
+                new Command.UnsavePosition("position-history"),
+                new Command.ClearPositionHistory("browser-position-history"),
+                new Command.CycleNextPosition("browser-position-history"),
+                new Command.CyclePreviousPosition("browser-position-history"));
+        assertTrue(commands(configuration, "idle-mode").containsAll(commands));
+        assertTrue(commands(configuration, "_other-mode").containsAll(commands));
+    }
+
+}

@@ -14,6 +14,16 @@ public sealed interface Command {
     record StopMoveLeft() implements Command {}
     record StopMoveRight() implements Command {}
 
+    record StartMoveTargetUp() implements Command {}
+    record StartMoveTargetDown() implements Command {}
+    record StartMoveTargetLeft() implements Command {}
+    record StartMoveTargetRight() implements Command {}
+
+    record StopMoveTargetUp() implements Command {}
+    record StopMoveTargetDown() implements Command {}
+    record StopMoveTargetLeft() implements Command {}
+    record StopMoveTargetRight() implements Command {}
+
     record PressLeft() implements Command {}
     record PressMiddle() implements Command {}
     record PressRight() implements Command {}
@@ -36,41 +46,64 @@ public sealed interface Command {
     record StopWheelLeft() implements Command {}
     record StopWheelRight() implements Command {}
 
-    record SnapUp() implements Command {}
-    record SnapDown() implements Command {}
-    record SnapLeft() implements Command {}
-    record SnapRight() implements Command {}
+    record ShrinkOverlayUp() implements Command {}
+    record ShrinkOverlayDown() implements Command {}
+    record ShrinkOverlayLeft() implements Command {}
+    record ShrinkOverlayRight() implements Command {}
 
-    record ShrinkGridUp() implements Command {}
-    record ShrinkGridDown() implements Command {}
-    record ShrinkGridLeft() implements Command {}
-    record ShrinkGridRight() implements Command {}
+    record MoveOverlayToAreaAbove() implements Command {}
+    record MoveOverlayToAreaBelow() implements Command {}
+    record MoveOverlayToAreaLeft() implements Command {}
+    record MoveOverlayToAreaRight() implements Command {}
 
-    record MoveGridUp() implements Command {}
-    record MoveGridDown() implements Command {}
-    record MoveGridLeft() implements Command {}
-    record MoveGridRight() implements Command {}
-
-    record MoveToGridCenter() implements Command {}
-
+    record MoveToTarget() implements Command {}
     record MoveToLastSelectedHint() implements Command {}
+    record MoveToOverlayCenter() implements Command {}
+    record MoveToCellCenter() implements Command {}
+    record MoveToCellTop() implements Command {}
+    record MoveToCellBottom() implements Command {}
+    record MoveToCellLeft() implements Command {}
+    record MoveToCellRight() implements Command {}
 
-    record SavePosition() implements Command {}
-    record UnsavePosition() implements Command {}
-    record ClearPositionHistory() implements Command {}
-    record CycleNextPosition() implements Command {}
-    record CyclePreviousPosition() implements Command {}
+    record MoveTargetToMouse() implements Command {}
+    record MoveTargetToLastSelectedHint() implements Command {}
+    record MoveTargetToOverlayCenter() implements Command {}
+    record MoveTargetToCellCenter() implements Command {}
+    record MoveTargetToCellTop() implements Command {}
+    record MoveTargetToCellBottom() implements Command {}
+    record MoveTargetToCellLeft() implements Command {}
+    record MoveTargetToCellRight() implements Command {}
 
-    record MacroCommand(Macro macro, AliasResolution aliasResolution) implements Command {}
+    record SavePosition(String positionHistoryName) implements Command {}
+    record UnsavePosition(String positionHistoryName) implements Command {}
+    record ToggleSavePosition(String positionHistoryName) implements Command {}
+    record ClearPositionHistory(String positionHistoryName) implements Command {}
+    record CycleNextPosition(String positionHistoryName) implements Command {}
+    record CyclePreviousPosition(String positionHistoryName) implements Command {}
+
+    record StartAnimation(String animationName) implements Command {}
+    record StopAnimation(String animationName) implements Command {}
+
+    record MacroCommand(Macro macro, AliasResolution aliasResolution) implements Command {
+        @Override
+        public String toString() {
+            return "MacroCommand[" + macro.name() + "]";
+        }
+    }
 
     record BreakComboPreparation() implements Command {}
 
     record BreakMacro() implements Command {}
 
+    record Exit() implements Command {}
+
+    record Restart() implements Command {}
+
     record Noop(String name) implements Command {}
 
     record SelectHintKey() implements Command {}
-    record UnselectHintKey() implements Command {}
+    record DeselectHintKey() implements Command {}
+    record DeselectAllHintKeys() implements Command {}
 
     record MutateMode(String modeName, ModePropertyPath propertyPath, Object newPropertyValue, Combo combo) implements Command {
         @Override
@@ -99,6 +132,6 @@ public sealed interface Command {
 
     record SetVariable(String variableName) implements Command {}
     record UnsetVariable(String variableName) implements Command {}
-    record ClearVariables() implements Command {}
+    record ResetVariables() implements Command {}
 
 }

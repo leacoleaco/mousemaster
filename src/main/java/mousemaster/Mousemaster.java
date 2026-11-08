@@ -12,28 +12,35 @@ import java.util.*;
 public class Mousemaster {
 
     private static final Logger logger = LoggerFactory.getLogger(Mousemaster.class);
+    public static final double FRAME_INTERVAL = 0.016;
 
     private final Path configurationPath;
     private final Platform platform;
     private final WatchService watchService;
     private Configuration configuration;
-    private MouseController mouseController;
+    private MouseManager mouseManager;
     private CommandRunner commandRunner;
     private MacroPlayer macroPlayer;
+    private AnimationPlayer animationPlayer;
     private KeyboardManager keyboardManager;
     private IndicatorManager indicatorManager;
+    private HintManager hintManager;
     private ZoomManager zoomManager;
     private ModeController modeController;
     private List<String> configurationProperties;
     private KeyboardLayout activeKeyboardLayout;
     private KeyboardLayout forcedActiveKeyboardLayout;
+    private final boolean preWarmHints;
+    private boolean logToFileEnabledByConfiguration;
     private MousemasterTray tray;
 
-    public Mousemaster(Path configurationPath, Platform platform) throws IOException {
+    public Mousemaster(Path configurationPath, Platform platform, boolean preWarmHints)
+            throws IOException {
         this.configurationPath = configurationPath;
         this.platform = platform;
+        this.preWarmHints = preWarmHints;
         this.activeKeyboardLayout = platform.activeKeyboardLayout();
-        MousemasterApplication.hideConsole();
+        platform.console().hide();
         QtManager.initialize();
         loadConfiguration(true, false);
         watchService = FileSystems.getDefault().newWatchService();
@@ -43,75 +50,98 @@ public class Mousemaster {
         tray = new MousemasterTray(this);
         if (!tray.isActive()) {
             if (configuration.hideConsole())
-                MousemasterApplication.hideConsole();
+                platform.console().hide();
             else
-                MousemasterApplication.showConsole();
+                platform.console().show();
         }
     }
 
     public void run() throws InterruptedException {
         long previousIterationBeginTime = System.nanoTime();
+        long previousMacroPlayerUpdateTime = previousIterationBeginTime;
         while (true) {
             long iterationBeginTime = System.nanoTime();
             long deltaNanos = iterationBeginTime - previousIterationBeginTime;
             previousIterationBeginTime = iterationBeginTime;
             double delta = deltaNanos / 1e9d;
             long timeBeforeOp = iterationBeginTime;
+            long pumpEventsNanos = 0;
             updateConfiguration();
             long timeAfterOp = System.nanoTime();
             long updateConfigurationDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
             updateActiveKeyboardLayout(delta);
             timeAfterOp = System.nanoTime();
             long updateActiveKeyboardLayoutDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
             QtManager.processEvents();
+            timeAfterOp = System.nanoTime();
+            long qtDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
+            timeBeforeOp = timeAfterOp;
             platform.update(delta);
             timeAfterOp = System.nanoTime();
             long platformDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
             modeController.update(delta);
             timeAfterOp = System.nanoTime();
             long modeControllerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
-            mouseController.update(delta);
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
+            mouseManager.update(delta);
+            hintManager.update(delta);
             timeAfterOp = System.nanoTime();
             long mouseControllerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
+            animationPlayer.update(delta);
             keyboardManager.update(delta);
             timeAfterOp = System.nanoTime();
             long keyboardManagerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
-            indicatorManager.update(delta);
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
+            modeController.updateBuiltInVirtualKeys();
+            if (!hintManager.waitingForUiElements())
+                indicatorManager.update(delta);
             timeAfterOp = System.nanoTime();
             long indicatorManagerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
             zoomManager.update(delta);
             timeAfterOp = System.nanoTime();
-            platform.windowsMessagePump();
-            timeBeforeOp = timeAfterOp;
-            macroPlayer.update(delta);
+            long zoomManagerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
+            platform.pumpEvents();
+            timeBeforeOp = System.nanoTime();
+            pumpEventsNanos += timeBeforeOp - timeAfterOp;
+            macroPlayer.update(
+                    (timeBeforeOp - previousMacroPlayerUpdateTime) / 1e9d);
+            previousMacroPlayerUpdateTime = timeBeforeOp;
             timeAfterOp = System.nanoTime();
             long macroPlayerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
             long iterationEndTime = System.nanoTime();
             long iterationDuration =
                     (long) ((iterationEndTime - iterationBeginTime) / 1e6);
-            if (iterationDuration > 10L && logger.isTraceEnabled()) {
-                logger.trace("Long iteration duration: " + iterationDuration + "ms, " +
+            if (iterationDuration > 20L) {
+                logger.debug("Long iteration duration: " + iterationDuration + "ms, " +
                              "updateConfigurationDuration = " + updateConfigurationDuration + "ms, " +
                              "updateActiveKeyboardLayoutDuration = " + updateActiveKeyboardLayoutDuration + "ms, " +
+                             "pumpEventsDuration = " + pumpEventsNanos / 1_000_000 + "ms, " +
+                             "qtDuration = " + qtDuration + "ms, " +
                              "platformDuration = " + platformDuration + "ms, " +
                              "modeControllerDuration = " + modeControllerDuration + "ms, " +
                              "mouseControllerDuration = " + mouseControllerDuration + "ms, " +
                              "keyboardManagerDuration = " + keyboardManagerDuration + "ms, " +
                              "indicatorManagerDuration = " + indicatorManagerDuration + "ms, " +
+                             "zoomManagerDuration = " + zoomManagerDuration + "ms, " +
                              "macroPlayerDuration = " + macroPlayerDuration + "ms");
             }
             platform.sleep();
@@ -165,10 +195,14 @@ public class Mousemaster {
     private void loadConfiguration(boolean readFile, boolean applyHideConsoleFromConfig) throws IOException {
         boolean reload = configuration != null;
         if (readFile) {
+            List<String> properties;
             try (BufferedReader reader = Files.newBufferedReader(configurationPath,
                     StandardCharsets.UTF_8)) {
-                configurationProperties = PropertiesReader.readPropertiesFile(reader);
+                properties = PropertiesReader.readPropertiesFile(reader);
             }
+            if (properties.equals(configurationProperties))
+                return;
+            configurationProperties = properties;
         }
         configuration =
                 ConfigurationParser.parse(configurationProperties, activeKeyboardLayout);
@@ -176,30 +210,44 @@ public class Mousemaster {
         // gives the language identifier, which is 0409. But it is missing the other part
         // of the layout identifier (00010409).
         forcedActiveKeyboardLayout = configuration.forcedActiveKeyboardLayout();
-        if (forcedActiveKeyboardLayout != null)
-            activeKeyboardLayout = forcedActiveKeyboardLayout;
+        activeKeyboardLayout = configuration.activeKeyboardLayout();
         if (configuration.logLevel() != null)
             MousemasterApplication.setLogLevel(configuration.logLevel());
-        if (configuration.logToFile())
+        MousemasterApplication.setModeColumnWidth(
+                configuration.modeMap().modes().stream()
+                             .mapToInt(mode -> mode.name().length())
+                             .max().orElse(0));
+        // Only what a configuration turned on is turned back off: --log-to-file asked for the
+        // file before there was a configuration, and no configuration mentioning nothing undoes it.
+        if (configuration.logToFile()) {
             MousemasterApplication.enableLogToFile();
-        else
+            logToFileEnabledByConfiguration = true;
+        }
+        else if (logToFileEnabledByConfiguration) {
             MousemasterApplication.disableLogToFile();
+            logToFileEnabledByConfiguration = false;
+        }
         if (applyHideConsoleFromConfig) {
-            if (configuration.hideConsole())
-                MousemasterApplication.hideConsole();
+            if (tray != null && tray.isActive())
+                tray.applySavedConsoleVisibility();
+            else if (configuration.hideConsole())
+                platform.console().hide();
             else
-                MousemasterApplication.showConsole();
+                platform.console().show();
         }
         logger.info((reload ? "Reloaded" : "Loaded") + " configuration " +
                     (readFile ? "file " + configurationPath + " " : "") +
                     "with active keyboard layout " + activeKeyboardLayout);
-        ScreenManager screenManager = new ScreenManager();
-        mouseController = new MouseController(screenManager);
-        MouseState mouseState = new MouseState(mouseController);
-        GridManager gridManager = new GridManager(screenManager, mouseController);
-        HintManager hintManager = new HintManager(configuration.maxPositionHistorySize(),
-                screenManager, mouseController);
-        commandRunner = new CommandRunner(mouseController, gridManager, hintManager);
+        ScreenManager screenManager = new ScreenManager(platform::screens);
+        mouseManager = new MouseManager(screenManager, platform.mouse());
+        MouseState mouseState = new MouseState(mouseManager);
+        KeyRedactor keyRedactor = new KeyRedactor(configuration.keyRedaction());
+        hintManager =
+                new HintManager(configuration.positionHistoryConfigurationByName(),
+                        screenManager, mouseManager, platform.overlay(),
+                        platform.uiAutomation(), platform.activeAppFinder(),
+                        keyRedactor, platform.vision());
+        commandRunner = new CommandRunner(mouseManager, hintManager, platform);
         Set<Key> unpressedComboPreconditionKeys = new HashSet<>();
         Set<Key> pressedComboPreconditionKeys = new HashSet<>();
         for (Mode mode : configuration.modeMap().modes()) {
@@ -216,51 +264,73 @@ public class Mousemaster {
             }
         }
         ComboWatcher comboWatcher =
-                new ComboWatcher(commandRunner, hintManager, new ActiveAppFinder(),
-                        platform.clock(),
+                new ComboWatcher(commandRunner, hintManager, platform.activeAppFinder(),
+                        screenManager, platform.clock(),
                         unpressedComboPreconditionKeys,
-                        pressedComboPreconditionKeys, configuration.logRedactKeys(),
-                        configuration.modeMap());
-        keyboardManager = new KeyboardManager(comboWatcher, hintManager,
-                platform.keyRegurgitator());
-        macroPlayer = new MacroPlayer(platform.clock(), comboWatcher, keyboardManager);
+                        pressedComboPreconditionKeys, keyRedactor,
+                        configuration.modeMap(), configuration.initiallySetVariables(),
+                        configuration.virtualKeys(), configuration.initiallyPressedVirtualKeys(),
+                        configuration.activeKeyboardLayout());
+        KeyRegurgitator keyRegurgitator =
+                new KeyRegurgitator(platform.keyboard(), keyRedactor);
+        keyboardManager = new KeyboardManager(comboWatcher, hintManager, keyRegurgitator,
+                platform.clock());
+        macroPlayer = new MacroPlayer(platform.clock(), comboWatcher, keyboardManager,
+                platform.keyboard(), keyRedactor, configuration.activeKeyboardLayout());
         keyboardManager.setMacroPlayer(macroPlayer);
         KeyboardState keyboardState = new KeyboardState(keyboardManager);
-        indicatorManager = new IndicatorManager(mouseState, keyboardState);
-        zoomManager = new ZoomManager(screenManager, hintManager);
-        CursorPingManager cursorPingManager = new CursorPingManager();
+        animationPlayer = new AnimationPlayer(configuration.animationConfigurationByName());
+        indicatorManager = new IndicatorManager(platform.overlay(), animationPlayer, hintManager,
+                comboWatcher::lastActiveApp);
+        zoomManager = new ZoomManager(screenManager, hintManager, platform.overlay());
         // ComboWatcher is the sole broadcaster to ModeListeners: it broadcasts
         // on mode switch (delegated from ModeController) and on mode mutation.
         // ZoomManager must be notified after HintManager because it calls
-        // lastSelectedHintPoint() which is updated by HintManager#modeChanged.
-        comboWatcher.setModeListeners(
-                List.of(platform, mouseController, indicatorManager, gridManager,
-                        hintManager, zoomManager, cursorPingManager));
+        // lastSelectedHintPoint() which is updated by HintManager#modeChanged. IndicatorManager
+        // draws with the state of both.
+        List<ModeListener> modeListeners = new ArrayList<>(
+                List.of(platform, mouseManager, hintManager, zoomManager, indicatorManager));
+        if (Os.windows)
+            modeListeners.add(new CursorPingManager());
+        comboWatcher.setModeListeners(modeListeners);
+        if (modeController != null)
+            modeController.showCursor();
         modeController =
-                new ModeController(configuration.modeMap(), mouseController, mouseState,
+                new ModeController(configuration.modeMap(), mouseManager, mouseState,
                         keyboardState,
                         hintManager,
-                        comboWatcher);
+                        comboWatcher, animationPlayer);
         commandRunner.setModeController(modeController);
         commandRunner.setMacroPlayer(macroPlayer);
+        commandRunner.setAnimationPlayer(animationPlayer);
         hintManager.setModeController(modeController);
-        comboWatcher.setComboListeners(List.of(modeController));
         modeController.switchMode(Mode.IDLE_MODE_NAME);
-        platform.reset(mouseController, keyboardManager,
+        platform.reset(mouseManager, keyboardManager, keyRegurgitator, macroPlayer,
+                keyRedactor, configuration.logLastKeyEventsOnExit(),
                 configuration.modeMap(),
-                List.of(mouseController, gridManager, hintManager, screenManager,
-                        zoomManager), activeKeyboardLayout,
-                configuration.suppressCapsLockOsPassthrough());
-        if (tray != null && tray.isActive())
-            tray.applySavedConsoleVisibility();
+                zoomManager,
+                indicatorManager,
+                hintManager,
+                List.of(mouseManager, hintManager, screenManager), activeKeyboardLayout,
+                true);
+        if (preWarmHints)
+            hintManager.preWarmHintMeshes(configuration.modeMap());
+        // Last, so the detector does not compete with the mesh pre-warm for cores.
+        Integer density = uiVisionDensity(configuration.modeMap());
+        if (density != null)
+            platform.vision().preWarm(screenManager.activeScreen(), density);
     }
 
-    Path configurationPath() {
+    public Path configurationPath() {
         return configurationPath;
     }
 
-    Configuration configuration() {
+    public Configuration configuration() {
         return configuration;
+    }
+
+    public mousemaster.platform.Console console() {
+        return platform.console();
     }
 
     void exitFromTray() {
@@ -268,9 +338,18 @@ public class Mousemaster {
             tray.hide();
             tray = null;
         }
-        platform.shutdown();
-        QtManager.stop();
-        System.exit(0);
+        platform.requestKillProcess();
+    }
+
+    private static Integer uiVisionDensity(ModeMap modeMap) {
+        return modeMap.modes()
+                      .stream()
+                      .filter(mode -> mode.hintMesh().enabled())
+                      .map(mode -> mode.hintMesh().type())
+                      .filter(type -> type.type() == HintMeshType.HintMeshTypeType.UI_VISION)
+                      .map(HintMeshType::density)
+                      .findFirst()
+                      .orElse(null);
     }
 
 }

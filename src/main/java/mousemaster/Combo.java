@@ -55,6 +55,10 @@ public record Combo(String label, ComboPrecondition precondition, ComboSequence 
                             parseMustNotBeActiveApps(mustNotBeActiveAppsString, appAliases);
                 }
                 else {
+                    if (unpressedKeySetString != null)
+                        throw new IllegalArgumentException(
+                                "[" + label + "] Multiple key ^{...} blocks are not allowed, " +
+                                "combine them into a single block: " + string);
                     unpressedKeySetString = content;
                     unpressedKeySet =
                             parseUnpressedKeySet(unpressedKeySetString,
@@ -88,6 +92,10 @@ public record Combo(String label, ComboPrecondition precondition, ComboSequence 
                             throw new IllegalArgumentException(
                                     "! prefix is only valid for variable names in a variable-only _{...} block: " + token);
                     }
+                    if (pressedKeyPreconditionString != null)
+                        throw new IllegalArgumentException(
+                                "[" + label + "] Multiple key _{...} blocks are not allowed, " +
+                                "combine them into a single block: " + string);
                     pressedKeyPreconditionString = content;
                     pressedKeyPrecondition =
                             parsePressedKeyPrecondition(
@@ -114,7 +122,7 @@ public record Combo(String label, ComboPrecondition precondition, ComboSequence 
                 new ComboVariablePrecondition(List.copyOf(variableConditionGroups));
         ComboSequence sequence;
         if (sequenceString.isEmpty()) {
-            sequence = new ComboSequence(List.of());
+            sequence = new ComboSequence(List.of(), Set.of());
         }
         else {
             ExpandableSequence expandableSequence =

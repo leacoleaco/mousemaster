@@ -1,21 +1,18 @@
 package mousemaster;
 
-import io.qt.gui.QFontDatabase;
 import mousemaster.ComboMove.KeyComboMove;
 import mousemaster.ComboMove.PressComboMove;
-import mousemaster.GridArea.GridAreaType;
-import mousemaster.GridConfiguration.GridConfigurationBuilder;
 import mousemaster.HideCursor.HideCursorBuilder;
-import mousemaster.HintGridArea.HintGridAreaType;
 import mousemaster.HintGridLayout.HintGridLayoutBuilder;
 import mousemaster.HintMeshConfiguration.HintMeshConfigurationBuilder;
 import mousemaster.HintMeshKeys.HintMeshKeysBuilder;
 import mousemaster.HintMeshStyle.HintMeshStyleBuilder;
-import mousemaster.Indicator.IndicatorBuilder;
 import mousemaster.IndicatorConfiguration.IndicatorConfigurationBuilder;
+import mousemaster.IndicatorLayerConfiguration.IndicatorLayerConfigurationBuilder;
 import mousemaster.ModeTimeout.ModeTimeoutBuilder;
-import mousemaster.Mouse.MouseBuilder;
-import mousemaster.ViewportFilterMap.ViewportFilterMapBuilder;
+import mousemaster.MovementConfiguration.MovementConfigurationBuilder;
+import mousemaster.VelocityConfiguration.VelocityConfigurationBuilder;
+import mousemaster.ScreenFilterMap.ScreenFilterMapBuilder;
 import mousemaster.Wheel.WheelBuilder;
 import mousemaster.ZoomConfiguration.ZoomConfigurationBuilder;
 import org.slf4j.Logger;
@@ -30,229 +27,130 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static mousemaster.Command.*;
-import static mousemaster.ViewportFilter.AnyViewportFilter;
-import static mousemaster.ViewportFilter.FixedViewportFilter;
+import static mousemaster.ScreenFilter.AnyScreenFilter;
 
 public class ConfigurationParser {
 
     private static final Logger logger = LoggerFactory.getLogger(ConfigurationParser.class);
 
+    private static final Pattern appAliasPattern = Pattern.compile("\"([^\"]*)\"|(\\S+)");
     private static final Pattern propertyLinePattern = Pattern.compile("(.+?)=(.+)");
+    // a-mode.overlay.grid-cell-width
+    // a-mode.overlay.grid-cell-width.1920x1080-100%
+    private static final Pattern modeKeyPattern =
+            Pattern.compile("([^.]+-mode)(\\.([^.]+)(\\.([^.]+))?(\\.([^.]+))?)?");
     private static final Map<String, Property<?>> defaultPropertyByName = defaultPropertyByName();
 
     private static Map<String, Property<?>> defaultPropertyByName() {
         AtomicReference<Boolean> pushModeToHistoryStack = new AtomicReference<>(false);
         AtomicReference<Boolean> stopCommandsFromPreviousMode = new AtomicReference<>(false);
         AtomicReference<String> modeAfterPressingUnhandledKeysOnly = new AtomicReference<>();
-        MouseBuilder mouse = new MouseBuilder();
+        MovementConfigurationBuilder mouse = new MovementConfigurationBuilder();
         mouse.velocity().initialVelocity(1000)
-                        .maxVelocity(2200)
-                        .acceleration(3000)
-                        .accelerationEasing(new Easing.Smootherstep())
-                        .deceleration(20);
+                 .maxVelocity(2200)
+                 .acceleration(3000)
+                 .accelerationEasing(new Easing.Smootherstep())
+                 .deceleration(20);
         mouse.smoothJumpEnabled(true)
              .smoothJumpVelocity(30000);
         WheelBuilder wheel = new WheelBuilder();
         wheel.velocity().initialVelocity(1000)
-                        .maxVelocity(1000)
-                        .acceleration(500)
-                        .accelerationEasing(new Easing.Polynomial(1))
-                        .deceleration(0);
-        GridConfigurationBuilder grid =
-                new GridConfigurationBuilder();
-        grid.synchronization(Synchronization.MOUSE_AND_GRID_CENTER_UNSYNCHRONIZED)
-            .rowCount(2)
-            .columnCount(2)
-            .lineVisible(false)
-            .lineHexColor("#FF0000")
-            .lineThickness(1);
-        GridArea.GridAreaBuilder gridAreaBuilder = grid.area();
-        gridAreaBuilder.type(GridAreaType.ACTIVE_SCREEN)
-                       .widthPercent(1)
-                       .heightPercent(1)
-                       .topInset(0)
-                       .bottomInset(0)
-                       .leftInset(0)
-                       .rightInset(0);
-        HintMeshConfigurationBuilder hintMesh =
-                new HintMeshConfigurationBuilder();
-        hintMesh.enabled(false)
-                .visible(true)
-                .mouseMovement(HintMouseMovement.MOUSE_FOLLOWS_SELECTED_HINT);
-        hintMesh.keys(AnyViewportFilter.ANY_VIEWPORT_FILTER)
-                .selectionKeys(IntStream.rangeClosed('a', 'z')
-                                        .mapToObj(c -> String.valueOf((char) c))
-                                        .map(Key::ofName)
-                                        .toList())
-                .rowKeyOffset(0);
-        HintMeshStyleBuilder hintMeshStyleBuilder =
-                hintMesh.style(AnyViewportFilter.ANY_VIEWPORT_FILTER);
-        hintMeshStyleBuilder.fontStyle().defaultFontStyle()
-                            .name("Consolas")
-                            .weight(FontWeight.NORMAL)
-                            .size(18d)
-                            .hexColor("#FFFFFF")
-                            .opacity(1d)
-                            .outlineThickness(0d)
-                            .outlineHexColor("#000000")
-                            .outlineOpacity(0.5d);
-        hintMeshStyleBuilder.fontStyle()
-                            .spacingPercent(0.7d);
-        hintMeshStyleBuilder.fontStyle().defaultFontStyle().shadow()
-                            .blurRadius(10d)
-                            .hexColor("#FFFFFF")
-                            .opacity(1d)
-                            .horizontalOffset(0d)
-                            .verticalOffset(0d)
-                            .stackCount(1);
-        hintMeshStyleBuilder
-                .prefixInBackground(false)
-                .boxHexColor("#000000")
-                .boxOpacity(0.3d)
-                .boxBorderThickness(1d)
-                .boxBorderLength(10_000d)
-                .boxBorderHexColor("#FFFFFF")
-                .boxBorderOpacity(0.4d)
-                .boxBorderRadius(0d);
-        hintMeshStyleBuilder.boxShadow()
-                .blurRadius(10d)
-                .hexColor("#000000")
-                .opacity(0d)
-                .horizontalOffset(2d)
-                .verticalOffset(2d)
-                .stackCount(1);
-        hintMeshStyleBuilder
-                .prefixBoxEnabled(false)
-                .prefixBoxBorderThickness(4d)
-                .prefixBoxBorderLength(10_000d)
-                .prefixBoxBorderHexColor("#FFD93D")
-                .prefixBoxBorderOpacity(0.8d)
-                .boxWidthPercent(1d)
-                .boxHeightPercent(1d)
-                .cellHorizontalPadding(0d)
-                .cellVerticalPadding(0d)
-                .hintCenterOffsetX(0d)
-                .subgridRowCount(1)
-                .subgridColumnCount(1)
-                .subgridBorderThickness(1d)
-                .subgridBorderLength(10_000d)
-                .subgridBorderHexColor("#FFFFFF")
-                .subgridBorderOpacity(1d)
-                .transitionAnimationEnabled(true)
-                .transitionAnimationDuration(Duration.ofMillis(100))
-                .fadeAnimationEnabled(true)
-                .fadeAnimationDuration(Duration.ofMillis(100))
-                .backgroundHexColor("#000000")
-                .backgroundOpacity(0d);
-        hintMesh.eatUnusedSelectionKeys(true);
-        HintMeshType.HintMeshTypeBuilder hintMeshTypeBuilder = hintMesh.type();
-        hintMeshTypeBuilder.type(HintMeshType.HintMeshTypeType.GRID)
-                           .gridLayout(AnyViewportFilter.ANY_VIEWPORT_FILTER)
-                           .maxRowCount(200)
-                           .maxColumnCount(200)
-                           .cellWidth(73d)
-                           .cellHeight(36d)
-                           .layoutRowCount(1_000_000)
-                           .layoutColumnCount(1)
-                           .layoutRowOriented(true);
-        HintGridArea.HintGridAreaBuilder hintGridAreaBuilder =
-                hintMesh.type().gridArea();
-        hintGridAreaBuilder.type(HintGridAreaType.ACTIVE_SCREEN)
-                           .activeScreenHintGridAreaCenter(
-                                   ActiveScreenHintGridAreaCenter.SCREEN_CENTER);
+                 .maxVelocity(1000)
+                 .acceleration(500)
+                 .accelerationEasing(new Easing.Polynomial(1))
+                 .deceleration(0);
+        HintMeshConfigurationBuilder hintMesh = defaultHintMesh();
+        // The deprecated grid's defaults.
+        HintMeshConfigurationBuilder gridHintMesh = defaultHintMesh();
+        gridHintMesh.visible(false)
+                    .mouseFollowsTarget(false)
+                    .targetFollowsOverlayCenter(false);
+        gridHintMesh.type().gridLayout(AnyScreenFilter.ANY_SCREEN_FILTER)
+                    .cellSizingType(HintCellSizing.HintCellSizingType.FIT)
+                    .maxRowCount(2)
+                    .maxColumnCount(2);
+        gridHintMesh.style(AnyScreenFilter.ANY_SCREEN_FILTER)
+                    .boxColor(GradientColor.parse("#FF0000"))
+                    .boxOpacity(0.1d)
+                    .boxBorderColor(Color.parse("#FF0000"))
+                    .boxBorderOpacity(1d);
         ModeTimeoutBuilder timeout =
                 new ModeTimeoutBuilder().enabled(false).onlyIfIdle(true);
         IndicatorConfigurationBuilder indicator =
-                new IndicatorConfigurationBuilder();
-        indicator.enabled(false)
-                 .fadeAnimationEnabled(true)
-                 .fadeAnimationDuration(Duration.ofMillis(100));
-        // Defaults are set on idle indicator; other states inherit during build.
-        IndicatorBuilder idleIndicator = indicator.idleIndicator();
-        idleIndicator.size(26)
-                     .edgeCount(300)
-                     .hexColor("#FF0000")
-                     .opacity(0.2)
-                     .position(IndicatorPosition.CENTER);
-         idleIndicator.outerOutline()
-                     .thickness(0)
-                     .hexColor("#FF0000")
-                     .opacity(1.0)
-                     .fillPercent(1.0)
-                     .fillStartAngle(180)
-                     .fillDirection(FillDirection.COUNTERCLOCKWISE);
-        idleIndicator.innerOutline()
-                     .thickness(0.5)
-                     .hexColor("#FF0000")
-                     .opacity(1.0)
-                     .fillPercent(1.0)
-                     .fillStartAngle(180)
-                     .fillDirection(FillDirection.COUNTERCLOCKWISE);
-        idleIndicator.shadow()
-                     .blurRadius(10d)
-                     .hexColor("#000000")
-                     .opacity(0d)
-                     .horizontalOffset(0d)
-                     .verticalOffset(0d)
-                     .stackCount(1);
-        indicator.wheelIndicator()
-                 .hexColor("#FFFF00")
-                 .innerOutline().hexColor("#FFFF00");
-        indicator.wheelIndicator()
-                 .shadow().opacity(1d).hexColor("#FFFF00");
-        indicator.leftMousePressIndicator()
-                 .hexColor("#00FF00")
-                 .innerOutline().hexColor("#00FF00");
-        indicator.leftMousePressIndicator()
-                 .shadow().opacity(1d).hexColor("#00FF00");
-        indicator.middleMousePressIndicator()
-                 .hexColor("#FF00FF")
-                 .innerOutline().hexColor("#FF00FF");
-        indicator.middleMousePressIndicator()
-                 .shadow().opacity(1d).hexColor("#FF00FF");
-        indicator.rightMousePressIndicator()
-                 .hexColor("#00FFFF")
-                 .innerOutline().hexColor("#00FFFF");
-        indicator.rightMousePressIndicator()
-                 .shadow().opacity(1d).hexColor("#00FFFF");
-        idleIndicator.labelEnabled(false);
-        idleIndicator.labelFontStyle()
-                     .name("Arial")
-                     .weight(FontWeight.NORMAL)
-                     .size(8d)
-                     .hexColor("#FFFFFF")
-                     .opacity(1.0)
-                     .outlineThickness(0d)
-                     .outlineHexColor("#000000")
-                     .outlineOpacity(0d);
-        idleIndicator.labelFontStyle().shadow()
-                     .blurRadius(10d)
-                     .hexColor("#000000")
-                     .opacity(0d)
-                     .horizontalOffset(0d)
-                     .verticalOffset(0d)
-                     .stackCount(1);
+                new IndicatorConfigurationBuilder().renderAsCursor(false).excludeFromCapture(false);
+        IndicatorLayerConfigurationBuilder layer = indicator.layer("indicator");
+        layer.enabled(false).z(0);
+        layer.shape(IndicatorShape.CIRCLE)
+             .size(26)
+             .aspectRatio(1)
+             .borderRadius(0)
+             .points(List.of())
+             .x(0)
+             .y(0)
+             .distance(0)
+             .angle(0)
+             .rotation(0)
+             .fillColor(Color.parse("#FF0000"))
+             .fillOpacity(0.2)
+             .position(IndicatorPosition.PointIndicatorPosition.MOUSE)
+             .positionAnchor(PositionAnchor.POINT)
+             .endPositionAnchor(PositionAnchor.POINT)
+             .follow(true);
+        layer.area()
+             .widthPercent(1d)
+             .heightPercent(1d)
+             .topInset(0d)
+             .bottomInset(0d)
+             .leftInset(0d)
+             .rightInset(0d);
+        layer.stroke()
+             .thickness(1)
+             .color(Color.parse("#FF0000"))
+             .opacity(1.0)
+             .startAngle(0)
+             .lengthPercent(1)
+             .anchor(StrokeAnchor.START)
+             .dashLength(0)
+             .dashGap(0)
+             .dashOffset(0)
+             .cap(StrokeCap.FLAT);
+        layer.shadow()
+             .blurRadius(10d)
+             .color(Color.parse("#000000"))
+             .opacity(0d)
+             .horizontalOffset(0d)
+             .verticalOffset(0d)
+             .stackCount(1);
+        layer.text("")
+             .fontName("Arial")
+             .fontSize(8)
+             .fontWeight(FontWeight.NORMAL)
+             .textStyleSheet("");
         HideCursorBuilder hideCursor =
                 new HideCursorBuilder().enabled(false).idleDuration(Duration.ZERO);
         ZoomConfigurationBuilder zoom = new ZoomConfigurationBuilder();
         zoom.percent(1.0)
-            .center(ZoomCenter.SCREEN_CENTER)
-            .animationEnabled(false)
-            .animationEasing(new Easing.Smootherstep())
-            .animationDurationMillis(200);
+            .areaSizeSource(ZoomAreaSizeSource.PERCENT)
+            .areaWidthPercent(1.0)
+            .areaHeightPercent(1.0)
+            .center(AreaCenter.ACTIVE_SCREEN_CENTER);
+        zoom.transition()
+            .enabled(false)
+            .duration(Duration.ofMillis(200))
+            .easing(new Easing.Smootherstep());
         // @formatter:off
         return Stream.of( //
                 new Property<>("stop-commands-from-previous-mode", stopCommandsFromPreviousMode),
                 new Property<>("push-mode-to-history-stack", pushModeToHistoryStack),
                 new Property<>("mode-after-unhandled-key-press", modeAfterPressingUnhandledKeysOnly),
                 new Property<>("mouse", mouse),
+                new Property<>("target", mouse.velocity()),
                 new Property<>("wheel", wheel), 
-                new Property<>("grid", grid), 
-                new Property<>("hint", hintMesh), 
+                new Property<>("grid", gridHintMesh),
+                new Property<>("overlay", hintMesh),
                 new Property<>("timeout", timeout), 
                 new Property<>("indicator", indicator), 
                 new Property<>("hide-cursor", hideCursor),
@@ -260,35 +158,181 @@ public class ConfigurationParser {
                 new Property<>("to", Map.of()),
                 new Property<>("start-move", Map.of()),
                 new Property<>("stop-move", Map.of()),
+                new Property<>("start-move-target", Map.of()),
+                new Property<>("stop-move-target", Map.of()),
                 new Property<>("press", Map.of()),
                 new Property<>("release", Map.of()),
                 new Property<>("toggle", Map.of()),
                 new Property<>("start-wheel", Map.of()),
                 new Property<>("stop-wheel", Map.of()),
-                new Property<>("snap", Map.of()),
-                new Property<>("shrink-grid", Map.of()),
-                new Property<>("move-grid", Map.of()),
-                new Property<>("move-grid-to-center", Map.of()),
-                new Property<>("move-to-last-selected-hint", Map.of()),
-                new Property<>("save-position", Map.of()),
-                new Property<>("unsave-position", Map.of()),
+                new Property<>("shrink-overlay", Map.of()),
+                new Property<>("move-overlay-to", Map.of()),
+                new Property<>("move-target-to", Map.of()),
+                new Property<>("move-to", Map.of()),
+                new Property<>("save", Map.of()),
+                new Property<>("unsave", Map.of()),
+                new Property<>("toggle-save", Map.of()),
                 new Property<>("clear", Map.of()),
                 new Property<>("cycle-next", Map.of()),
                 new Property<>("cycle-previous", Map.of()),
+                new Property<>("start", Map.of()),
+                new Property<>("stop", Map.of()),
+                new Property<>("select", Map.of()),
+                new Property<>("deselect", Map.of()),
+                new Property<>("deselect-all", Map.of()),
                 new Property<>("break-combo-preparation", Map.of()),
                 new Property<>("break-macro", Map.of()),
+                new Property<>("exit", Map.of()),
+                new Property<>("restart", Map.of()),
                 new Property<>("macro", Map.of()),
                 new Property<>("mutate-mode", Map.of()),
                 new Property<>("set-variable", Map.of()),
                 new Property<>("unset-variable", Map.of()),
-                new Property<>("clear-variables", Map.of()),
+                new Property<>("reset-variables", Map.of()),
                 new Property<>("noop", Map.of())
         ).collect(Collectors.toMap(property -> property.propertyKey.propertyName, Function.identity()));
         // @formatter:on
     }
 
+    private static HintMeshConfigurationBuilder defaultHintMesh() {
+        HintMeshConfigurationBuilder hintMesh =
+                new HintMeshConfigurationBuilder();
+        hintMesh.enabled(false)
+                .visible(true)
+                .excludeFromCapture(false)
+                .mouseFollowsTarget(true)
+                .targetFollowsOverlayCenter(false);
+        hintMesh.keys(AnyScreenFilter.ANY_SCREEN_FILTER)
+                .selectionKeys(List.of())
+                .rowKeyOffset(0);
+        HintMeshStyleBuilder hintMeshStyleBuilder =
+                hintMesh.style(AnyScreenFilter.ANY_SCREEN_FILTER);
+        hintMeshStyleBuilder.fontStyle().defaultFontStyle()
+                            .name(FontStyle.defaultName)
+                            .weight(FontWeight.NORMAL)
+                            .size(18d)
+                            .color(Color.parse("#FFFFFF"))
+                            .opacity(1d)
+                            .outlineThickness(0d)
+                            .outlineColor(Color.parse("#000000"))
+                            .outlineOpacity(0.5d)
+                            .verticalAlignment(FontVerticalAlignment.CAP_HEIGHT);
+        hintMeshStyleBuilder.fontStyle()
+                            .spacingPercent(0.7d);
+        hintMeshStyleBuilder.fontStyle().defaultFontStyle().shadow()
+                            .blurRadius(10d)
+                            .color(Color.parse("#FFFFFF"))
+                            .opacity(1d)
+                            .horizontalOffset(0d)
+                            .verticalOffset(0d)
+                            .stackCount(1);
+        hintMeshStyleBuilder
+                .prefixInBackground(false)
+                .boxColor(GradientColor.parse("#000000"))
+                .boxOpacity(0.3d)
+                .boxBorderThickness(1d)
+                .boxBorderLength(10_000d)
+                .boxBorderColor(Color.parse("#FFFFFF"))
+                .boxBorderOpacity(0.4d)
+                .boxBorderRadius(0d)
+                .boxFramed(true);
+        hintMeshStyleBuilder.transition()
+                .enabled(true)
+                .duration(Duration.ofMillis(100))
+                .easing(new Easing.Smootherstep());
+        hintMeshStyleBuilder.fade()
+                .enabled(true)
+                .duration(Duration.ofMillis(100))
+                .easing(new Easing.Smootherstep());
+        hintMeshStyleBuilder.boxShadow()
+                .blurRadius(10d)
+                .color(Color.parse("#000000"))
+                .opacity(0d)
+                .horizontalOffset(0d)
+                .verticalOffset(0d)
+                .stackCount(1);
+        hintMeshStyleBuilder
+                .prefixBoxEnabled(false)
+                .prefixBoxBorderThickness(2d)
+                .prefixBoxBorderLength(10_000d)
+                .prefixBoxBorderColor(Color.parse("#FFD93D"))
+                .prefixBoxBorderOpacity(0.8d)
+                .prefixBoxFramed(true)
+                .uiElementBoxColor(GradientColor.parse("#000000"))
+                .uiElementBoxOpacity(0d)
+                .uiElementBoxBorderThickness(1d)
+                .uiElementBoxBorderLength(10_000d)
+                .uiElementBoxBorderColor(Color.parse("#FFFFFF"))
+                .uiElementBoxBorderOpacity(0d)
+                .uiElementBoxBorderRadius(0d)
+                .uiElementBoxHorizontalPadding(0d)
+                .uiElementBoxVerticalPadding(0d)
+                .boxWidthPercent(1d)
+                .boxHeightPercent(1d)
+                .boxHorizontalPadding(0d)
+                .boxVerticalPadding(0d)
+                .hintCenterOffsetX(0d)
+                .backgroundColor(Color.parse("#000000"))
+                .backgroundOpacity(0d)
+                .backgroundBorderThickness(1d)
+                .backgroundBorderColor(Color.parse("#FFFFFF"))
+                .backgroundBorderOpacity(0d)
+                .backgroundBorderRadius(8d)
+                .labelOverride(List.of());
+        // Decoration defaults: index 0 = whole-area decoration, 1 = subdecoration,
+        // 2 = subsubdecoration. Disabled by default (a 1x1 grid draws nothing).
+        for (int decorationIndex = 0; decorationIndex < 3; decorationIndex++) {
+            Decoration.DecorationBuilder decoration =
+                    hintMeshStyleBuilder.decoration(decorationIndex);
+            decoration.maxRowCount(1).maxColumnCount(1)
+                      .labelKeys(List.of()).labelOverride(List.of())
+                      .boxColor(GradientColor.parse("#000000")).boxOpacity(0d)
+                      .boxBorderThickness(1d).boxBorderLength(10_000d)
+                      .boxBorderColor(Color.parse("#FFFFFF")).boxBorderOpacity(1d)
+                      .boxBorderRadius(0d).boxFramed(false)
+                      .boxHorizontalPadding(0d).boxVerticalPadding(0d);
+            decoration.fontStyle().defaultFontStyle()
+                      .name(FontStyle.defaultName).weight(FontWeight.NORMAL).size(10d)
+                      .color(Color.parse("#FFFFFF")).opacity(1d)
+                      .outlineThickness(0d).outlineColor(Color.parse("#000000"))
+                      .outlineOpacity(0.5d)
+                      .verticalAlignment(FontVerticalAlignment.CAP_HEIGHT);
+            decoration.fontStyle().spacingPercent(0.7d);
+            decoration.fontStyle().defaultFontStyle().shadow()
+                      .blurRadius(10d).color(Color.parse("#FFFFFF")).opacity(0d)
+                      .horizontalOffset(0d).verticalOffset(0d).stackCount(1);
+        }
+        hintMesh.eatUnusedSelectionKeys(true);
+        hintMesh.z(0);
+        HintMeshType.HintMeshTypeBuilder hintMeshTypeBuilder = hintMesh.type();
+        hintMeshTypeBuilder.type(HintMeshType.HintMeshTypeType.GRID)
+                           .gridLayout(AnyScreenFilter.ANY_SCREEN_FILTER)
+                           .maxRowCount(200)
+                           .maxColumnCount(200)
+                           .cellSizingType(HintCellSizing.HintCellSizingType.FIXED)
+                           .cellWidth(73d)
+                           .cellHeight(36d)
+                           .layoutRowCount(1_000_000)
+                           .layoutColumnCount(1)
+                           .layoutRowOriented(true);
+        Area.AreaBuilder areaBuilder = hintMesh.type().area();
+        areaBuilder.source(AreaSizeSource.ACTIVE_SCREEN)
+                   .widthPercent(1.0)
+                   .heightPercent(1.0)
+                   .topInset(0d)
+                   .bottomInset(0d)
+                   .leftInset(0d)
+                   .rightInset(0d);
+        hintMeshTypeBuilder.uiOrder(UiHintOrder.TOP_TO_BOTTOM);
+        hintMeshTypeBuilder.visionDensity(6);
+        hintMeshTypeBuilder.visionMinSize(0d);
+        return hintMesh;
+    }
+
     private record Aliases(Map<String, LayoutKeyAlias> layoutKeyAliasByName,
-                           Map<String, AppAlias> appAliasByName) {
+                           Map<String, AppAlias> appAliasByName,
+                           Map<String, Set<ScreenFilter>> screenFilterAliasByName,
+                           Map<String, GradientColor> colorAliasByName) {
 
     }
 
@@ -308,6 +352,13 @@ public class ConfigurationParser {
 
     public static Configuration parse(List<String> properties,
                                       KeyboardLayout platformActiveKeyboardLayout) {
+        properties = desugarOverlayKeys(properties);
+        properties = desugarHintMeshEmpty(properties);
+        properties = desugarIndicatorStates(properties);
+        properties = desugarIndicatorAndZoomKeys(properties);
+        properties = desugarMouseMovement(desugarGrid(properties));
+        properties = desugarPositionHistoryAndAnimationCommands(properties);
+        properties = desugarOverlaySelect(properties);
         ForcedActiveAndConfigurationKeyboardLayouts
                 forcedActiveAndConfigurationKeyboardLayouts = parseForcedAndConfigurationLayouts(properties);
         KeyboardLayout activeKeyboardLayout =
@@ -318,22 +369,44 @@ public class ConfigurationParser {
                 forcedActiveAndConfigurationKeyboardLayouts.configurationKeyboardLayout == null ?
                         activeKeyboardLayout :
                         forcedActiveAndConfigurationKeyboardLayouts.configurationKeyboardLayout;
+        Map<String, AnimationConfiguration> animationConfigurationByName =
+                parseAnimationConfigurations(properties);
+        Set<String> positionHistoryNames = parsePositionHistoryNames(properties);
+        DeclaredVirtualKeyNames declaredVirtualKeyNames =
+                parseDeclaredVirtualKeyNames(properties, animationConfigurationByName.keySet(),
+                        positionHistoryNames);
         KeyResolver keyResolver =
-                new KeyResolver(activeKeyboardLayout, configurationKeyboardLayout);
+                new KeyResolver(activeKeyboardLayout, configurationKeyboardLayout,
+                        declaredVirtualKeyNames.names(), animationConfigurationByName.keySet());
         Aliases configurationAliases = parseAliases(properties);
         Map<String, KeyAlias> keyAliases = buildKeyAliasesForActiveKeyboardLayout(
                 configurationAliases.layoutKeyAliasByName, activeKeyboardLayout,
                 configurationKeyboardLayout);
+        configurationAliases.screenFilterAliasByName.forEach((aliasName, screenFilters) -> {
+            if (keyAliases.put(aliasName, new KeyAlias(aliasName,
+                    screenFilters.stream()
+                                 .map(BuiltInVirtualKey::screenFilterKey)
+                                 .toList())) != null)
+                throw new IllegalArgumentException("Screen alias " + aliasName +
+                                                   " collides with a key alias name");
+        });
         Map<String, AppAlias> appAliases = configurationAliases.appAliasByName;
         Set<String> allVariableNames = parseVariableNames(properties, keyAliases, keyResolver);
 
         String logLevel = null;
-        boolean logRedactKeys = false;
+        KeyRedaction keyRedaction = KeyRedaction.NONE;
+        boolean logLastKeyEventsOnExit = false;
         boolean logToFile = false;
         boolean hideConsole = false;
         ComboMoveDuration defaultComboMoveDuration =
                 new ComboMoveDuration(Duration.ZERO, null);
-        int maxPositionHistorySize = 16;
+        Map<String, PositionHistoryConfiguration> positionHistoryConfigurationByName =
+                new HashMap<>();
+        for (String positionHistoryName : positionHistoryNames)
+            positionHistoryConfigurationByName.put(positionHistoryName,
+                    new PositionHistoryConfiguration(16,
+                            PositionHistoryIsolation.NONE));
+        Set<String> initiallySetVariables = new HashSet<>();
         Map<String, ModeBuilder> modeByName = new HashMap<>();
         Map<PropertyKey, Property<?>> propertyByKey = new HashMap<>();
         Set<PropertyKey> nonRootPropertyKeys = new HashSet<>();
@@ -341,8 +414,7 @@ public class ConfigurationParser {
         Map<String, Set<String>> referencedModesByReferencerMode = new HashMap<>();
         Map<PropertyKey, Set<PropertyKey>> childPropertiesByParentProperty =
                 new HashMap<>();
-        Set<String> nonRootModes = new HashSet<>();
-        Map<String, Set<String>> childModesByParentMode = new HashMap<>();
+        Map<String, List<String>> parentModesByChildMode = new HashMap<>();
         Set<String> visitedPropertyKeys = new HashSet<>();
         for (String property : properties) {
             checkPropertyLineCorrectness(property, visitedPropertyKeys);
@@ -356,7 +428,14 @@ public class ConfigurationParser {
                 continue;
             }
             else if (propertyKey.equals("logging.redact-keys")) {
-                logRedactKeys = Boolean.parseBoolean(propertyValue);
+                logger.warn(
+                        "logging.redact-keys is deprecated: use logging.key-redaction=none, pseudonymize or anonymize instead");
+                keyRedaction = Boolean.parseBoolean(propertyValue) ?
+                        KeyRedaction.ANONYMIZE : KeyRedaction.NONE;
+                continue;
+            }
+            else if (propertyKey.equals("logging.key-redaction")) {
+                keyRedaction = parseKeyRedaction(propertyKey, propertyValue);
                 continue;
             }
             else if (propertyKey.equals("logging.to-file")) {
@@ -368,18 +447,56 @@ public class ConfigurationParser {
                 continue;
             }
             else if (propertyKey.equals("max-position-history-size")) {
-                maxPositionHistorySize =
-                        parseUnsignedInteger(propertyValue, 1, 100);
+                throw new IllegalArgumentException(
+                        "max-position-history-size has been deprecated and removed: use position-history.max-size instead");
+            }
+            else if (isPositionHistoryProperty(propertyKey)) {
+                int dotIndex = propertyKey.indexOf('.');
+                String positionHistoryName = propertyKey.substring(0, dotIndex);
+                PositionHistoryConfiguration positionHistory =
+                        positionHistoryConfigurationByName.get(positionHistoryName);
+                if (positionHistory == null)
+                    throw new IllegalArgumentException(
+                            "Invalid property key " + propertyKey +
+                            ": undefined position history " + positionHistoryName);
+                switch (propertyKey.substring(dotIndex + 1)) {
+                    case "max-size" -> positionHistoryConfigurationByName.put(
+                            positionHistoryName, new PositionHistoryConfiguration(
+                                    parseUnsignedInteger(propertyValue, 1, 100),
+                                    positionHistory.isolation()));
+                    case "isolation" -> positionHistoryConfigurationByName.put(
+                            positionHistoryName, new PositionHistoryConfiguration(
+                                    positionHistory.maxSize(),
+                                    parsePositionHistoryIsolation(propertyKey,
+                                            propertyValue)));
+                    default -> throw new IllegalArgumentException(
+                            "Invalid position history property key " + propertyKey);
+                }
+                continue;
+            }
+            else if (propertyKey.equals("log-last-key-events-on-exit")) {
+                logLastKeyEventsOnExit = Boolean.parseBoolean(propertyValue);
                 continue;
             }
             else if (propertyKey.equals("hide-console")) {
                 hideConsole = Boolean.parseBoolean(propertyValue);
                 continue;
             }
-            // a-mode.hint.grid-cell-width
-            // a-mode.hint.grid-cell-width.1920x1080-100%
-            Pattern modeKeyPattern =
-                    Pattern.compile("([^.]+-mode)(\\.([^.]+)(\\.([^.]+))?(\\.([^.]+))?)?");
+            else if (propertyKey.startsWith("variable.")) {
+                if (!propertyValue.equals("true") && !propertyValue.equals("false"))
+                    throw new IllegalArgumentException(
+                            "Invalid property value in " + propertyKey + "=" +
+                            propertyValue + ": should be true or false");
+                if (propertyValue.equals("true"))
+                    initiallySetVariables.add(
+                            propertyKey.substring("variable.".length()));
+                continue;
+            }
+            else if (propertyKey.equals("virtual-keys") ||
+                     propertyKey.startsWith("virtual-key.")) {
+                // Read by parseDeclaredVirtualKeyNames, before the keys are resolved.
+                continue;
+            }
             Matcher keyMatcher = modeKeyPattern.matcher(propertyKey);
             if (!keyMatcher.matches())
                 continue;
@@ -404,12 +521,14 @@ public class ConfigurationParser {
             ComboMoveDuration finalDefaultComboMoveDuration = defaultComboMoveDuration;
             try {
                 parseLine(group2, mode, propertyKey, propertyValue,
-                        childModesByParentMode, nonRootModes,
+                        parentModesByChildMode,
                         childPropertiesByParentProperty, nonRootPropertyKeys,
-                        referencedModesByReferencerMode, modeName, keyMatcher, keyAliases, keyResolver,
+                        referencedModesByReferencerMode, modeName, keyMatcher, keyAliases,
+                        configurationAliases.colorAliasByName, keyResolver,
                         modeReferences, defaultComboMoveDuration, appAliases,
-                        finalDefaultComboMoveDuration, QFontDatabase::hasFamily,
-                        allVariableNames);
+                        finalDefaultComboMoveDuration,
+                        allVariableNames, positionHistoryNames, animationConfigurationByName,
+                        configurationAliases.screenFilterAliasByName);
             } catch (IllegalArgumentException e) {
                 IllegalArgumentException e2 =
                         new IllegalArgumentException("[" + propertyKey + "] " + e.getMessage());
@@ -432,33 +551,105 @@ public class ConfigurationParser {
         // Default stop-commands-from-previous-mode for idle mode is true.
         if (idleMode.stopCommandsFromPreviousMode.builder.get() == null)
             idleMode.stopCommandsFromPreviousMode.builder.set(true);
-        Set<PropertyKey> rootPropertyKeys = propertyByKey.keySet()
-                                                         .stream()
-                                                         .filter(propertyKey -> !nonRootModes.contains(
-                                                                 propertyKey.modeName()))
-                                                         .filter(Predicate.not(
-                                                                 nonRootPropertyKeys::contains))
-                                                         .collect(Collectors.toSet());;
-        Set<PropertyKey> alreadyBuiltPropertyNodeKeys = new HashSet<>();
-        Set<PropertyNode> rootPropertyNodes = new HashSet<>();
-        for (PropertyKey rootPropertyKey : rootPropertyKeys)
-            rootPropertyNodes.add(recursivelyBuildPropertyNode(rootPropertyKey,
-                    childPropertiesByParentProperty,
-                    childModesByParentMode, nonRootPropertyKeys,
-                    alreadyBuiltPropertyNodeKeys));
-        for (PropertyNode rootPropertyNode : rootPropertyNodes) {
-            recursivelyExtendProperty(
-                    defaultPropertyByName.get(rootPropertyNode.propertyKey.propertyName),
-                    rootPropertyNode, propertyByKey, referencedModesByReferencerMode);
+        for (Map.Entry<PropertyKey, Set<PropertyKey>> entry :
+                childPropertiesByParentProperty.entrySet())
+            if (!propertyByKey.containsKey(entry.getKey()))
+                throw new IllegalArgumentException(
+                        entry.getValue() + " references " + entry.getKey() +
+                        ", which is not defined");
+        for (Map.Entry<String, List<String>> entry : parentModesByChildMode.entrySet())
+            for (String parentMode : entry.getValue())
+                if (!modeByName.containsKey(parentMode))
+                    throw new IllegalArgumentException(
+                            entry.getKey() + " extends mode " + parentMode +
+                            ", which is not defined");
+        // Each parent in turn fills what is still unset, and a parent is extended before its
+        // children, so that what it inherits reaches them.
+        Map<PropertyKey, List<PropertyKey>> parentPropertiesByChildProperty = new HashMap<>();
+        for (Map.Entry<PropertyKey, Property<?>> entry : propertyByKey.entrySet()) {
+            PropertyKey propertyKey = entry.getKey();
+            List<PropertyKey> parentProperties =
+                    nonRootPropertyKeys.contains(propertyKey) ?
+                            List.of(entry.getValue().parentPropertyKey) :
+                            parentModesByChildMode.getOrDefault(propertyKey.modeName(), List.of())
+                                                  .stream()
+                                                  .map(parentMode -> new PropertyKey(parentMode,
+                                                          propertyKey.propertyName()))
+                                                  .toList();
+            if (!parentProperties.isEmpty())
+                parentPropertiesByChildProperty.put(propertyKey, parentProperties);
         }
-        // Cascade mutations along property inheritance paths:
-        // e.g., font-color -> focused-font-color/selected-font-color/prefix variants,
-        // indicator idle -> move/wheel/mousePress/etc.
-        // Does not cascade to properties the user explicitly set in the configuration.
+        for (Map.Entry<PropertyKey, List<PropertyKey>> entry :
+                parentPropertiesByChildProperty.entrySet())
+            for (PropertyKey parentPropertyKey : entry.getValue())
+                childPropertiesByParentProperty.computeIfAbsent(parentPropertyKey,
+                        parentProperty -> new HashSet<>()).add(entry.getKey());
+        Deque<PropertyKey> extendablePropertyKeys = propertyByKey.keySet()
+                                                                 .stream()
+                                                                 .filter(Predicate.not(
+                                                                         parentPropertiesByChildProperty::containsKey))
+                                                                 .collect(Collectors.toCollection(
+                                                                         ArrayDeque::new));
+        Set<PropertyKey> extendedPropertyKeys = new HashSet<>();
+        while (!extendablePropertyKeys.isEmpty()) {
+            PropertyKey propertyKey = extendablePropertyKeys.poll();
+            extendedPropertyKeys.add(propertyKey);
+            List<PropertyKey> parentProperties =
+                    parentPropertiesByChildProperty.getOrDefault(propertyKey,
+                            List.of(new PropertyKey(null, propertyKey.propertyName())));
+            for (PropertyKey parentPropertyKey : parentProperties)
+                extendProperty(parentPropertyKey.modeName() == null ?
+                                defaultPropertyByName.get(parentPropertyKey.propertyName()) :
+                                propertyByKey.get(parentPropertyKey),
+                        propertyByKey.get(propertyKey));
+            for (PropertyKey childPropertyKey :
+                    childPropertiesByParentProperty.getOrDefault(propertyKey, Set.of()))
+                if (!extendedPropertyKeys.contains(childPropertyKey) &&
+                    extendedPropertyKeys.containsAll(
+                            parentPropertiesByChildProperty.get(childPropertyKey)))
+                    extendablePropertyKeys.add(childPropertyKey);
+        }
+        for (PropertyKey propertyKey : propertyByKey.keySet())
+            if (!extendedPropertyKeys.contains(propertyKey))
+                throw new IllegalArgumentException(
+                        "Found property dependency cycle involving property key " +
+                        propertyKey);
+        // A mode that uses the deprecated grid, and has no hint, shows the grid as its hint.
         for (ModeBuilder mode : modeByName.values()) {
-            cascadeMutations(mode.hintMesh, HINT_FONT_STYLE_CASCADE_RULES);
-            cascadeMutations(mode.indicator, IndicatorConfigurationBuilder.CASCADE_RULES);
+            if (mode.hintMesh.builder.enabled() ||
+                !mode.grid.builder.enabled() && !usesGridCommands(mode))
+                continue;
+            mode.grid.builder.enabled(true);
+            mode.hintMesh = mode.grid;
         }
+        IndicatorLayerConfigurationBuilder defaultLayer =
+                ((IndicatorConfigurationBuilder) defaultPropertyByName.get("indicator").builder)
+                        .layer("indicator");
+        for (ModeBuilder mode : modeByName.values())
+            for (Map.Entry<String, IndicatorLayerConfigurationBuilder> entry : mode.indicator.builder.layerByName().entrySet()) {
+                IndicatorLayerConfigurationBuilder layer = entry.getValue();
+                if (layer.endPosition() != null &&
+                    mode.indicator.setPropertyPaths.contains(new ModePropertyPath(
+                            List.of("indicator", "layerByName", entry.getKey(), "aspectRatio"))))
+                    throw new IllegalArgumentException(
+                            "Invalid definition of " + entry.getKey() + " for " + mode.modeName +
+                            ": a layer with an end position takes its aspect ratio from its positions");
+                if (layer.area().source() != null &&
+                    List.of("position", "endPosition", "size", "aspectRatio").stream().anyMatch(fieldName ->
+                            mode.indicator.setPropertyPaths.contains(new ModePropertyPath(
+                                    List.of("indicator", "layerByName", entry.getKey(),
+                                            fieldName)))))
+                    throw new IllegalArgumentException(
+                            "Invalid definition of " + entry.getKey() + " for " + mode.modeName +
+                            ": a layer with an area takes its position and size from it");
+                layer.extend(defaultLayer);
+            }
+        // Cascades font-color mutations to the focused, selected and prefix variants that take
+        // their value from it.
+        for (ModeBuilder mode : modeByName.values())
+            cascadeMutations(
+                    propertyAndParents(mode.hintMesh, propertyByKey, parentPropertiesByChildProperty),
+                    HINT_FONT_STYLE_CASCADE_RULES);
         // Aggregate mutateModeCommands from individual properties into
         // each mode's comboMap.mutateMode so they are included in the ComboMap.
         for (ModeBuilder mode : modeByName.values()) {
@@ -466,8 +657,8 @@ public class ConfigurationParser {
                     mode.stopCommandsFromPreviousMode,
                     mode.pushModeToHistoryStack,
                     mode.modeAfterUnhandledKeyPress,
-                    mode.mouse, mode.wheel,
-                    mode.grid, mode.hintMesh, mode.timeout, mode.indicator,
+                    mode.mouse, mode.target, mode.wheel,
+                    mode.hintMesh, mode.timeout, mode.indicator,
                     mode.hideCursor, mode.zoom)) {
                 for (Map.Entry<Combo, List<Command>> entry :
                         property.mutateModeCommands.entrySet()) {
@@ -513,15 +704,20 @@ public class ConfigurationParser {
         Set<Key> allComboAndMacroKeys = new HashSet<>();
         for (ModeBuilder mode : modeByName.values()) {
             checkMissingProperties(mode);
-            if (mode.hintMesh.builder.enabled() &&
-                mode.hintMesh.builder.selectCombos() == null) {
-                logger.trace(mode.modeName + ".hint.select is missing, using selection keys");
-                mode.hintMesh.builder.selectCombos(
-                        deriveSelectCombosFromHintSelectionKeys(mode,
-                                defaultComboMoveDuration, mode.modeName));
+            if (mode.hintMesh.builder.enabled() && hintSelectionKeys(mode).isEmpty() &&
+                Stream.of(mode.comboMap.select.builder, mode.comboMap.deselect.builder,
+                                mode.comboMap.deselectAll.builder)
+                      .anyMatch(commandsByCombo -> commandsByCombo.keySet().stream()
+                                                                  .anyMatch(Objects::nonNull)))
+                throw new IllegalArgumentException(
+                        "Invalid definition of overlay for " + mode.modeName +
+                        ": select, deselect and deselect-all need overlay.selection-keys");
+            if (mode.hintMesh.builder.enabled() && mode.comboMap.select.builder.isEmpty()) {
+                logger.trace(mode.modeName + ".select is missing, using selection keys");
+                for (Combo combo : deriveSelectCombosFromHintSelectionKeys(mode,
+                        defaultComboMoveDuration, mode.modeName))
+                    mode.comboMap.select.builder.put(combo, List.of(new SelectHintKey()));
             }
-            mode.comboMap.hintSelectCombos(mode.hintMesh.builder.selectCombos());
-            mode.comboMap.hintUnselectCombos(mode.hintMesh.builder.unselectCombos());
             usedKeys(mode.comboMap, allComboAndMacroKeys);
         }
         List<Key> missingKeys = allComboAndMacroKeys.stream()
@@ -538,38 +734,561 @@ public class ConfigurationParser {
                                     .stream()
                                     .map(ModeBuilder::build)
                                     .collect(Collectors.toSet());
-        boolean suppressCapsLockOsPassthrough = true;
-        return new Configuration(maxPositionHistorySize,
-                new ModeMap(modes), logLevel, logRedactKeys, logToFile, hideConsole,
+        Set<Key> virtualKeys = new HashSet<>(BuiltInVirtualKey.STATIC_KEYS);
+        declaredVirtualKeyNames.names()
+                               .forEach(name -> virtualKeys.add(keyResolver.resolve(name)));
+        // A screen filter key cannot be declared, so it is whichever one the combos name.
+        allComboAndMacroKeys.stream()
+                            .filter(key -> BuiltInVirtualKey.screenFilter(key) != null)
+                            .forEach(virtualKeys::add);
+        return new Configuration(positionHistoryConfigurationByName,
+                animationConfigurationByName,
+                new ModeMap(modes), logLevel, keyRedaction, logLastKeyEventsOnExit,
+                logToFile, hideConsole, activeKeyboardLayout,
                 forcedActiveAndConfigurationKeyboardLayouts.forcedActiveKeyboardLayout,
-                suppressCapsLockOsPassthrough);
+                Set.copyOf(initiallySetVariables),
+                virtualKeys,
+                declaredVirtualKeyNames.initiallyPressed()
+                                       .stream()
+                                       .map(keyResolver::resolve)
+                                       .collect(Collectors.toSet()));
     }
 
     private static List<Combo> deriveSelectCombosFromHintSelectionKeys(ModeBuilder mode,
                                                                        ComboMoveDuration defaultComboMoveDuration,
                                                                        String modeName) {
-        Set<Key> hintSelectionKeys =
-                mode.hintMesh.builder.keysByFilter()
-                                     .map()
-                                     .values()
-                                     .stream()
-                                     .map(HintMeshKeysBuilder::selectionKeys)
-                                     .filter(Objects::nonNull)
-                                     .flatMap(Collection::stream)
-                                     .collect(Collectors.toSet());
         ComboPrecondition emptyComboPrecondition = new ComboPrecondition(
                 new ComboPrecondition.ComboKeyPrecondition(Set.of(),
                         new ComboPrecondition.PressedKeyPrecondition(List.of())),
                 new ComboPrecondition.ComboAppPrecondition(Set.of(), Set.of()),
                 new ComboPrecondition.ComboVariablePrecondition(List.of()));
-        String label = modeName + ".hint.select";
-        return hintSelectionKeys.stream()
+        String label = modeName + ".select";
+        return hintSelectionKeys(mode).stream()
                                 .map(key -> new Combo(label, emptyComboPrecondition,
                                         ComboSequence.ofMoves(
                                                 List.<KeyComboMove>of(new PressComboMove(
                                                         KeyOrAlias.ofKey(key), false, true,
                                                         defaultComboMoveDuration, null)))))
                                 .toList();
+    }
+
+    /** The keys of every screen and of every mutation branch. */
+    private static Set<Key> hintSelectionKeys(ModeBuilder mode) {
+        Stream<List<Key>> screenKeys = mode.hintMesh.builder.keysByFilter()
+                                                            .map()
+                                                            .values()
+                                                            .stream()
+                                                            .map(HintMeshKeysBuilder::selectionKeys);
+        Stream<List<Key>> branchKeys =
+                mode.hintMesh.mutateModeCommands.values()
+                                                .stream()
+                                                .flatMap(Collection::stream)
+                                                .map(command -> command instanceof MutateMode mutateMode &&
+                                                                mutateMode.propertyPath()
+                                                                          .equalsIgnoringScreenFilter(HINT_SELECTION_KEYS_PATH) ?
+                                                        (List<Key>) mutateMode.newPropertyValue() : null);
+        return Stream.concat(screenKeys, branchKeys)
+                     .filter(Objects::nonNull)
+                     .flatMap(Collection::stream)
+                     .collect(Collectors.toSet());
+    }
+
+    private static final String IDLE_INDICATOR_STATE = "idle";
+
+    /**
+     * The deprecated indicator states and the built-in virtual key each became, in
+     * ascending mutation priority: the old states were picked in the reverse order.
+     */
+    private static final List<Map.Entry<String, String>> INDICATOR_STATE_KEYS = List.of(
+            Map.entry("move", "ismoving"),
+            Map.entry("wheel", "iswheeling"),
+            Map.entry("mouse-press", "ismousepressing"),
+            Map.entry("right-mouse-press", "isrightmousepressing"),
+            Map.entry("middle-mouse-press", "ismiddlemousepressing"),
+            Map.entry("left-mouse-press", "isleftmousepressing"),
+            Map.entry("unhandled-key-press", "isunhandledkeypressing"));
+
+    /**
+     * Rewrites the deprecated per-state indicator properties as mutation branches:
+     * indicator.idle.color=A and indicator.wheel.color=B become
+     * indicator.fill-color=A | _{iswheeling} -> B.
+     */
+    private static List<String> desugarIndicatorStates(List<String> properties) {
+        Map<String, Map<String, String>> valueByStateByProperty = new LinkedHashMap<>();
+        Set<String> propertiesWithoutState = new HashSet<>();
+        String[] statePropertyKeys = new String[properties.size()];
+        for (int lineIndex = 0; lineIndex < properties.size(); lineIndex++) {
+            Matcher lineMatcher = propertyLinePattern.matcher(properties.get(lineIndex));
+            if (!lineMatcher.matches())
+                continue;
+            String propertyKey = lineMatcher.group(1).strip();
+            int indicatorEndIndex = propertyKey.indexOf(".indicator.");
+            if (indicatorEndIndex < 0)
+                continue;
+            indicatorEndIndex += ".indicator.".length();
+            String afterIndicator = propertyKey.substring(indicatorEndIndex);
+            int stateEndIndex = afterIndicator.indexOf('.');
+            if (stateEndIndex < 0) {
+                propertiesWithoutState.add(propertyKey);
+                continue;
+            }
+            String state = afterIndicator.substring(0, stateEndIndex);
+            if (!state.equals(IDLE_INDICATOR_STATE) && virtualKeyOfIndicatorState(state) == null)
+                continue;
+            String remainder = afterIndicator.substring(stateEndIndex + 1);
+            if (remainder.equals("color"))
+                remainder = "fill-color";
+            else if (remainder.equals("opacity"))
+                remainder = "fill-opacity";
+            statePropertyKeys[lineIndex] = propertyKey.substring(0, indicatorEndIndex) + remainder;
+            if (valueByStateByProperty.computeIfAbsent(statePropertyKeys[lineIndex],
+                                              key -> new LinkedHashMap<>())
+                                      .put(state, lineMatcher.group(2).strip()) != null)
+                throw new IllegalArgumentException(
+                        "Property " + propertyKey + " is defined twice");
+        }
+        if (valueByStateByProperty.isEmpty())
+            return properties;
+        for (String propertyKey : valueByStateByProperty.keySet())
+            if (propertiesWithoutState.contains(propertyKey))
+                throw new IllegalArgumentException("[" + propertyKey +
+                                                   "] An indicator property cannot be given both with and without a state");
+        List<String> desugared = new ArrayList<>(properties.size());
+        Set<String> emittedProperties = new HashSet<>();
+        for (int lineIndex = 0; lineIndex < properties.size(); lineIndex++) {
+            String statePropertyKey = statePropertyKeys[lineIndex];
+            if (statePropertyKey == null) {
+                desugared.add(properties.get(lineIndex));
+                continue;
+            }
+            if (!emittedProperties.add(statePropertyKey))
+                continue;
+            String property = statePropertyKey + "=" +
+                              desugaredIndicatorValue(statePropertyKey,
+                                      valueByStateByProperty.get(statePropertyKey));
+            logger.warn("Indicator states are deprecated, use " + property + " instead");
+            desugared.add(property);
+        }
+        return desugared;
+    }
+
+    private static String virtualKeyOfIndicatorState(String state) {
+        for (Map.Entry<String, String> stateKey : INDICATOR_STATE_KEYS)
+            if (stateKey.getKey().equals(state))
+                return stateKey.getValue();
+        return null;
+    }
+
+    private static String desugaredIndicatorValue(String propertyKey,
+                                                  Map<String, String> valueByState) {
+        String idleValue = valueByState.get(IDLE_INDICATOR_STATE);
+        if (idleValue != null && valueByState.size() == 1)
+            return idleValue;
+        for (String value : valueByState.values())
+            if (value.contains("->"))
+                throw new IllegalArgumentException("[" + propertyKey +
+                                                   "] An indicator state cannot carry branches of its own: " +
+                                                   value);
+        List<String> branches = new ArrayList<>();
+        if (idleValue != null)
+            branches.add(idleValue);
+        for (Map.Entry<String, String> stateKey : INDICATOR_STATE_KEYS) {
+            String value = valueByState.get(stateKey.getKey());
+            if (value != null)
+                branches.add("_{" + stateKey.getValue() + "} -> " + value);
+        }
+        return String.join(" | ", branches);
+    }
+
+    private static final Map<String, String> HINT_KEY_BY_GRID_KEY = Map.ofEntries(
+            Map.entry("area", "area"),
+            Map.entry("area-width-percent", "area-width-percent"),
+            Map.entry("area-height-percent", "area-height-percent"),
+            Map.entry("area-top-inset", "area-top-inset"),
+            Map.entry("area-bottom-inset", "area-bottom-inset"),
+            Map.entry("area-left-inset", "area-left-inset"),
+            Map.entry("area-right-inset", "area-right-inset"),
+            Map.entry("row-count", "grid-max-row-count"),
+            Map.entry("column-count", "grid-max-column-count"),
+            Map.entry("line-visible", "visible"),
+            Map.entry("line-color", "box-border-color"),
+            Map.entry("line-thickness", "box-border-thickness"),
+            Map.entry("line-opacity", "box-border-opacity"),
+            Map.entry("background-color", "box-color"),
+            Map.entry("background-opacity", "box-opacity"),
+            Map.entry("transition-animation-enabled", "transition-enabled"),
+            Map.entry("transition-animation-duration-millis", "transition-duration-millis"),
+            Map.entry("fade-animation-enabled", "fade-enabled"),
+            Map.entry("fade-animation-duration-millis", "fade-duration-millis"));
+
+    private static final Map<String, String> HINT_PROPERTY_BY_SYNCHRONIZATION = Map.of(
+            "mouse-follows-grid-center", "mouse-movement=mouse-follows-overlay-center",
+            "mouse-and-grid-center-unsynchronized", "mouse-movement=no-movement",
+            "grid-center-follows-mouse", "area-center=mouse");
+
+    private static boolean usesGridCommands(ModeBuilder mode) {
+        return !mode.comboMap.shrinkOverlay.builder.isEmpty() ||
+               !mode.comboMap.moveOverlayTo.builder.isEmpty() ||
+               Stream.of(mode.comboMap.moveTo.builder, mode.comboMap.moveTargetTo.builder)
+                     .flatMap(commandsByCombo -> commandsByCombo.values().stream())
+                     .flatMap(List::stream)
+                     .anyMatch(command -> !(command instanceof MoveToTarget ||
+                                            command instanceof MoveToLastSelectedHint ||
+                                            command instanceof MoveTargetToMouse ||
+                                            command instanceof MoveTargetToLastSelectedHint));
+    }
+
+    private static final Map<String, String> OVERLAY_KEY_BY_DEPRECATED_KEY = Map.ofEntries(
+            Map.entry("grid-area", "area"),
+            Map.entry("ui-area", "area"),
+            Map.entry("grid-area-width-percent", "area-width-percent"),
+            Map.entry("grid-area-height-percent", "area-height-percent"),
+            Map.entry("grid-area-center", "area-center"),
+            Map.entry("active-screen-grid-area-center", "area-center"),
+            Map.entry("cell-horizontal-padding", "box-horizontal-padding"),
+            Map.entry("cell-vertical-padding", "box-vertical-padding"),
+            Map.entry("transition-animation-enabled", "transition-enabled"),
+            Map.entry("transition-animation-duration-millis", "transition-duration-millis"),
+            Map.entry("fade-animation-enabled", "fade-enabled"),
+            Map.entry("fade-animation-duration-millis", "fade-duration-millis"));
+
+    private static final Pattern hintMeshEmptyPattern =
+            Pattern.compile("(?<![\\w-])ishintmeshempty(?![\\w-])");
+
+    /**
+     * Rewrites the deprecated ishintmeshempty as isoverlayempty:
+     * a-mode.to.b-mode=_{ishintmeshempty} becomes a-mode.to.b-mode=_{isoverlayempty}.
+     */
+    private static List<String> desugarHintMeshEmpty(List<String> properties) {
+        List<String> desugared = new ArrayList<>(properties.size());
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            if (!lineMatcher.matches() ||
+                !hintMeshEmptyPattern.matcher(lineMatcher.group(2)).find()) {
+                desugared.add(property);
+                continue;
+            }
+            logger.warn("ishintmeshempty in " + lineMatcher.group(1).strip() +
+                        " has been deprecated: use isoverlayempty instead");
+            desugared.add(lineMatcher.group(1).strip() + "=" + hintMeshEmptyPattern.matcher(
+                    lineMatcher.group(2).strip()).replaceAll("isoverlayempty"));
+        }
+        return desugared;
+    }
+
+    /**
+     * Rewrites the deprecated overlay keys: a-mode.hint.grid-area=active-window becomes
+     * a-mode.overlay.area=active-window, and a-mode.overlay.subgrid-closed=true becomes
+     * a-mode.overlay.subdecoration-box-framed=true.
+     */
+    private static List<String> desugarOverlayKeys(List<String> properties) {
+        List<String> desugared = new ArrayList<>(properties.size());
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            Matcher keyMatcher = modeKeyPattern.matcher(
+                    lineMatcher.matches() ? lineMatcher.group(1).strip() : "");
+            if (!keyMatcher.matches() || keyMatcher.group(3) == null ||
+                !List.of("overlay", "hint").contains(keyMatcher.group(3))) {
+                desugared.add(property);
+                continue;
+            }
+            String key = keyMatcher.group(5);
+            if (key != null && key.startsWith("subgrid-")) {
+                String suffix = key.substring("subgrid-".length());
+                key = "subdecoration-" + (suffix.startsWith("border-") ? "box-" + suffix :
+                        suffix.equals("closed") ? "box-framed" :
+                        suffix.equals("selection-keys") ? "label-keys" : suffix);
+            }
+            else if (key != null)
+                key = OVERLAY_KEY_BY_DEPRECATED_KEY.getOrDefault(key, key);
+            String propertyKey = keyMatcher.group(1) + ".overlay" +
+                                 (key == null ? "" : "." + key) +
+                                 (keyMatcher.group(7) == null ? "" : "." + keyMatcher.group(7));
+            String value = lineMatcher.group(2).strip();
+            String overlayValue = key == null ? value.replaceFirst("\\.hint$", ".overlay") : value;
+            if (!propertyKey.equals(lineMatcher.group(1).strip()))
+                logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use " +
+                            propertyKey + " instead");
+            else if (!overlayValue.equals(value))
+                logger.warn(value + " has been deprecated: use " + overlayValue + " instead");
+            else {
+                desugared.add(property);
+                continue;
+            }
+            desugared.add(propertyKey + "=" + overlayValue);
+        }
+        return desugared;
+    }
+
+    private static final Map<String, String> INDICATOR_KEY_BY_DEPRECATED_KEY =
+            Map.of("follow-mouse", "follow");
+
+    private static final Map<String, String> ZOOM_KEY_BY_DEPRECATED_KEY = Map.of(
+            "animation-enabled", "transition-enabled",
+            "animation-easing", "transition-easing",
+            "animation-duration-millis", "transition-duration-millis");
+
+    /**
+     * Rewrites the deprecated indicator and zoom keys: a-mode.indicator.follow-mouse=false
+     * becomes a-mode.indicator.follow=false, and a-mode.zoom.animation-enabled=true becomes
+     * a-mode.zoom.transition-enabled=true.
+     */
+    private static List<String> desugarIndicatorAndZoomKeys(List<String> properties) {
+        List<String> desugared = new ArrayList<>(properties.size());
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            Matcher keyMatcher = modeKeyPattern.matcher(
+                    lineMatcher.matches() ? lineMatcher.group(1).strip() : "");
+            Map<String, String> keyByDeprecatedKey =
+                    !keyMatcher.matches() || keyMatcher.group(3) == null ? Map.of() :
+                    isIndicatorName(keyMatcher.group(3)) ? INDICATOR_KEY_BY_DEPRECATED_KEY :
+                    keyMatcher.group(3).equals("zoom") ? ZOOM_KEY_BY_DEPRECATED_KEY : Map.of();
+            if (keyByDeprecatedKey.isEmpty() || keyMatcher.group(5) == null ||
+                !keyByDeprecatedKey.containsKey(keyMatcher.group(5)) ||
+                keyMatcher.group(7) != null) {
+                desugared.add(property);
+                continue;
+            }
+            String propertyKey = keyMatcher.group(1) + "." + keyMatcher.group(3) + "." +
+                                 keyByDeprecatedKey.get(keyMatcher.group(5));
+            logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use " +
+                        propertyKey + " instead");
+            desugared.add(propertyKey + "=" + lineMatcher.group(2).strip());
+        }
+        return desugared;
+    }
+
+    /**
+     * Rewrites the deprecated grid properties with the names of the hint properties:
+     * a-mode.grid.row-count=1 becomes a-mode.grid.grid-max-row-count=1.
+     */
+    private static List<String> desugarGrid(List<String> properties) {
+        List<String> desugared = new ArrayList<>(properties.size());
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            Matcher keyMatcher = modeKeyPattern.matcher(
+                    lineMatcher.matches() ? lineMatcher.group(1).strip() : "");
+            if (!keyMatcher.matches() || !"grid".equals(keyMatcher.group(3))) {
+                desugared.add(property);
+                continue;
+            }
+            logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use overlay instead");
+            if (keyMatcher.group(5) == null || keyMatcher.group(7) != null) {
+                desugared.add(property);
+                continue;
+            }
+            String gridKey = keyMatcher.group(1) + ".grid";
+            String key = keyMatcher.group(5);
+            String value = lineMatcher.group(2).strip();
+            if (key.equals("synchronization") &&
+                HINT_PROPERTY_BY_SYNCHRONIZATION.containsKey(value))
+                desugared.add(gridKey + "." + HINT_PROPERTY_BY_SYNCHRONIZATION.get(value));
+            else if (HINT_KEY_BY_GRID_KEY.containsKey(key))
+                desugared.add(gridKey + "." + HINT_KEY_BY_GRID_KEY.get(key) + "=" + value);
+            else
+                desugared.add(property);
+        }
+        return desugared;
+    }
+
+    private static final Pattern mouseMovementPattern = Pattern.compile(
+            "(?<![\\w-])(no-movement|mouse-follows-selected-hint|mouse-follows-overlay-center|" +
+            "mouse-follows-hint-grid-center)(?![\\w-])");
+
+    /**
+     * Rewrites the deprecated mouse-movement as mouse-follows-target and
+     * target-follows-overlay-center, in each branch of a mutation:
+     * a-mode.overlay.mouse-movement=no-movement becomes
+     * a-mode.overlay.mouse-follows-target=false and
+     * a-mode.overlay.target-follows-overlay-center=false.
+     */
+    private static List<String> desugarMouseMovement(List<String> properties) {
+        List<String> desugared = new ArrayList<>(properties.size());
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            Matcher keyMatcher = modeKeyPattern.matcher(
+                    lineMatcher.matches() ? lineMatcher.group(1).strip() : "");
+            if (!keyMatcher.matches() || !"mouse-movement".equals(keyMatcher.group(5)) ||
+                keyMatcher.group(7) != null ||
+                !List.of("overlay", "grid").contains(keyMatcher.group(3))) {
+                desugared.add(property);
+                continue;
+            }
+            if (keyMatcher.group(3).equals("overlay"))
+                logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use " +
+                            "mouse-follows-target and target-follows-overlay-center instead");
+            String overlayKey = keyMatcher.group(1) + "." + keyMatcher.group(3);
+            String value = lineMatcher.group(2).strip();
+            desugared.add(overlayKey + ".mouse-follows-target=" +
+                          mouseMovementPattern.matcher(value).replaceAll(
+                                  movement -> String.valueOf(
+                                          !movement.group().equals("no-movement"))));
+            desugared.add(overlayKey + ".target-follows-overlay-center=" +
+                          mouseMovementPattern.matcher(value).replaceAll(
+                                  movement -> String.valueOf(movement.group().endsWith("-center"))));
+        }
+        return desugared;
+    }
+
+    private static final Map<String, String> POSITION_HISTORY_COMMAND_BY_DEPRECATED_NAME = Map.of(
+            "save-position", "save",
+            "unsave-position", "unsave",
+            "clear", "clear",
+            "cycle-next", "cycle-next",
+            "cycle-previous", "cycle-previous");
+
+    /**
+     * Rewrites the deprecated position history and animation commands with the command first:
+     * a-mode.position-history.clear=+x becomes a-mode.clear.position-history=+x, and
+     * a-mode.pop-in-animation.start=+x becomes a-mode.start.pop-in-animation=+x.
+     */
+    private static List<String> desugarPositionHistoryAndAnimationCommands(
+            List<String> properties) {
+        List<String> desugared = new ArrayList<>(properties.size());
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            Matcher keyMatcher = modeKeyPattern.matcher(
+                    lineMatcher.matches() ? lineMatcher.group(1).strip() : "");
+            if (!keyMatcher.matches() || keyMatcher.group(3) == null ||
+                keyMatcher.group(7) != null) {
+                desugared.add(property);
+                continue;
+            }
+            String modeName = keyMatcher.group(1);
+            String name = keyMatcher.group(3);
+            String command = keyMatcher.group(5);
+            String value = lineMatcher.group(2).strip();
+            if (name.equals("position-history") && command == null) {
+                logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use " +
+                            "save, unsave, clear, cycle-next and cycle-previous instead");
+                for (String positionHistoryCommand : POSITION_HISTORY_COMMAND_BY_DEPRECATED_NAME.values())
+                    desugared.add(modeName + "." + positionHistoryCommand + "=" +
+                                  value.replaceFirst("\\.position-history$",
+                                          "." + positionHistoryCommand));
+            }
+            else if (command != null && isPositionHistoryName(name) &&
+                     POSITION_HISTORY_COMMAND_BY_DEPRECATED_NAME.containsKey(command)) {
+                String propertyKey = modeName + "." +
+                                     POSITION_HISTORY_COMMAND_BY_DEPRECATED_NAME.get(command) +
+                                     "." + name;
+                logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use " +
+                            propertyKey + " instead");
+                desugared.add(propertyKey + "=" + value);
+            }
+            else if (isAnimationName(name) && ("start".equals(command) || "stop".equals(command))) {
+                String propertyKey = modeName + "." + command + "." + name;
+                logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use " +
+                            propertyKey + " instead");
+                desugared.add(propertyKey + "=" + value);
+            }
+            else
+                desugared.add(property);
+        }
+        return desugared;
+    }
+
+    private static final Pattern overlaySelectKeyPattern =
+            Pattern.compile("([^.]+-mode)\\.(?:overlay|grid)\\.(select|deselect|undo)");
+    private static final Pattern overlayKeyPattern =
+            Pattern.compile("([^.]+-mode)\\.(?:overlay|grid)");
+
+    /**
+     * Rewrites the deprecated overlay.select and overlay.deselect as select and deselect:
+     * a-mode.overlay.select=+x becomes a-mode.select=+x. An overlay reference copied them, so
+     * b-mode.overlay=a-mode.overlay also gets b-mode.select=a-mode.select.
+     */
+    private static List<String> desugarOverlaySelect(List<String> properties) {
+        List<String> desugared = new ArrayList<>(properties.size());
+        Set<String> propertyKeys = new HashSet<>();
+        Set<String> commands = new HashSet<>();
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            if (!lineMatcher.matches()) {
+                desugared.add(property);
+                continue;
+            }
+            Matcher keyMatcher = overlaySelectKeyPattern.matcher(lineMatcher.group(1).strip());
+            if (keyMatcher.matches()) {
+                String command = keyMatcher.group(2).equals("undo") ? "deselect" :
+                        keyMatcher.group(2);
+                logger.warn(lineMatcher.group(1).strip() + " has been deprecated: use " +
+                            keyMatcher.group(1) + "." + command + " instead");
+                commands.add(command);
+                propertyKeys.add(keyMatcher.group(1) + "." + command);
+                desugared.add(keyMatcher.group(1) + "." + command + "=" +
+                              lineMatcher.group(2).strip());
+            }
+            else {
+                propertyKeys.add(lineMatcher.group(1).strip());
+                desugared.add(property);
+            }
+        }
+        List<String> referenced = new ArrayList<>(desugared.size());
+        for (String property : desugared) {
+            referenced.add(property);
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            if (!lineMatcher.matches())
+                continue;
+            Matcher keyMatcher = overlayKeyPattern.matcher(lineMatcher.group(1).strip());
+            Matcher valueMatcher = overlayKeyPattern.matcher(lineMatcher.group(2).strip());
+            if (!keyMatcher.matches() || !valueMatcher.matches())
+                continue;
+            for (String command : commands)
+                if (!propertyKeys.contains(keyMatcher.group(1) + "." + command))
+                    referenced.add(keyMatcher.group(1) + "." + command + "=" +
+                                   valueMatcher.group(1) + "." + command);
+        }
+        return referenced;
+    }
+
+    /** A name prefixed with + is pressed from the start; - or no prefix is not pressed. */
+    private record DeclaredVirtualKeyNames(Set<String> names, Set<String> initiallyPressed) {
+    }
+
+    /** The names of the virtual-keys line: a built-in one is never declared. */
+    private static DeclaredVirtualKeyNames parseDeclaredVirtualKeyNames(
+            List<String> properties, Set<String> animationNames,
+            Set<String> positionHistoryNames) {
+        Set<String> names = new HashSet<>(animationNames);
+        for (String positionHistoryName : positionHistoryNames)
+            names.add(BuiltInVirtualKey.positionHistoryKey(positionHistoryName).name());
+        Set<String> initiallyPressed = new HashSet<>();
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            if (!lineMatcher.matches())
+                continue;
+            String propertyKey = lineMatcher.group(1).strip();
+            if (propertyKey.startsWith("virtual-key.")) {
+                String name = propertyKey.substring("virtual-key.".length());
+                String state = lineMatcher.group(2).strip();
+                if (!state.equals("pressed") && !state.equals("released"))
+                    throw new IllegalArgumentException(
+                            "Invalid virtual key state " + propertyKey + "=" + state +
+                            ": expected pressed or released");
+                if (!names.add(name))
+                    throw new IllegalArgumentException(
+                            "Virtual key " + name + " is declared twice");
+                if (state.equals("pressed"))
+                    initiallyPressed.add(name);
+                continue;
+            }
+            if (!propertyKey.equals("virtual-keys"))
+                continue;
+            logger.warn(
+                    "virtual-keys has been deprecated: use virtual-key.<name>=pressed or released instead");
+            for (String token : lineMatcher.group(2).strip().split("\\s+")) {
+                if (token.isEmpty())
+                    continue;
+                boolean pressed = token.startsWith("+");
+                String name = pressed || token.startsWith("-") ? token.substring(1) : token;
+                if (!names.add(name))
+                    throw new IllegalArgumentException(
+                            "Virtual key " + name + " is declared twice");
+                if (pressed)
+                    initiallyPressed.add(name);
+            }
+        }
+        return new DeclaredVirtualKeyNames(names, initiallyPressed);
     }
 
     private static ForcedActiveAndConfigurationKeyboardLayouts parseForcedAndConfigurationLayouts(
@@ -709,23 +1428,24 @@ public class ConfigurationParser {
 
     private static void parseLine(String group2, ModeBuilder mode, String propertyKey,
                                   String propertyValue,
-                                  Map<String, Set<String>> childModesByParentMode,
-                                  Set<String> nonRootModes,
+                                  Map<String, List<String>> parentModesByChildMode,
                                   Map<PropertyKey, Set<PropertyKey>> childPropertiesByParentProperty,
                                   Set<PropertyKey> nonRootPropertyKeys,
                                   Map<String, Set<String>> referencedModesByReferencerMode,
                                   String modeName, Matcher keyMatcher,
                                   Map<String, KeyAlias> keyAliases,
+                                  Map<String, GradientColor> colorAliases,
                                   KeyResolver keyResolver, Set<String> modeReferences,
                                   ComboMoveDuration defaultComboMoveDuration,
                                   Map<String, AppAlias> appAliases,
                                   ComboMoveDuration finalDefaultComboMoveDuration,
-                                  Predicate<String> fontAvailability,
-                                  Set<String> allVariableNames) {
+                                  Set<String> allVariableNames,
+                                  Set<String> positionHistoryNames,
+                                  Map<String, AnimationConfiguration> animationConfigurationByName,
+                                  Map<String, Set<ScreenFilter>> screenFilterAliases) {
         if (group2 == null) {
             // Mode reference.
-            parseModeReference(propertyKey, propertyValue, childModesByParentMode,
-                    nonRootModes);
+            parseModeReference(propertyKey, propertyValue, parentModesByChildMode);
             return;
         }
         final int group3 = 4;
@@ -803,6 +1523,31 @@ public class ConfigurationParser {
                         handler.modeBuilderSetter().accept(propertyValue);
                 }
             }
+            case "target" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.target.parsePropertyReference(propertyKey, propertyValue,
+                            childPropertiesByParentProperty,
+                            nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "Invalid target property key");
+                else {
+                    ModePropertyHandler handler = velocityHandler(
+                            new ModePropertyPath(List.of("target")),
+                            mode.target.builder, keyMatcher.group(group4));
+                    if (handler == null)
+                        throw new IllegalArgumentException(
+                                "Invalid target property key");
+                    if (!tryParseComboProperty(propertyValue, modeName,
+                            handler.propertyPath(), handler.valueParser(),
+                            handler.modeBuilderSetter(),
+                            mode.target.mutateModeCommands,
+                            mode.target.setPropertyPaths,
+                            defaultComboMoveDuration, keyAliases, appAliases,
+                            keyResolver, allVariableNames, null))
+                        handler.modeBuilderSetter().accept(propertyValue);
+                }
+            }
             case "wheel" -> {
                 if (keyMatcher.group(group3) == null)
                     mode.wheel.parsePropertyReference(propertyKey, propertyValue,
@@ -812,9 +1557,9 @@ public class ConfigurationParser {
                     throw new IllegalArgumentException(
                             "Invalid wheel property key");
                 else {
-                    ModePropertyHandler handler = wheelHandler(
-                            new ModePropertyPath(List.of("wheel")),
-                            mode.wheel.builder, keyMatcher.group(group4));
+                    ModePropertyHandler handler = velocityHandler(
+                            new ModePropertyPath(List.of("wheel", "velocity")),
+                            mode.wheel.builder.velocity(), keyMatcher.group(group4));
                     if (handler == null)
                         throw new IllegalArgumentException(
                                 "Invalid wheel property key");
@@ -828,58 +1573,40 @@ public class ConfigurationParser {
                         handler.modeBuilderSetter().accept(propertyValue);
                 }
             }
-            case "grid" -> {
+            case "overlay", "grid" -> {
+                Property<HintMeshConfigurationBuilder> hintMesh =
+                        group2.equals("grid") ? mode.grid : mode.hintMesh;
                 if (keyMatcher.group(group3) == null)
-                    mode.grid.parsePropertyReference(propertyKey, propertyValue,
+                    hintMesh.parsePropertyReference(propertyKey, propertyValue,
                             childPropertiesByParentProperty,
                             nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "Invalid grid property key");
+                            "Invalid overlay property key");
                 else {
-                    ModePropertyHandler handler = gridHandler(
-                            new ModePropertyPath(List.of("grid")),
-                            mode.grid.builder, keyMatcher.group(group4));
-                    if (handler == null)
-                        throw new IllegalArgumentException(
-                                "Invalid grid property key");
-                    if (!tryParseComboProperty(propertyValue, modeName,
-                            handler.propertyPath(), handler.valueParser(),
-                            handler.modeBuilderSetter(),
-                            mode.grid.mutateModeCommands,
-                            mode.grid.setPropertyPaths,
-                            defaultComboMoveDuration, keyAliases, appAliases,
-                            keyResolver, allVariableNames, null))
-                        handler.modeBuilderSetter().accept(propertyValue);
-                }
-            }
-            case "hint" -> {
-                if (keyMatcher.group(group3) == null)
-                    mode.hintMesh.parsePropertyReference(propertyKey, propertyValue,
-                            childPropertiesByParentProperty,
-                            nonRootPropertyKeys);
-                else if (keyMatcher.group(group4) == null)
-                    throw new IllegalArgumentException(
-                            "Invalid hint property key");
-                else {
-                    if (mode.hintMesh.builder.enabled() == null)
-                        mode.hintMesh.builder.enabled(true);
-                    ViewportFilter viewportFilter = keyMatcher.group(group5) == null ?
-                            AnyViewportFilter.ANY_VIEWPORT_FILTER :
-                            parseViewportFilter(keyMatcher.group(group5));
+                    if (hintMesh.builder.enabled() == null)
+                        hintMesh.builder.enabled(true);
+                    ScreenFilter screenFilter = keyMatcher.group(group5) == null ?
+                            AnyScreenFilter.ANY_SCREEN_FILTER :
+                            parseScreenFilter(keyMatcher.group(group5));
                     String hintKey = keyMatcher.group(group4);
-                    ModePropertyHandler handler = hintHandler(
-                            new ModePropertyPath(List.of("hintMesh")),
-                            mode.hintMesh.builder, viewportFilter, hintKey,
-                            fontAvailability, keyAliases, keyResolver);
+                    Function<ScreenFilter, ModePropertyHandler> handlerByFilter =
+                            filter -> hintHandler(
+                                    new ModePropertyPath(List.of("hintMesh")),
+                                    hintMesh.builder, filter, hintKey,
+                                    keyAliases, keyResolver,
+                                    positionHistoryNames, colorAliases);
+                    ModePropertyHandler handler = handlerByFilter.apply(screenFilter);
                     if (handler != null) {
                         if (!tryParseComboProperty(propertyValue, modeName,
                                 handler.propertyPath(), handler.valueParser(),
                                 handler.modeBuilderSetter(),
-                                mode.hintMesh.mutateModeCommands,
-                                mode.hintMesh.setPropertyPaths,
+                                hintMesh.mutateModeCommands,
+                                hintMesh.setPropertyPaths,
                                 defaultComboMoveDuration, keyAliases, appAliases,
-                                keyResolver, allVariableNames, viewportFilter))
+                                keyResolver, allVariableNames,
+                                new ScreenFilterProperty(screenFilter,
+                                        handlerByFilter, screenFilterAliases)))
                             handler.modeBuilderSetter().accept(propertyValue);
                         return;
                     }
@@ -888,22 +1615,16 @@ public class ConfigurationParser {
                             boolean moveMouse = Boolean.parseBoolean(propertyValue);
                             logger.warn(
                                     "hint.move-mouse has been deprecated: use " +
-                                    modeName +
-                                    ".hint.mouse-movement=" +
-                                    (moveMouse ? "mouse-follows-selected-hint" :
-                                            "no-movement") + " instead");
-                            if (mode.hintMesh.builder.mouseMovement() == null) {
-                                mode.hintMesh.builder.mouseMovement(
-                                        moveMouse ?
-                                                HintMouseMovement.MOUSE_FOLLOWS_SELECTED_HINT :
-                                                HintMouseMovement.NO_MOVEMENT);
-                            }
+                                    modeName + ".overlay.mouse-follows-target=" +
+                                    moveMouse + " instead");
+                            if (hintMesh.builder.mouseFollowsTarget() == null)
+                                hintMesh.builder.mouseFollowsTarget(moveMouse);
                         }
                         case "mode-after-selection" -> {
                             String modeAfterSelection = propertyValue;
                             modeReferences.add(
                                     checkModeReference(modeAfterSelection));
-                            mode.hintMesh.builder.modeAfterSelection(modeAfterSelection);
+                            hintMesh.builder.modeAfterSelection(modeAfterSelection);
                             logger.warn(
                                     "hint.mode-after-selection has been deprecated: use " +
                                     modeName + ".to." + modeAfterSelection +
@@ -916,22 +1637,10 @@ public class ConfigurationParser {
                         }
                         case "save-position-after-selection" -> {
                             throw new IllegalArgumentException(
-                                    "hint.save-position-after-selection has been deprecated and removed: use position-history.save-position instead");
-                        }
-                        case "select" -> {
-                            mode.hintMesh.builder.selectCombos(
-                                    parseCombos(propertyValue, propertyKey,
-                                            defaultComboMoveDuration,
-                                            keyAliases, appAliases, keyResolver, allVariableNames));
-                        }
-                        case "undo" -> {
-                            mode.hintMesh.builder.unselectCombos(
-                                    parseCombos(propertyValue, propertyKey,
-                                            defaultComboMoveDuration,
-                                            keyAliases, appAliases, keyResolver, allVariableNames));
+                                    "hint.save-position-after-selection has been deprecated and removed: use save.position-history instead");
                         }
                         default -> throw new IllegalArgumentException(
-                                "Invalid hint property key");
+                                "Invalid overlay property key");
                     }
                 }
             }
@@ -949,7 +1658,8 @@ public class ConfigurationParser {
                     setCommand(mode.comboMap.to.builder, propertyValue,
                             new SwitchMode(newModeName), propertyKey,
                             defaultComboMoveDuration,
-                            keyAliases, appAliases, keyResolver, allVariableNames);
+                            keyAliases, appAliases, keyResolver,
+                            allVariableNames);
                 }
             }
             case "remapping" -> {
@@ -1013,101 +1723,6 @@ public class ConfigurationParser {
                             defaultComboMoveDuration, keyAliases, appAliases,
                             keyResolver, allVariableNames, null))
                         handler.modeBuilderSetter().accept(propertyValue);
-                }
-            }
-            case "indicator" -> {
-                if (keyMatcher.group(group3) == null)
-                    mode.indicator.parsePropertyReference(propertyKey, propertyValue,
-                            childPropertiesByParentProperty,
-                            nonRootPropertyKeys);
-                else if (keyMatcher.group(group4) == null)
-                    throw new IllegalArgumentException(
-                            "Invalid indicator property key");
-                else {
-                    if (mode.indicator.builder.enabled() == null)
-                        mode.indicator.builder.enabled(true);
-                    // group4 is the state name (idle, move, etc.) or "enabled".
-                    // group5 is the property name (color, size, etc.).
-                    String stateOrKey = keyMatcher.group(group4);
-                    if (stateOrKey.equals("enabled")) {
-                        ModePropertyHandler handler = ModePropertyHandler.of(
-                                new ModePropertyPath(List.of("indicator", "enabled")),
-                                Boolean::parseBoolean,
-                                v -> mode.indicator.builder.enabled(v));
-                        if (!tryParseComboProperty(propertyValue, modeName,
-                                handler.propertyPath(), handler.valueParser(),
-                                handler.modeBuilderSetter(),
-                                mode.indicator.mutateModeCommands,
-                                mode.indicator.setPropertyPaths,
-                                defaultComboMoveDuration, keyAliases, appAliases,
-                                keyResolver, allVariableNames, null))
-                            handler.modeBuilderSetter().accept(propertyValue);
-                    }
-                    else if (stateOrKey.equals("fade-animation-enabled")) {
-                        mode.indicator.builder.fadeAnimationEnabled(
-                                Boolean.parseBoolean(propertyValue));
-                    }
-                    else if (stateOrKey.equals("fade-animation-duration-millis")) {
-                        mode.indicator.builder.fadeAnimationDuration(
-                                Duration.ofMillis(Integer.parseInt(propertyValue)));
-                    }
-                    else {
-                        String subKey = keyMatcher.group(group5);
-                        if (subKey == null) {
-                            // Backward compatibility: idle-color (old) -> idle.color (new)
-                            for (String state : List.of(
-                                    "unhandled-key-press", "middle-mouse-press", "right-mouse-press",
-                                    "left-mouse-press", "mouse-press", "wheel", "idle", "move")) {
-                                if (stateOrKey.startsWith(state + "-")) {
-                                    subKey = stateOrKey.substring(state.length() + 1);
-                                    stateOrKey = state;
-                                    break;
-                                }
-                            }
-                            if (subKey == null)
-                                throw new IllegalArgumentException(
-                                        "Invalid indicator property key: " + stateOrKey);
-                            logger.warn(propertyKey + " is deprecated, use " +
-                                    propertyKey.replace("." + stateOrKey + "-" + subKey,
-                                            "." + stateOrKey + "." + subKey) +
-                                    " instead");
-                        }
-                        IndicatorBuilder targetIndicator = switch (stateOrKey) {
-                            case "idle" -> mode.indicator.builder.idleIndicator();
-                            case "move" -> mode.indicator.builder.moveIndicator();
-                            case "wheel" -> mode.indicator.builder.wheelIndicator();
-                            case "mouse-press" -> mode.indicator.builder.mousePressIndicator();
-                            case "left-mouse-press" -> mode.indicator.builder.leftMousePressIndicator();
-                            case "middle-mouse-press" -> mode.indicator.builder.middleMousePressIndicator();
-                            case "right-mouse-press" -> mode.indicator.builder.rightMousePressIndicator();
-                            case "unhandled-key-press" -> mode.indicator.builder.unhandledKeyPressIndicator();
-                            default -> throw new IllegalArgumentException(
-                                    "Invalid indicator state: " + stateOrKey);
-                        };
-                        if (subKey.startsWith("label-") &&
-                            targetIndicator.labelEnabled() == null)
-                            targetIndicator.labelEnabled(true);
-                        String indicatorFieldName = switch (stateOrKey) {
-                            case "idle" -> "idleIndicator";
-                            case "move" -> "moveIndicator";
-                            case "wheel" -> "wheelIndicator";
-                            case "mouse-press" -> "mousePressIndicator";
-                            case "left-mouse-press" -> "leftMousePressIndicator";
-                            case "middle-mouse-press" -> "middleMousePressIndicator";
-                            case "right-mouse-press" -> "rightMousePressIndicator";
-                            case "unhandled-key-press" -> "unhandledKeyPressIndicator";
-                            default -> throw new IllegalStateException();
-                        };
-                        ModePropertyPath indicatorPropertyPathPrefix =
-                                new ModePropertyPath(List.of("indicator", indicatorFieldName));
-                        parseIndicatorProperty(targetIndicator, subKey,
-                                propertyValue, fontAvailability,
-                                indicatorPropertyPathPrefix,
-                                mode.indicator.mutateModeCommands,
-                                mode.indicator.setPropertyPaths,
-                                modeName, defaultComboMoveDuration,
-                                keyAliases, appAliases, keyResolver, allVariableNames);
-                    }
                 }
             }
             case "hide-cursor" -> {
@@ -1198,6 +1813,46 @@ public class ConfigurationParser {
                         case "down" -> setCommand(mode.comboMap.stopMove.builder,  propertyValue, new StopMoveDown(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
                         case "left" -> setCommand(mode.comboMap.stopMove.builder,  propertyValue, new StopMoveLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
                         case "right" -> setCommand(mode.comboMap.stopMove.builder,  propertyValue, new StopMoveRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        // @formatter:on
+                    }
+                }
+            }
+            case "start-move-target" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.startMoveTarget.parsePropertyReference(propertyKey,
+                            propertyValue,
+                            childPropertiesByParentProperty,
+                            nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "Invalid start-move-target property key");
+                else {
+                    switch (keyMatcher.group(group4)) {
+                        // @formatter:off
+                        case "up" -> setCommand(mode.comboMap.startMoveTarget.builder,  propertyValue, new StartMoveTargetUp(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "down" -> setCommand(mode.comboMap.startMoveTarget.builder,  propertyValue, new StartMoveTargetDown(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "left" -> setCommand(mode.comboMap.startMoveTarget.builder,  propertyValue, new StartMoveTargetLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "right" -> setCommand(mode.comboMap.startMoveTarget.builder,  propertyValue, new StartMoveTargetRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        // @formatter:on
+                    }
+                }
+            }
+            case "stop-move-target" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.stopMoveTarget.parsePropertyReference(propertyKey,
+                            propertyValue,
+                            childPropertiesByParentProperty,
+                            nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "Invalid stop-move-target property key");
+                else {
+                    switch (keyMatcher.group(group4)) {
+                        // @formatter:off
+                        case "up" -> setCommand(mode.comboMap.stopMoveTarget.builder,  propertyValue, new StopMoveTargetUp(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "down" -> setCommand(mode.comboMap.stopMoveTarget.builder,  propertyValue, new StopMoveTargetDown(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "left" -> setCommand(mode.comboMap.stopMoveTarget.builder,  propertyValue, new StopMoveTargetLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "right" -> setCommand(mode.comboMap.stopMoveTarget.builder,  propertyValue, new StopMoveTargetRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
                         // @formatter:on
                     }
                 }
@@ -1298,49 +1953,55 @@ public class ConfigurationParser {
                     }
                 }
             }
-            case "snap" -> {
+            case "shrink-overlay", "shrink-grid" -> {
+                if (group2.equals("shrink-grid"))
+                    logger.warn(propertyKey + " has been deprecated: use shrink-overlay instead");
                 if (keyMatcher.group(group3) == null)
-                    mode.comboMap.snap.parsePropertyReference(propertyKey, propertyValue,
+                    mode.comboMap.shrinkOverlay.parsePropertyReference(
+                            propertyKey.replaceFirst("\\.shrink-grid$", ".shrink-overlay"),
+                            propertyValue.replaceFirst("\\.shrink-grid$", ".shrink-overlay"),
                             childPropertiesByParentProperty,
                             nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "Invalid snap property key");
+                            "Invalid shrink-overlay property key");
                 else {
                     switch (keyMatcher.group(group4)) {
                         // @formatter:off
-                        case "up" -> setCommand(mode.comboMap.snap.builder,  propertyValue, new SnapUp(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "down" -> setCommand(mode.comboMap.snap.builder,  propertyValue, new SnapDown(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "left" -> setCommand(mode.comboMap.snap.builder,  propertyValue, new SnapLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "right" -> setCommand(mode.comboMap.snap.builder,  propertyValue, new SnapRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "up" -> setCommand(mode.comboMap.shrinkOverlay.builder,  propertyValue, new ShrinkOverlayUp(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "down" -> setCommand(mode.comboMap.shrinkOverlay.builder,  propertyValue, new ShrinkOverlayDown(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "left" -> setCommand(mode.comboMap.shrinkOverlay.builder,  propertyValue, new ShrinkOverlayLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "right" -> setCommand(mode.comboMap.shrinkOverlay.builder,  propertyValue, new ShrinkOverlayRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
                         // @formatter:on
                     }
                 }
             }
-            case "shrink-grid" -> {
+            case "move-overlay-to" -> {
                 if (keyMatcher.group(group3) == null)
-                    mode.comboMap.shrinkGrid.parsePropertyReference(propertyKey,
+                    mode.comboMap.moveOverlayTo.parsePropertyReference(propertyKey,
                             propertyValue,
                             childPropertiesByParentProperty,
                             nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "Invalid shrink-grid property key");
+                            "Invalid move-overlay-to property key");
                 else {
                     switch (keyMatcher.group(group4)) {
                         // @formatter:off
-                        case "up" -> setCommand(mode.comboMap.shrinkGrid.builder,  propertyValue, new ShrinkGridUp(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "down" -> setCommand(mode.comboMap.shrinkGrid.builder,  propertyValue, new ShrinkGridDown(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "left" -> setCommand(mode.comboMap.shrinkGrid.builder,  propertyValue, new ShrinkGridLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "right" -> setCommand(mode.comboMap.shrinkGrid.builder,  propertyValue, new ShrinkGridRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "area-above" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaAbove(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "area-below" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaBelow(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "area-left" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "area-right" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
                         // @formatter:on
                     }
                 }
             }
             case "move-grid" -> {
+                logger.warn(propertyKey + " has been deprecated: use move-overlay-to.area-above, area-below, area-left or area-right instead");
                 if (keyMatcher.group(group3) == null)
-                    mode.comboMap.moveGrid.parsePropertyReference(propertyKey,
-                            propertyValue,
+                    mode.comboMap.moveOverlayTo.parsePropertyReference(
+                            propertyKey.replaceFirst("\\.move-grid$", ".move-overlay-to"),
+                            propertyValue.replaceFirst("\\.move-grid$", ".move-overlay-to"),
                             childPropertiesByParentProperty,
                             nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
@@ -1349,60 +2010,142 @@ public class ConfigurationParser {
                 else {
                     switch (keyMatcher.group(group4)) {
                         // @formatter:off
-                        case "up" -> setCommand(mode.comboMap.moveGrid.builder,  propertyValue, new MoveGridUp(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "down" -> setCommand(mode.comboMap.moveGrid.builder,  propertyValue, new MoveGridDown(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "left" -> setCommand(mode.comboMap.moveGrid.builder,  propertyValue, new MoveGridLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "right" -> setCommand(mode.comboMap.moveGrid.builder,  propertyValue, new MoveGridRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "up" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaAbove(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "down" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaBelow(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "left" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "right" -> setCommand(mode.comboMap.moveOverlayTo.builder,  propertyValue, new MoveOverlayToAreaRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
                         // @formatter:on
                     }
                 }
             }
-            case "position-history" -> {
-                if (keyMatcher.group(group3) == null) {
-                    mode.comboMap.savePosition.parsePropertyReference(propertyKey, propertyValue,
-                            childPropertiesByParentProperty, nonRootPropertyKeys);
-                    mode.comboMap.unsavePosition.parsePropertyReference(propertyKey, propertyValue,
-                            childPropertiesByParentProperty, nonRootPropertyKeys);
-                    mode.comboMap.clearPositionHistory.parsePropertyReference(propertyKey, propertyValue,
-                            childPropertiesByParentProperty, nonRootPropertyKeys);
-                    mode.comboMap.cycleNextPosition.parsePropertyReference(propertyKey, propertyValue,
-                            childPropertiesByParentProperty, nonRootPropertyKeys);
-                    mode.comboMap.cyclePreviousPosition.parsePropertyReference(propertyKey, propertyValue,
-                            childPropertiesByParentProperty, nonRootPropertyKeys);
-                }
+            case "move-target-to" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.moveTargetTo.parsePropertyReference(propertyKey,
+                            propertyValue,
+                            childPropertiesByParentProperty,
+                            nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "Invalid position-history property key");
+                            "Invalid move-target-to property key");
                 else {
                     switch (keyMatcher.group(group4)) {
                         // @formatter:off
-                        case "save-position" -> setCommand(mode.comboMap.savePosition.builder,  propertyValue, new SavePosition(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "unsave-position" -> setCommand(mode.comboMap.unsavePosition.builder,  propertyValue, new UnsavePosition(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "clear" -> setCommand(mode.comboMap.clearPositionHistory.builder,  propertyValue, new ClearPositionHistory(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "cycle-next" -> setCommand(mode.comboMap.cycleNextPosition.builder,  propertyValue, new CycleNextPosition(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
-                        case "cycle-previous" -> setCommand(mode.comboMap.cyclePreviousPosition.builder,  propertyValue, new CyclePreviousPosition(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "mouse" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToMouse(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "last-selected-hint" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToLastSelectedHint(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "overlay-center" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToOverlayCenter(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-center" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToCellCenter(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-top" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToCellTop(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-bottom" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToCellBottom(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-left" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToCellLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-right" -> setCommand(mode.comboMap.moveTargetTo.builder,  propertyValue, new MoveTargetToCellRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
                         // @formatter:on
-                        default -> throw new IllegalArgumentException(
-                                "Invalid position-history property key");
+                    }
+                }
+            }
+            case "move-to" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.moveTo.parsePropertyReference(propertyKey, propertyValue,
+                            childPropertiesByParentProperty,
+                            nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "Invalid move-to property key");
+                else {
+                    switch (keyMatcher.group(group4)) {
+                        // @formatter:off
+                        case "target" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToTarget(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "last-selected-hint" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToLastSelectedHint(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "overlay-center" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToOverlayCenter(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-center" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellCenter(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-top" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellTop(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-bottom" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellBottom(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-left" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "cell-right" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        // @formatter:on
                     }
                 }
             }
             // @formatter:off
             case "move-to-grid-center" -> {
-                mode.comboMap.moveToGridCenter.parseReferenceOr(propertyKey, propertyValue,
-                        commandsByCombo -> setCommand(mode.comboMap.moveToGridCenter.builder,  propertyValue, new MoveToGridCenter(), propertyKey, finalDefaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                logger.warn(propertyKey + " has been deprecated: use move-to.overlay-center instead");
+                mode.comboMap.moveTo.parseReferenceOr(
+                        propertyKey.replaceFirst("\\.move-to-grid-center$", ".move-to"),
+                        propertyValue.replaceFirst("\\.move-to-grid-center$", ".move-to"),
+                        commandsByCombo -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToOverlayCenter(), propertyKey, finalDefaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                         childPropertiesByParentProperty, nonRootPropertyKeys);
             }
             case "move-to-last-selected-hint" -> {
-                mode.comboMap.moveToLastSelectedHint.parseReferenceOr(propertyKey, propertyValue,
-                        commandsByCombo -> setCommand(mode.comboMap.moveToLastSelectedHint.builder,  propertyValue, new MoveToLastSelectedHint(), propertyKey, finalDefaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                logger.warn(propertyKey + " has been deprecated: use move-to.last-selected-hint instead");
+                mode.comboMap.moveTo.parseReferenceOr(
+                        propertyKey.replaceFirst("\\.move-to-last-selected-hint$", ".move-to"),
+                        propertyValue.replaceFirst("\\.move-to-last-selected-hint$", ".move-to"),
+                        commandsByCombo -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToLastSelectedHint(), propertyKey, finalDefaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                         childPropertiesByParentProperty, nonRootPropertyKeys);
             }
+            case "snap" -> {
+                logger.warn(propertyKey + " has been deprecated: use move-to.cell-top, cell-bottom, cell-left or cell-right instead");
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.moveTo.parsePropertyReference(
+                            propertyKey.replaceFirst("\\.snap$", ".move-to"),
+                            propertyValue.replaceFirst("\\.snap$", ".move-to"),
+                            childPropertiesByParentProperty,
+                            nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "Invalid snap property key");
+                else {
+                    switch (keyMatcher.group(group4)) {
+                        case "up" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellTop(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "down" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellBottom(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "left" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellLeft(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                        case "right" -> setCommand(mode.comboMap.moveTo.builder,  propertyValue, new MoveToCellRight(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames);
+                    }
+                }
+            }
+            case "save" -> mode.comboMap.savePosition.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.savePosition.builder, propertyValue, new SavePosition(checkedPositionHistoryName(group2, keyMatcher.group(group4))), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "unsave" -> mode.comboMap.unsavePosition.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.unsavePosition.builder, propertyValue, new UnsavePosition(checkedPositionHistoryName(group2, keyMatcher.group(group4))), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "toggle-save" -> mode.comboMap.toggleSavePosition.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.toggleSavePosition.builder, propertyValue, new ToggleSavePosition(checkedPositionHistoryName(group2, keyMatcher.group(group4))), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "clear" -> mode.comboMap.clearPositionHistory.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.clearPositionHistory.builder, propertyValue, new ClearPositionHistory(checkedPositionHistoryName(group2, keyMatcher.group(group4))), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "cycle-next" -> mode.comboMap.cycleNextPosition.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.cycleNextPosition.builder, propertyValue, new CycleNextPosition(checkedPositionHistoryName(group2, keyMatcher.group(group4))), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "cycle-previous" -> mode.comboMap.cyclePreviousPosition.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.cyclePreviousPosition.builder, propertyValue, new CyclePreviousPosition(checkedPositionHistoryName(group2, keyMatcher.group(group4))), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "start" -> mode.comboMap.startAnimation.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.startAnimation.builder, propertyValue, new StartAnimation(checkedAnimationName(group2, keyMatcher.group(group4), animationConfigurationByName)), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "stop" -> mode.comboMap.stopAnimation.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.stopAnimation.builder, propertyValue, new StopAnimation(checkedAnimationName(group2, keyMatcher.group(group4), animationConfigurationByName)), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "select" -> mode.comboMap.select.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.select.builder, propertyValue, new SelectHintKey(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "deselect" -> mode.comboMap.deselect.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.deselect.builder, propertyValue, new DeselectHintKey(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "deselect-all" -> mode.comboMap.deselectAll.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.deselectAll.builder, propertyValue, new DeselectAllHintKeys(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
             case "break-combo-preparation" -> mode.comboMap.breakComboPreparation.parseReferenceOr(propertyKey, propertyValue,
                     commandsByCombo -> setCommand(mode.comboMap.breakComboPreparation.builder,  propertyValue, new BreakComboPreparation(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                     childPropertiesByParentProperty, nonRootPropertyKeys);
             case "break-macro" -> mode.comboMap.breakMacro.parseReferenceOr(propertyKey, propertyValue,
                     commandsByCombo -> setCommand(mode.comboMap.breakMacro.builder, propertyValue, new BreakMacro(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "exit" -> mode.comboMap.exit.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.exit.builder, propertyValue, new Exit(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+                    childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "restart" -> mode.comboMap.restart.parseReferenceOr(propertyKey, propertyValue,
+                    commandsByCombo -> setCommand(mode.comboMap.restart.builder, propertyValue, new Restart(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                     childPropertiesByParentProperty, nonRootPropertyKeys);
             case "noop" -> {
                 if (keyMatcher.group(group3) == null)
@@ -1437,15 +2180,19 @@ public class ConfigurationParser {
                             "unset-variable requires a variable name: unset-variable.<name>");
                 else {
                     String variableName = keyMatcher.group(group4);
+                    if (BuiltInVirtualKey.STATIC_KEY_NAMES.contains(variableName))
+                        throw new IllegalArgumentException(
+                                "Variable name '" + variableName +
+                                "' is a built-in virtual key and cannot be unset");
                     setCommand(mode.comboMap.unsetVariable.builder, propertyValue,
                             new Command.UnsetVariable(variableName), propertyKey,
                             defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
                             allVariableNames);
                 }
             }
-            case "clear-variables" -> {
-                mode.comboMap.clearVariables.parseReferenceOr(propertyKey, propertyValue,
-                        commandsByCombo -> setCommand(mode.comboMap.clearVariables.builder, propertyValue, new Command.ClearVariables(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
+            case "reset-variables" -> {
+                mode.comboMap.resetVariables.parseReferenceOr(propertyKey, propertyValue,
+                        commandsByCombo -> setCommand(mode.comboMap.resetVariables.builder, propertyValue, new Command.ResetVariables(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                         childPropertiesByParentProperty, nonRootPropertyKeys);
             }
             case "double-tap-to-normal" -> {
@@ -1474,75 +2221,71 @@ public class ConfigurationParser {
                 }
             }
             // @formatter:on
-            default -> throw new IllegalArgumentException(
-                    "Invalid mode property key");
+            default -> {
+                if (isIndicatorName(group2)) {
+                    if (keyMatcher.group(group3) == null) {
+                        if (!group2.equals("indicator"))
+                            throw new IllegalArgumentException(
+                                    "An indicator reference copies every indicator layer: use indicator instead of " +
+                                    group2);
+                        mode.indicator.parsePropertyReference(propertyKey, propertyValue,
+                                childPropertiesByParentProperty,
+                                nonRootPropertyKeys);
+                        return;
+                    }
+                    if (keyMatcher.group(group4) == null)
+                        throw new IllegalArgumentException(
+                                "Invalid indicator property key");
+                    IndicatorLayerConfigurationBuilder layer =
+                            mode.indicator.builder.layer(group2);
+                    if (layer.enabled() == null)
+                        layer.enabled(true);
+                    if (keyMatcher.group(group5) != null)
+                        throw new IllegalArgumentException(
+                                "Invalid indicator property key: " +
+                                keyMatcher.group(group4));
+                    String key = keyMatcher.group(group4);
+                    parseIndicatorProperty(mode.indicator.builder, group2, key, propertyValue,
+                            mode.indicator.mutateModeCommands,
+                            mode.indicator.setPropertyPaths,
+                            modeName, defaultComboMoveDuration,
+                            keyAliases, appAliases, colorAliases, keyResolver,
+                            allVariableNames, positionHistoryNames);
+                    return;
+                }
+                throw new IllegalArgumentException("Invalid mode property key");
+            }
         }
     }
 
-    private static HintMouseMovement parseHintMouseMovement(String propertyKey, String propertyValue) {
-        return switch (propertyValue) {
-            case "no-movement" -> HintMouseMovement.NO_MOVEMENT;
-            case "mouse-follows-selected-hint" -> HintMouseMovement.MOUSE_FOLLOWS_SELECTED_HINT;
-            case "mouse-follows-hint-grid-center" -> HintMouseMovement.MOUSE_FOLLOWS_HINT_GRID_CENTER;
-            default -> throw new IllegalArgumentException(
-                    "Invalid property value in " + propertyKey + "=" + propertyValue +
-                    ": mouse-movement should be one of " +
-                    List.of("no-movement", "mouse-follows-selected-hint",
-                            "mouse-follows-hint-grid-center"));
-        };
-    }
-
-    private static ViewportFilter parseViewportFilter(String string) {
+    private static ScreenFilter parseScreenFilter(String string) {
         if (string == null)
-            return AnyViewportFilter.ANY_VIEWPORT_FILTER;
-        // 1920x1080
-        Matcher resolutionMatcher = Pattern.compile("(\\d+)x(\\d+)").matcher(string);
-        if (resolutionMatcher.matches()) {
-            return new FixedViewportFilter(new Viewport(
-                    Integer.parseUnsignedInt(resolutionMatcher.group(1)),
-                    Integer.parseUnsignedInt(resolutionMatcher.group(2)),
-                    -1f
-            ));
-        }
-        // 1920x1080-100%
-        Matcher resolutionScaleMatcher = Pattern.compile("(\\d+)x(\\d+)-(\\d+)%").matcher(string);
-        if (!resolutionScaleMatcher.matches()) {
-            throw new IllegalArgumentException("Invalid viewport filter " + string +
-                                               ": expected formats 1920x1080 or 1920x1080-100%");
-        }
-        return new FixedViewportFilter(new Viewport(
-                Integer.parseUnsignedInt(resolutionScaleMatcher.group(1)),
-                Integer.parseUnsignedInt(resolutionScaleMatcher.group(2)),
-                Integer.parseUnsignedInt(resolutionScaleMatcher.group(3)) / 100d
-        ));
+            return AnyScreenFilter.ANY_SCREEN_FILTER;
+        ScreenFilter screenFilter = ScreenFilter.of(string);
+        if (screenFilter == null)
+            throw new IllegalArgumentException("Invalid screen filter " + string +
+                                               ": expected formats 1920x1080, 100%, or 1920x1080-100%");
+        return screenFilter;
     }
 
     private static void parseModeReference(String propertyKey, String propertyValue,
-                                           Map<String, Set<String>> childModesByParentMode,
-                                           Set<String> nonRootModes) {
+                                           Map<String, List<String>> parentModesByChildMode) {
         String propertyKeyMode = propertyKey;
-        // x-mode=normal-mode
-        String propertyValueMode = propertyValue;
-        if (propertyValueMode.equals(propertyKeyMode))
-            throw new IllegalArgumentException(
-                    "Invalid mode reference " + propertyKey + "=" +
-                    propertyValue + ": a mode cannot reference itself");
-        if (!propertyValueMode.endsWith("-mode"))
-            throw new IllegalArgumentException(
-                    "Invalid parent mode name " + propertyValueMode +
-                    ": mode names should end with -mode");
-        childModesByParentMode.computeIfAbsent(propertyValueMode,
-                mode -> new HashSet<>()).add(propertyKeyMode);
-        nonRootModes.add(propertyKeyMode);
+        // x-mode=normal-mode y-mode
+        for (String propertyValueMode : propertyValue.split("\\s+")) {
+            if (propertyValueMode.equals(propertyKeyMode))
+                throw new IllegalArgumentException(
+                        "Invalid mode reference " + propertyKey + "=" +
+                        propertyValue + ": a mode cannot reference itself");
+            if (!propertyValueMode.endsWith("-mode"))
+                throw new IllegalArgumentException(
+                        "Invalid parent mode name " + propertyValueMode +
+                        ": mode names should end with -mode");
+            parentModesByChildMode.computeIfAbsent(propertyKeyMode,
+                    mode -> new ArrayList<>()).add(propertyValueMode);
+        }
     }
 
-    private static String parseFontName(String fontName, Predicate<String> fontAvailability) {
-        if (!fontAvailability.test(fontName)) {
-            logger.info("Font " + fontName + " not found, falling back to Consolas");
-            return "Consolas";
-        }
-        return fontName;
-    }
 
     private record ResolvedAliasWithRefs(KeyAlias alias, List<String> referencedAliasNames) {
     }
@@ -1640,7 +2383,7 @@ public class ConfigurationParser {
             }
             else {
                 Key key = Key.ofName(token);
-                if (!tokenLayout.equals(activeKeyboardLayout)) {
+                if (!tokenLayout.equals(activeKeyboardLayout) && tokenLayout.containsKey(key)) {
                     int scanCode = tokenLayout.scanCode(key);
                     Key activeKey = activeKeyboardLayout.keyFromScanCode(scanCode);
                     if (activeKey == null)
@@ -1661,9 +2404,9 @@ public class ConfigurationParser {
      * First pass: scan all property lines for set-variable.X= patterns
      * and collect variable names. Also checks for collisions with key names and aliases.
      */
-    private static Set<String> parseVariableNames(List<String> properties,
-                                                  Map<String, KeyAlias> keyAliases,
-                                                  KeyResolver keyResolver) {
+    static Set<String> parseVariableNames(List<String> properties,
+                                          Map<String, KeyAlias> keyAliases,
+                                          KeyResolver keyResolver) {
         Set<String> variableNames = new HashSet<>();
         for (String line : properties) {
             Matcher lineMatcher = propertyLinePattern.matcher(line);
@@ -1673,25 +2416,245 @@ public class ConfigurationParser {
             // Match: <mode-name>.set-variable.<variable-name>=...
             Pattern setVarPattern = Pattern.compile("[^.]+-mode\\.set-variable\\.([^.]+)");
             Matcher setVarMatcher = setVarPattern.matcher(propertyKey);
-            if (setVarMatcher.matches()) {
-                String variableName = setVarMatcher.group(1);
-                if (keyAliases.containsKey(variableName))
-                    throw new IllegalArgumentException(
-                            "Variable name '" + variableName +
-                            "' collides with a key alias name");
-                if (Key.tryOfName(variableName) != null)
-                    throw new IllegalArgumentException(
-                            "Variable name '" + variableName +
-                            "' collides with a key name");
-                variableNames.add(variableName);
-            }
+            if (setVarMatcher.matches())
+                variableNames.add(checkedVariableName(setVarMatcher.group(1), keyAliases));
+            // variable.<name>=true|false declares one too, so a variable no combo ever sets is still
+            // a variable a precondition can test.
+            else if (propertyKey.startsWith("variable."))
+                variableNames.add(checkedVariableName(
+                        propertyKey.substring("variable.".length()), keyAliases));
         }
         return variableNames;
+    }
+
+    private static final List<String> POSITION_HISTORY_COMMAND_NAMES = List.of(
+            "save", "unsave", "toggle-save", "clear", "cycle-next", "cycle-previous");
+
+    /**
+     * First pass: a position history exists as soon as a mode defines a command for it.
+     */
+    static Set<String> parsePositionHistoryNames(List<String> properties) {
+        Pattern commandPattern = Pattern.compile("[^.]+-mode\\.(?:" +
+                String.join("|", POSITION_HISTORY_COMMAND_NAMES) + ")\\.([^.]+)");
+        Set<String> positionHistoryNames = new HashSet<>();
+        for (String line : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(line);
+            if (!lineMatcher.matches())
+                continue;
+            Matcher commandMatcher =
+                    commandPattern.matcher(lineMatcher.group(1).strip());
+            if (commandMatcher.matches() &&
+                isPositionHistoryName(commandMatcher.group(1)))
+                positionHistoryNames.add(commandMatcher.group(1));
+        }
+        return positionHistoryNames;
+    }
+
+    private static Map<String, AnimationConfiguration> parseAnimationConfigurations(
+            List<String> properties) {
+        Map<String, AnimationConfiguration> animationConfigurationByName = new HashMap<>();
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            if (!lineMatcher.matches())
+                continue;
+            String propertyKey = lineMatcher.group(1).strip();
+            int dotIndex = propertyKey.indexOf('.');
+            if (dotIndex == -1 || !isAnimationName(propertyKey.substring(0, dotIndex)))
+                continue;
+            String animationName = animationKeyName(propertyKey.substring(0, dotIndex));
+            String propertyValue = lineMatcher.group(2).strip();
+            AnimationConfiguration animation = animationConfigurationByName.getOrDefault(
+                    animationName,
+                    new AnimationConfiguration(null, 1, AnimationDirection.FORWARD, false));
+            animationConfigurationByName.put(animationName,
+                    switch (propertyKey.substring(dotIndex + 1)) {
+                        case "duration-millis" -> new AnimationConfiguration(
+                                parseDuration(propertyValue), animation.repeatCount(),
+                                animation.direction(), animation.overlap());
+                        case "repeat" -> new AnimationConfiguration(animation.duration(),
+                                propertyValue.equals("loop") ? null :
+                                        parseUnsignedInteger(propertyValue, 1, 10000),
+                                animation.direction(), animation.overlap());
+                        case "direction" -> new AnimationConfiguration(animation.duration(),
+                                animation.repeatCount(),
+                                parseAnimationDirection(propertyKey, propertyValue),
+                                animation.overlap());
+                        case "overlap" -> new AnimationConfiguration(animation.duration(),
+                                animation.repeatCount(), animation.direction(),
+                                Boolean.parseBoolean(propertyValue));
+                        default -> throw new IllegalArgumentException(
+                                "Invalid animation property key " + propertyKey);
+                    });
+        }
+        for (Map.Entry<String, AnimationConfiguration> entry :
+                animationConfigurationByName.entrySet()) {
+            if (entry.getValue().duration() == null)
+                throw new IllegalArgumentException(
+                        "Undefined animation " + entry.getKey() + ": missing duration-millis");
+            if (entry.getValue().overlap() && entry.getValue().repeatCount() == null)
+                throw new IllegalArgumentException(
+                        "Invalid animation " + entry.getKey() + ": a loop cannot overlap");
+        }
+        return animationConfigurationByName;
+    }
+
+    private static String animationKeyName(String animationName) {
+        return animationName.replace("-", "");
+    }
+
+    private static AnimationDirection parseAnimationDirection(String propertyKey,
+                                                              String propertyValue) {
+        return switch (propertyValue) {
+            case "forward" -> AnimationDirection.FORWARD;
+            case "alternate" -> AnimationDirection.ALTERNATE;
+            default -> throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": expected one of " + List.of("forward", "alternate"));
+        };
+    }
+
+    private static final Pattern keyframePattern =
+            Pattern.compile("(\\d+(\\.\\d+)?%|\\d+ms)\\s+\\S+(\\s+\\S+)?");
+
+    private static boolean isTimeline(String value) {
+        return Arrays.stream(value.split(";"))
+                     .allMatch(keyframe -> keyframePattern.matcher(keyframe.strip()).matches());
+    }
+
+    private static Timeline parseTimeline(String value, Combo combo,
+                                          Function<String, Object> valueParser,
+                                          KeyResolver keyResolver) {
+        ComboPrecondition.PressedKeyPrecondition pressedKeyPrecondition =
+                combo.precondition().keyPrecondition().pressedKeyPrecondition();
+        List<String> animationNames = pressedKeyPrecondition.allKeys()
+                                                            .stream()
+                                                            .map(Key::name)
+                                                            .filter(keyResolver::isAnimation)
+                                                            .toList();
+        if (animationNames.size() != 1 ||
+            !pressedKeyPrecondition.groups().stream().allMatch(group -> group.keySets().contains(
+                    Set.of(keyResolver.resolve(animationNames.getFirst())))))
+            throw new IllegalArgumentException(
+                    "Invalid keyframes " + value +
+                    ": the branch should name exactly one animation, like _{clickburstanimation}," +
+                    " and each of its | groups should need it");
+        List<Timeline.Keyframe> keyframes = new ArrayList<>();
+        for (String keyframeString : value.split("\\s*;\\s*")) {
+            String[] tokens = keyframeString.split("\\s+");
+            Timeline.Position position = tokens[0].endsWith("ms") ?
+                    new Timeline.Position.DurationPosition(
+                            parseDuration(tokens[0].replace("ms", ""))) :
+                    new Timeline.Position.PercentPosition(
+                            parseDouble(tokens[0].replace("%", ""), true, 0, 100) / 100);
+            if (!keyframes.isEmpty() && isBefore(position, keyframes.getLast().position()))
+                throw new IllegalArgumentException(
+                        "Invalid keyframes " + value + ": " + tokens[0] +
+                        " comes before the keyframe it follows");
+            keyframes.add(new Timeline.Keyframe(position,
+                    tokens[1].equals("current") ? new Timeline.Current() :
+                            valueParser.apply(tokens[1]),
+                    tokens.length == 3 ? parseEasing(tokens[2]) :
+                            new Easing.Polynomial(1)));
+        }
+        return new Timeline(animationNames.getFirst(), keyframes);
+    }
+
+    private static boolean isBefore(Timeline.Position position,
+                                    Timeline.Position previousPosition) {
+        return switch (position) {
+            case Timeline.Position.PercentPosition(double percent) ->
+                    previousPosition instanceof
+                            Timeline.Position.PercentPosition(double previousPercent) &&
+                    percent < previousPercent;
+            case Timeline.Position.DurationPosition(Duration duration) ->
+                    previousPosition instanceof
+                            Timeline.Position.DurationPosition(Duration previousDuration) &&
+                    duration.compareTo(previousDuration) < 0;
+        };
+    }
+
+    /** Replaces each {alias} with the names of the alias's keys, except the unresolved
+     *  placeholders, which are replaced by the keys the combo matches. */
+    private static String parseText(String text, Map<String, KeyAlias> keyAliases,
+                                    Set<String> unresolvedPlaceholders) {
+        Matcher placeholders = UnresolvedAliasComboPropertyValue.placeholderPattern.matcher(text);
+        return placeholders.replaceAll(match -> {
+            if (unresolvedPlaceholders.contains(match.group()))
+                return match.group();
+            if (!match.group(1).isEmpty())
+                throw new IllegalArgumentException("Invalid text " + text + ": " +
+                                                   match.group(2) + " is not negated by the combo");
+            KeyAlias keyAlias = keyAliases.get(match.group(2));
+            if (keyAlias == null)
+                throw new IllegalArgumentException(
+                        "Invalid text " + text + ": " + match.group(2) + " is not a key alias");
+            return Matcher.quoteReplacement(
+                    keyAlias.keys().stream().map(Key::name).collect(Collectors.joining(" ")));
+        });
+    }
+
+    private static boolean isIndicatorName(String name) {
+        return name.equals("indicator") || name.endsWith("-indicator");
+    }
+
+    private static boolean isAnimationName(String name) {
+        return name.endsWith("-animation");
+    }
+
+    private static String checkedPositionHistoryName(String propertyName,
+                                                     String positionHistoryName) {
+        if (positionHistoryName == null || !isPositionHistoryName(positionHistoryName))
+            throw new IllegalArgumentException("Invalid " + propertyName + " property key");
+        return positionHistoryName;
+    }
+
+    private static String checkedAnimationName(String propertyName, String animationName,
+                                               Map<String, AnimationConfiguration> animationConfigurationByName) {
+        if (animationName == null || !isAnimationName(animationName))
+            throw new IllegalArgumentException("Invalid " + propertyName + " property key");
+        if (!animationConfigurationByName.containsKey(animationKeyName(animationName)))
+            throw new IllegalArgumentException(
+                    "Undefined animation " + animationName + ": missing " + animationName +
+                    ".duration-millis");
+        return animationKeyName(animationName);
+    }
+
+    private static boolean isPositionHistoryName(String name) {
+        return name.equals("position-history") ||
+               name.endsWith("-position-history");
+    }
+
+    /**
+     * Matches a root position history property, e.g. browser-position-history.max-size.
+     */
+    private static boolean isPositionHistoryProperty(String propertyKey) {
+        int dotIndex = propertyKey.indexOf('.');
+        return dotIndex != -1 && propertyKey.indexOf('.', dotIndex + 1) == -1 &&
+               isPositionHistoryName(propertyKey.substring(0, dotIndex));
+    }
+
+    private static String checkedVariableName(String variableName,
+                                              Map<String, KeyAlias> keyAliases) {
+        if (BuiltInVirtualKey.STATIC_KEY_NAMES.contains(variableName))
+            throw new IllegalArgumentException(
+                    "Variable name '" + variableName +
+                    "' is a built-in virtual key and cannot be set");
+        if (keyAliases.containsKey(variableName))
+            throw new IllegalArgumentException(
+                    "Variable name '" + variableName +
+                    "' collides with a key alias name");
+        if (Key.tryOfName(variableName) != null)
+            throw new IllegalArgumentException(
+                    "Variable name '" + variableName +
+                    "' collides with a key name");
+        return variableName;
     }
 
     private static Aliases parseAliases(List<String> properties) {
         Map<String, LayoutKeyAlias> layoutKeyAliasByName = new HashMap<>();
         Map<String, AppAlias> appAliasByName = new HashMap<>();
+        Map<String, List<String>> screenFilterAliasTokensByName = new HashMap<>();
+        Map<String, GradientColor> colorAliasByName = new HashMap<>();
         Set<String> visitedPropertyKeys = new HashSet<>();
         for (String line : properties) {
             checkPropertyLineCorrectness(line, visitedPropertyKeys);
@@ -1701,7 +2664,8 @@ public class ConfigurationParser {
             String propertyKey = lineMatcher.group(1).strip();
             String propertyValue = lineMatcher.group(2).strip();
             try {
-                parseAlias(propertyKey, propertyValue, appAliasByName, layoutKeyAliasByName);
+                parseAlias(propertyKey, propertyValue, appAliasByName, layoutKeyAliasByName,
+                        screenFilterAliasTokensByName, colorAliasByName);
             } catch (IllegalArgumentException e) {
                 IllegalArgumentException e2 =
                         new IllegalArgumentException("[" + propertyKey + "] " + e.getMessage());
@@ -1709,17 +2673,59 @@ public class ConfigurationParser {
                 throw e2;
             }
         }
-        return new Aliases(layoutKeyAliasByName, appAliasByName);
+        Map<String, Set<ScreenFilter>> screenFilterAliasByName = new HashMap<>();
+        for (String aliasName : screenFilterAliasTokensByName.keySet())
+            resolveScreenFilterAlias(aliasName, screenFilterAliasTokensByName,
+                    screenFilterAliasByName);
+        return new Aliases(layoutKeyAliasByName, appAliasByName,
+                screenFilterAliasByName, colorAliasByName);
+    }
+
+    /** A screen alias can name another one, like a key alias can. */
+    private static Set<ScreenFilter> resolveScreenFilterAlias(String aliasName,
+                                                              Map<String, List<String>> tokensByName,
+                                                              Map<String, Set<ScreenFilter>> resolvedByName) {
+        Set<ScreenFilter> resolved = resolvedByName.get(aliasName);
+        if (resolved != null)
+            return resolved;
+        // Put it in before filling it, so an alias naming itself stops here.
+        resolved = new LinkedHashSet<>();
+        resolvedByName.put(aliasName, resolved);
+        for (String token : tokensByName.get(aliasName)) {
+            if (tokensByName.containsKey(token))
+                resolved.addAll(resolveScreenFilterAlias(token, tokensByName,
+                        resolvedByName));
+            else
+                resolved.add(parseScreenFilter(token));
+        }
+        return resolved;
     }
 
     private static void parseAlias(String propertyKey, String propertyValue,
                                    Map<String, AppAlias> appAliasByName,
-                                   Map<String, LayoutKeyAlias> layoutKeyAliasByName) {
-        if (propertyKey.startsWith("app-alias.")) {
+                                   Map<String, LayoutKeyAlias> layoutKeyAliasByName,
+                                   Map<String, List<String>> screenFilterAliasTokensByName,
+                                   Map<String, GradientColor> colorAliasByName) {
+        if (propertyKey.startsWith("color-alias.")) {
+            colorAliasByName.put(propertyKey.substring("color-alias.".length()),
+                    GradientColor.parse(propertyValue));
+        }
+        else if (propertyKey.startsWith("screen-alias.")) {
+            // screen-alias.dense=3840x2160-100% 2560x1440-100%
+            screenFilterAliasTokensByName.put(
+                    propertyKey.substring("screen-alias.".length()),
+                    List.of(propertyValue.split("\\s+")));
+        }
+        else if (propertyKey.startsWith("app-alias.")) {
             String aliasName = propertyKey.substring("app-alias.".length());
-            Set<App> apps = Arrays.stream(propertyValue.split("\\s+"))
-                                  .map(App::new)
-                                  .collect(Collectors.toSet());
+            // Quoted so that an executable name containing a space, which macOS is full of,
+            // can be given.
+            Set<App> apps = appAliasPattern.matcher(propertyValue)
+                                           .results()
+                                           .map(result -> result.group(1) != null ?
+                                                   result.group(1) : result.group(2))
+                                           .map(App::new)
+                                           .collect(Collectors.toSet());
             appAliasByName.put(aliasName, new AppAlias(aliasName, apps));
         }
         else if (propertyKey.startsWith("key-alias.")) {
@@ -1746,11 +2752,9 @@ public class ConfigurationParser {
     }
 
     private static KeyboardLayout parseKeyboardLayout(String layoutName) {
-        KeyboardLayout layout =
-                KeyboardLayout.keyboardLayoutByShortName.get(layoutName);
+        KeyboardLayout layout = KeyboardLayout.keyboardLayoutByShortName.get(layoutName);
         if (layout == null) {
-            String layoutIdentifier = layoutName;
-            layout = KeyboardLayout.keyboardLayoutByIdentifier.get(layoutIdentifier);
+            layout = KeyboardLayout.keyboardLayout(layoutName, null);
             if (layout == null)
                 throw new IllegalArgumentException(
                         "Invalid keyboard layout: " + layoutName +
@@ -1778,6 +2782,9 @@ public class ConfigurationParser {
                     "Property " + propertyKey + " is defined twice");
     }
 
+    private static final ModePropertyPath HINT_SELECTION_KEYS_PATH =
+            new ModePropertyPath(List.of("hintMesh", "keysByFilter", "selectionKeys"));
+
     private static void checkMissingProperties(ModeBuilder mode) {
         if (mode.timeout.builder.enabled() != null && mode.timeout.builder.enabled() &&
             (mode.timeout.builder.duration() == null ||
@@ -1792,19 +2799,13 @@ public class ConfigurationParser {
             throw new IllegalArgumentException(
                     "Definition of hide-cursor for " + mode.modeName +
                     " is incomplete: expected " + List.of("enabled", "duration"));
-        GridArea.GridAreaBuilder gridArea = mode.grid.builder.area();
-        if (gridArea.widthPercent() == null || gridArea.heightPercent() == null)
-            throw new IllegalArgumentException(
-                    "Definition of grid for " + mode.modeName +
-                    " is incomplete: expected " +
-                    List.of("row-count", "column-count"));
         HintMeshType.HintMeshTypeBuilder hintMeshType =
                 mode.hintMesh.builder.type();
         if (hintMeshType.type() != null) {
             switch (hintMeshType.type()) {
                 case GRID -> {
                     HintGridLayoutBuilder defaultLayout =
-                            hintMeshType.gridLayout(AnyViewportFilter.ANY_VIEWPORT_FILTER);
+                            hintMeshType.gridLayout(AnyScreenFilter.ANY_SCREEN_FILTER);
                     if (defaultLayout.maxRowCount() == null ||
                         defaultLayout.maxColumnCount() == null ||
                         defaultLayout.cellWidth() == null ||
@@ -1814,7 +2815,7 @@ public class ConfigurationParser {
                         defaultLayout.layoutRowOriented() == null
                     )
                         throw new IllegalArgumentException(
-                                "Definition of hint for " + mode.modeName +
+                                "Definition of overlay for " + mode.modeName +
                                 " is incomplete: expected " +
                                 List.of("grid-max-row-count", "grid-max-column-count",
                                         "grid-cell-width", "grid-cell-height",
@@ -1824,25 +2825,7 @@ public class ConfigurationParser {
                 case POSITION_HISTORY -> {
                     // No op.
                 }
-                case UI -> {
-                    // No op.
-                }
-            }
-        }
-        HintGridArea.HintGridAreaBuilder hintGridArea = hintMeshType.gridArea();
-        if (hintGridArea.type() != null) {
-            switch (hintGridArea.type()) {
-                case ACTIVE_SCREEN -> {
-                    if (hintGridArea.activeScreenHintGridAreaCenter() == null)
-                        throw new IllegalArgumentException(
-                                "Definition of active-screen hint.grid-area for " +
-                                mode.modeName + " is incomplete: expected " +
-                                List.of("active-screen-grid-area-center"));
-                }
-                case ACTIVE_WINDOW -> {
-                    // No op.
-                }
-                case ALL_SCREENS -> {
+                case UI_ACCESSIBILITY -> {
                     // No op.
                 }
             }
@@ -1850,65 +2833,121 @@ public class ConfigurationParser {
     }
 
     /**
-     * Hint font style cascade rules, matching the cascade in cascadeAllFontStyles:
-     * defaultFontStyle -> focused/selected, fontStyle -> prefixFontStyle.
-     * Order matters: fontStyle.defaultFontStyle -> prefixFontStyle.defaultFontStyle
-     * must run before the prefixFontStyle.defaultFontStyle -> focused/selected rules,
-     * so that transitive cascades work.
+     * The sources of each hint font style, in the order of cascadeAllFontStyles.
      */
     private static final List<CascadeRule> HINT_FONT_STYLE_CASCADE_RULES = List.of(
-            new CascadeRule(List.of("fontStyle", "defaultFontStyle"), List.of("fontStyle", "focusedFontStyle")),
-            new CascadeRule(List.of("fontStyle", "defaultFontStyle"), List.of("fontStyle", "selectedFontStyle")),
-            new CascadeRule(List.of("fontStyle", "defaultFontStyle"), List.of("prefixFontStyle", "defaultFontStyle")),
-            new CascadeRule(List.of("prefixFontStyle", "defaultFontStyle"), List.of("prefixFontStyle", "focusedFontStyle")),
-            new CascadeRule(List.of("prefixFontStyle", "defaultFontStyle"), List.of("prefixFontStyle", "selectedFontStyle"))
+            new CascadeRule(List.of("fontStyle", "focusedFontStyle"),
+                    List.of(List.of("fontStyle", "defaultFontStyle"))),
+            new CascadeRule(List.of("fontStyle", "selectedFontStyle"),
+                    List.of(List.of("fontStyle", "defaultFontStyle"))),
+            new CascadeRule(List.of("fontStyle", "savedFontStyle"),
+                    List.of(List.of("fontStyle", "defaultFontStyle"))),
+            new CascadeRule(List.of("prefixFontStyle", "defaultFontStyle"),
+                    List.of(List.of("fontStyle", "defaultFontStyle"))),
+            new CascadeRule(List.of("prefixFontStyle", "focusedFontStyle"),
+                    List.of(List.of("prefixFontStyle", "defaultFontStyle"),
+                            List.of("fontStyle", "focusedFontStyle"),
+                            List.of("fontStyle", "defaultFontStyle"))),
+            new CascadeRule(List.of("prefixFontStyle", "selectedFontStyle"),
+                    List.of(List.of("prefixFontStyle", "defaultFontStyle"),
+                            List.of("fontStyle", "selectedFontStyle"),
+                            List.of("fontStyle", "defaultFontStyle"))),
+            new CascadeRule(List.of("prefixFontStyle", "savedFontStyle"),
+                    List.of(List.of("prefixFontStyle", "defaultFontStyle"),
+                            List.of("fontStyle", "savedFontStyle"),
+                            List.of("fontStyle", "defaultFontStyle")))
     );
 
     /**
-     * Cascades MutateMode commands along inheritance paths within a property.
+     * Gives each MutateMode a twin on the fields that take their value from the field it
+     * mutates, so that mutating font-color also mutates focused-font-color.
+     * A field takes its value from the first of these that the configuration sets: the field
+     * itself, then its sources in the order of its rule. The mode is searched first, then the
+     * mode it extends, and so on. For example, prefix-focused-font-color takes its value from
+     * prefix-font-color, else focused-font-color, else font-color.
+     * A MutateMode inherited from an extended mode is dropped when the field it mutates takes
+     * its value from another field: focused-font-color in a mode that sets font-color.
      */
-    private static void cascadeMutations(Property<?> property, List<CascadeRule> rules) {
-        for (CascadeRule rule : rules) {
-            Map<Combo, List<Command>> newEntries = new HashMap<>();
-            for (Map.Entry<Combo, List<Command>> entry :
-                    property.mutateModeCommands.entrySet()) {
-                for (Command command : entry.getValue()) {
-                    if (!(command instanceof Command.MutateMode mutateMode))
-                        continue;
-                    // Example: path = [indicator, idleIndicator, hexColor],
-                    // rule = idleIndicator -> mousePressIndicator:
-                    // 1. sourceIndex = 1 (where [idleIndicator] appears in the path)
-                    // 2. Take everything before: [indicator]
-                    // 3. Add the target: [indicator, mousePressIndicator]
-                    // 4. Add everything after: [indicator, mousePressIndicator, hexColor]
-                    List<String> fields = mutateMode.propertyPath().fieldNames();
-                    int sourceIndex = Collections.indexOfSubList(fields, rule.sourceFieldNames());
-                    if (sourceIndex < 0)
-                        continue;
-                    List<String> targetFields = new ArrayList<>(
-                            fields.subList(0, sourceIndex));
-                    targetFields.addAll(rule.targetFieldNames());
-                    targetFields.addAll(fields.subList(
-                            sourceIndex + rule.sourceFieldNames().size(),
-                            fields.size()));
-                    ModePropertyPath targetPath =
-                            new ModePropertyPath(List.copyOf(targetFields));
-                    if (property.setPropertyPaths.contains(targetPath))
-                        continue;
-                    Command cascadedCommand = new Command.MutateMode(
-                            mutateMode.modeName(), targetPath,
-                            mutateMode.newPropertyValue(), mutateMode.combo());
-                    newEntries.computeIfAbsent(entry.getKey(),
-                                    c -> new ArrayList<>())
-                            .add(cascadedCommand);
+    private static void cascadeMutations(List<Property<?>> properties, List<CascadeRule> rules) {
+        Property<?> property = properties.getFirst();
+        Map<Combo, List<Command>> newEntries = new HashMap<>();
+        for (Map.Entry<Combo, List<Command>> entry : property.mutateModeCommands.entrySet()) {
+            List<Command> commands = new ArrayList<>();
+            for (Command command : entry.getValue()) {
+                if (!(command instanceof Command.MutateMode mutateMode)) {
+                    commands.add(command);
+                    continue;
                 }
+                List<String> fields = mutateMode.propertyPath().fieldNames();
+                boolean reached = true;
+                for (CascadeRule rule : rules) {
+                    List<List<String>> ruleFieldNames = new ArrayList<>();
+                    ruleFieldNames.add(rule.targetFieldNames());
+                    ruleFieldNames.addAll(rule.sourceFieldNames());
+                    for (int fieldNamesIndex = 0; fieldNamesIndex < ruleFieldNames.size(); fieldNamesIndex++) {
+                        List<String> fieldNames = ruleFieldNames.get(fieldNamesIndex);
+                        int index = Collections.indexOfSubList(fields, fieldNames);
+                        if (index < 0)
+                            continue;
+                        List<ModePropertyPath> paths = ruleFieldNames.stream()
+                                .map(otherFieldNames -> replaceFieldNames(
+                                        mutateMode.propertyPath(), index, fieldNames.size(),
+                                        otherFieldNames))
+                                .toList();
+                        int setIndex = firstSetPathIndex(properties, paths);
+                        if (fieldNamesIndex == 0)
+                            reached &= setIndex == -1 || setIndex == 0;
+                        else if (setIndex == fieldNamesIndex)
+                            newEntries.computeIfAbsent(entry.getKey(), c -> new ArrayList<>())
+                                      .add(new Command.MutateMode(mutateMode.modeName(),
+                                              paths.getFirst(), mutateMode.newPropertyValue(),
+                                              mutateMode.combo()));
+                    }
+                }
+                if (reached)
+                    commands.add(command);
             }
-            for (Map.Entry<Combo, List<Command>> entry : newEntries.entrySet()) {
-                property.mutateModeCommands
-                        .computeIfAbsent(entry.getKey(), c -> new ArrayList<>())
-                        .addAll(entry.getValue());
-            }
+            entry.setValue(commands);
         }
+        for (Map.Entry<Combo, List<Command>> entry : newEntries.entrySet())
+            property.mutateModeCommands.computeIfAbsent(entry.getKey(), c -> new ArrayList<>())
+                                       .addAll(entry.getValue());
+    }
+
+    private static ModePropertyPath replaceFieldNames(ModePropertyPath path, int index,
+                                                      int count, List<String> fieldNames) {
+        List<String> newFieldNames = new ArrayList<>(path.fieldNames().subList(0, index));
+        newFieldNames.addAll(fieldNames);
+        newFieldNames.addAll(path.fieldNames().subList(index + count, path.fieldNames().size()));
+        return new ModePropertyPath(List.copyOf(newFieldNames), path.screenFilter());
+    }
+
+    /**
+     * The index of the first of the paths the properties set, nearest property first, or -1.
+     */
+    private static int firstSetPathIndex(List<Property<?>> properties,
+                                         List<ModePropertyPath> paths) {
+        for (Property<?> property : properties)
+            for (int pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
+                ModePropertyPath path = paths.get(pathIndex);
+                if (property.setPropertyPaths.stream().anyMatch(path::equalsIgnoringScreenFilter))
+                    return pathIndex;
+            }
+        return -1;
+    }
+
+    /**
+     * The property, then the ones it extends, nearest first.
+     */
+    private static List<Property<?>> propertyAndParents(Property<?> property,
+                                                        Map<PropertyKey, Property<?>> propertyByKey,
+                                                        Map<PropertyKey, List<PropertyKey>> parentPropertiesByChildProperty) {
+        List<Property<?>> properties = new ArrayList<>(List.of(property));
+        for (PropertyKey parentPropertyKey :
+                parentPropertiesByChildProperty.getOrDefault(property.propertyKey, List.of()))
+            properties.addAll(propertyAndParents(propertyByKey.get(parentPropertyKey),
+                    propertyByKey, parentPropertiesByChildProperty));
+        return properties;
     }
 
     private static String checkModeReference(String modeNameReference) {
@@ -1964,11 +3003,9 @@ public class ConfigurationParser {
     }
 
     /**
-     * When the double-tap-to-normal key alias includes capslock, adds idle-mode transitions
-     * that mirror {@code normal-mode}'s grid-hint and UI-hint entry combos except an extra
-     * {@code capslock} must be held (e.g. capslock+f enters hint1-mode from idle without
-     * entering normal mode first). Targets are mode names {@code hint1-mode} and
-     * {@code ui-hint-mode} as in the stock layout.
+     * When the double-tap key alias includes capslock, copies normal-mode transitions into
+     * hint1-mode and ui-hint-mode onto idle-mode with capslock held, so those hints can be
+     * opened without entering normal mode first.
      */
     private static void applyIdleCapslockHoldHintShortcuts(
             Map<String, ModeBuilder> modeByName,
@@ -2037,10 +3074,7 @@ public class ConfigurationParser {
                 base.sequence());
     }
 
-    private static void recursivelyExtendProperty(Property<?> parentProperty, PropertyNode propertyNode,
-                                                  Map<PropertyKey, Property<?>> propertyByKey,
-                                                  Map<String, Set<String>> referencedModesByReferencerMode) {
-        Property<?> property = propertyByKey.get(propertyNode.propertyKey);
+    private static void extendProperty(Property<?> parentProperty, Property<?> property) {
         // I believe there are some valid use cases for inheritance chains:
         // hint2-2-then-click-mode.hint -> hint2-2-mode.hint -> hint1.mode.hint
 /*
@@ -2072,7 +3106,7 @@ public class ConfigurationParser {
                 for (Command command : entry.getValue()) {
                     if (command instanceof Command.MutateMode mutateMode &&
                         childPropertyPaths.stream().anyMatch(
-                                p -> p.equalsIgnoringViewportFilter(
+                                p -> p.equalsIgnoringScreenFilter(
                                         mutateMode.propertyPath())))
                         continue;
                     Command adjusted = command;
@@ -2088,39 +3122,6 @@ public class ConfigurationParser {
                 }
             }
         }
-        for (PropertyNode childPropertyNode : propertyNode.childProperties)
-            recursivelyExtendProperty(property, childPropertyNode, propertyByKey,
-                    referencedModesByReferencerMode);
-    }
-
-    private static PropertyNode recursivelyBuildPropertyNode(PropertyKey propertyKey,
-                                                             Map<PropertyKey, Set<PropertyKey>> childPropertiesByParentProperty,
-                                                             Map<String, Set<String>> childModesByParentMode,
-                                                             Set<PropertyKey> nonRootPropertyKeys,
-                                                             Set<PropertyKey> alreadyBuiltPropertyNodeKeys) {
-        if (!alreadyBuiltPropertyNodeKeys.add(propertyKey))
-            throw new IllegalArgumentException(
-                    "Found property dependency cycle involving property key " +
-                    propertyKey);
-        List<PropertyNode> childrenProperties = new ArrayList<>();
-        Set<PropertyKey> childPropertyKeys = new HashSet<>();
-        Set<String> childModes = childModesByParentMode.getOrDefault(propertyKey.modeName, Set.of());
-        for (String childMode : childModes) {
-            // x2-mode=x1-mode
-            // x2-mode.to=y-mode.to
-            // x2-mode should not have any of the x1-mode.to. Instead, x2-mode.to should be exactly y-mode.to.
-            // Assuming that here, propertyKey.modeName == x1-mode,
-            // Only create childPropertyKey(x2-mode, to) if there is no x2-mode.to=y-mode.to
-            PropertyKey childPropertyKey = new PropertyKey(childMode, propertyKey.propertyName);
-            if (!nonRootPropertyKeys.contains(childPropertyKey))
-                childPropertyKeys.add(childPropertyKey);
-        }
-        childPropertyKeys.addAll(childPropertiesByParentProperty.getOrDefault(propertyKey, Set.of()));
-        for (PropertyKey childPropertyKey : childPropertyKeys)
-            childrenProperties.add(recursivelyBuildPropertyNode(childPropertyKey,
-                    childPropertiesByParentProperty, childModesByParentMode,
-                    nonRootPropertyKeys, alreadyBuiltPropertyNodeKeys));
-        return new PropertyNode(propertyKey, childrenProperties);
     }
 
     private static ModeNode recursivelyBuildReferenceNode(String modeName,
@@ -2144,20 +3145,24 @@ public class ConfigurationParser {
         return new ModeNode(modeName, referencedModes);
     }
 
-    private static void parseIndicatorProperty(IndicatorBuilder indicator,
+    private static void parseIndicatorProperty(IndicatorConfigurationBuilder indicator,
+                                                String layerName,
                                                 String key, String propertyValue,
-                                                Predicate<String> fontAvailability,
-                                                ModePropertyPath propertyPathPrefix,
                                                 Map<Combo, List<Command>> mutateModeCommandMap,
                                                 Set<ModePropertyPath> setPropertyPaths,
                                                 String modeName,
                                                 ComboMoveDuration defaultComboMoveDuration,
                                                 Map<String, KeyAlias> keyAliases,
                                                 Map<String, AppAlias> appAliases,
+                                                Map<String, GradientColor> colorAliases,
                                                 KeyResolver keyResolver,
-                                                Set<String> allVariableNames) {
-        ModePropertyHandler handler =
-                indicatorHandler(propertyPathPrefix, indicator, key, fontAvailability);
+                                                Set<String> allVariableNames,
+                                                Set<String> positionHistoryNames) {
+        ModePropertyHandler handler = layerName.equals("indicator") ?
+                indicatorHandler(indicator, key, colorAliases) : null;
+        if (handler == null)
+            handler = indicatorLayerHandler(indicator, layerName, key, colorAliases, keyAliases,
+                    positionHistoryNames);
         if (handler == null)
             throw new IllegalArgumentException("Invalid indicator property key: " + key);
         if (!tryParseComboProperty(propertyValue, modeName, handler.propertyPath(),
@@ -2185,64 +3190,22 @@ public class ConfigurationParser {
     }
 
     private static ModePropertyHandler mouseHandler(
-            ModePropertyPath prefix, Mouse.MouseBuilder mouse, String key) {
+            ModePropertyPath prefix, MovementConfigurationBuilder mouse, String key) {
         return switch (key) {
-            case "initial-velocity" -> ModePropertyHandler.of(prefix.append("velocity", "initialVelocity"), v -> Double.parseDouble(v), v -> mouse.velocity().initialVelocity(v));
-            case "max-velocity" -> ModePropertyHandler.of(prefix.append("velocity", "maxVelocity"), v -> Double.parseDouble(v), v -> mouse.velocity().maxVelocity(v));
-            case "acceleration" -> ModePropertyHandler.of(prefix.append("velocity", "acceleration"), v -> Double.parseDouble(v), v -> mouse.velocity().acceleration(v));
-            case "acceleration-easing" -> ModePropertyHandler.of(prefix.append("velocity", "accelerationEasing"), v -> parseEasing(v), v -> mouse.velocity().accelerationEasing(v));
-            case "deceleration" -> ModePropertyHandler.of(prefix.append("velocity", "deceleration"), v -> Double.parseDouble(v), v -> mouse.velocity().deceleration(v));
             case "smooth-jump-enabled" -> ModePropertyHandler.of(prefix.append("smoothJumpEnabled"), v -> Boolean.parseBoolean(v), v -> mouse.smoothJumpEnabled(v));
             case "smooth-jump-velocity" -> ModePropertyHandler.of(prefix.append("smoothJumpVelocity"), v -> Double.parseDouble(v), v -> mouse.smoothJumpVelocity(v));
-            default -> null;
+            default -> velocityHandler(prefix.append("velocity"), mouse.velocity(), key);
         };
     }
 
-    private static ModePropertyHandler wheelHandler(
-            ModePropertyPath prefix, Wheel.WheelBuilder wheel, String key) {
+    private static ModePropertyHandler velocityHandler(
+            ModePropertyPath prefix, VelocityConfigurationBuilder velocity, String key) {
         return switch (key) {
-            case "initial-velocity" -> ModePropertyHandler.of(prefix.append("velocity", "initialVelocity"), v -> Double.parseDouble(v), v -> wheel.velocity().initialVelocity(v));
-            case "max-velocity" -> ModePropertyHandler.of(prefix.append("velocity", "maxVelocity"), v -> Double.parseDouble(v), v -> wheel.velocity().maxVelocity(v));
-            case "acceleration" -> ModePropertyHandler.of(prefix.append("velocity", "acceleration"), v -> Double.parseDouble(v), v -> wheel.velocity().acceleration(v));
-            case "acceleration-easing" -> ModePropertyHandler.of(prefix.append("velocity", "accelerationEasing"), v -> parseEasing(v), v -> wheel.velocity().accelerationEasing(v));
-            case "deceleration" -> ModePropertyHandler.of(prefix.append("velocity", "deceleration"), v -> Double.parseDouble(v), v -> wheel.velocity().deceleration(v));
-            default -> null;
-        };
-    }
-
-    private static ModePropertyHandler gridHandler(
-            ModePropertyPath prefix,
-            GridConfiguration.GridConfigurationBuilder grid, String key) {
-        return switch (key) {
-            // @formatter:off
-            case "area" -> new ModePropertyHandler(prefix.append("area"),
-                    v -> {
-                        GridArea.GridAreaType type = parseGridAreaType("grid.area", v);
-                        return (Function<GridArea, GridArea>) currentArea -> switch (type) {
-                            case ACTIVE_SCREEN -> new GridArea.ActiveScreenGridArea(
-                                    currentArea.widthPercent(), currentArea.heightPercent(),
-                                    currentArea.topInset(), currentArea.bottomInset(),
-                                    currentArea.leftInset(), currentArea.rightInset());
-                            case ACTIVE_WINDOW -> new GridArea.ActiveWindowGridArea(
-                                    currentArea.widthPercent(), currentArea.heightPercent(),
-                                    currentArea.topInset(), currentArea.bottomInset(),
-                                    currentArea.leftInset(), currentArea.rightInset());
-                        };
-                    },
-                    v -> grid.area().type(parseGridAreaType("grid.area", v)));
-            case "area-width-percent" -> ModePropertyHandler.of(prefix.append("area", "widthPercent"), v -> parseNonZeroPercent(v, 2), v -> grid.area().widthPercent(v));
-            case "area-height-percent" -> ModePropertyHandler.of(prefix.append("area", "heightPercent"), v -> parseNonZeroPercent(v, 2), v -> grid.area().heightPercent(v));
-            case "area-top-inset" -> ModePropertyHandler.of(prefix.append("area", "topInset"), v -> parseUnsignedInteger(v, 0, 10_000), v -> grid.area().topInset(v));
-            case "area-bottom-inset" -> ModePropertyHandler.of(prefix.append("area", "bottomInset"), v -> parseUnsignedInteger(v, 0, 10_000), v -> grid.area().bottomInset(v));
-            case "area-left-inset" -> ModePropertyHandler.of(prefix.append("area", "leftInset"), v -> parseUnsignedInteger(v, 0, 10_000), v -> grid.area().leftInset(v));
-            case "area-right-inset" -> ModePropertyHandler.of(prefix.append("area", "rightInset"), v -> parseUnsignedInteger(v, 0, 10_000), v -> grid.area().rightInset(v));
-            case "synchronization" -> ModePropertyHandler.of(prefix.append("synchronization"), v -> parseSynchronization("grid.synchronization", v), v -> grid.synchronization(v));
-            case "row-count" -> ModePropertyHandler.of(prefix.append("rowCount"), v -> parseUnsignedInteger(v, 1, 50), v -> grid.rowCount(v));
-            case "column-count" -> ModePropertyHandler.of(prefix.append("columnCount"), v -> parseUnsignedInteger(v, 1, 50), v -> grid.columnCount(v));
-            case "line-visible" -> ModePropertyHandler.of(prefix.append("lineVisible"), v -> Boolean.parseBoolean(v), v -> grid.lineVisible(v));
-            case "line-color" -> ModePropertyHandler.of(prefix.append("lineHexColor"), v -> checkColorFormat(v), v -> grid.lineHexColor(v));
-            case "line-thickness" -> ModePropertyHandler.of(prefix.append("lineThickness"), v -> parseDouble(v, false, 0, 1000), v -> grid.lineThickness(v));
-            // @formatter:on
+            case "initial-velocity" -> ModePropertyHandler.of(prefix.append("initialVelocity"), v -> Double.parseDouble(v), v -> velocity.initialVelocity(v));
+            case "max-velocity" -> ModePropertyHandler.of(prefix.append("maxVelocity"), v -> Double.parseDouble(v), v -> velocity.maxVelocity(v));
+            case "acceleration" -> ModePropertyHandler.of(prefix.append("acceleration"), v -> Double.parseDouble(v), v -> velocity.acceleration(v));
+            case "acceleration-easing" -> ModePropertyHandler.of(prefix.append("accelerationEasing"), v -> parseEasing(v), v -> velocity.accelerationEasing(v));
+            case "deceleration" -> ModePropertyHandler.of(prefix.append("deceleration"), v -> Double.parseDouble(v), v -> velocity.deceleration(v));
             default -> null;
         };
     }
@@ -2280,266 +3243,391 @@ public class ConfigurationParser {
         return switch (key) {
             // @formatter:off
             case "percent" -> ModePropertyHandler.of(prefix.append("percent"), v -> parseDouble(v, true, 1, 100), v -> zoom.percent(v));
-            case "center" -> ModePropertyHandler.of(prefix.append("center"), v -> parseZoomCenter("zoom.center", v), v -> zoom.center(v));
-            case "animation-enabled" -> ModePropertyHandler.of(prefix.append("animationEnabled"), v -> Boolean.parseBoolean(v), v -> zoom.animationEnabled(v));
-            case "animation-easing" -> ModePropertyHandler.of(prefix.append("animationEasing"), v -> parseEasing(v), v -> zoom.animationEasing(v));
-            case "animation-duration-millis" -> ModePropertyHandler.of(prefix.append("animationDurationMillis"), v -> parseDouble(v, true, 0, 10000), v -> zoom.animationDurationMillis(v));
+            case "area-size-source" -> ModePropertyHandler.of(prefix.append("areaSize", "source"), v -> parseZoomAreaSizeSource("zoom.area-size-source", v), v -> zoom.areaSizeSource(v));
+            case "area-width-percent" -> ModePropertyHandler.of(prefix.append("areaSize", "widthPercent"), v -> parseNonZeroPercent(v, 100), v -> zoom.areaWidthPercent(v));
+            case "area-height-percent" -> ModePropertyHandler.of(prefix.append("areaSize", "heightPercent"), v -> parseNonZeroPercent(v, 100), v -> zoom.areaHeightPercent(v));
+            case "center" -> ModePropertyHandler.of(prefix.append("center"), v -> parseAreaCenter("zoom.center", v), v -> zoom.center(v));
+            case "transition-enabled" -> ModePropertyHandler.of(prefix.append("transition", "enabled"), v -> Boolean.parseBoolean(v), v -> zoom.transition().enabled(v));
+            case "transition-duration-millis" -> ModePropertyHandler.of(prefix.append("transition", "duration"), v -> parseDuration(v), v -> zoom.transition().duration(v));
+            case "transition-easing" -> ModePropertyHandler.of(prefix.append("transition", "easing"), v -> parseEasing(v), v -> zoom.transition().easing(v));
             // @formatter:on
             default -> null;
         };
     }
 
     private static ModePropertyHandler indicatorHandler(
-            ModePropertyPath prefix, IndicatorBuilder indicator,
-            String key, Predicate<String> fontAvailability) {
+            IndicatorConfigurationBuilder indicator, String key,
+            Map<String, GradientColor> colorAliases) {
+        ModePropertyPath prefix = new ModePropertyPath(List.of("indicator"));
         return switch (key) {
             // @formatter:off
-            case "size" -> ModePropertyHandler.of(prefix.append("size"), v -> parseUnsignedInteger(v, 1, 100), v -> indicator.size(v));
-            case "edge-count" -> ModePropertyHandler.of(prefix.append("edgeCount"), v -> parseUnsignedInteger(v, 3, 1000), v -> indicator.edgeCount(v));
-            case "color" -> ModePropertyHandler.of(prefix.append("hexColor"), v -> checkColorFormat(v), v -> indicator.hexColor(v));
-            case "opacity" -> ModePropertyHandler.of(prefix.append("opacity"), v -> parseDouble(v, true, 0, 1), v -> indicator.opacity(v));
-            case "outer-outline-thickness", "outline-thickness" -> ModePropertyHandler.of(prefix.append("outerOutline").append("thickness"), v -> parseDouble(v, true, 0, 100), v -> indicator.outerOutline().thickness(v));
-            case "outer-outline-color", "outline-color" -> ModePropertyHandler.of(prefix.append("outerOutline").append("hexColor"), v -> checkColorFormat(v), v -> indicator.outerOutline().hexColor(v));
-            case "outer-outline-opacity", "outline-opacity" -> ModePropertyHandler.of(prefix.append("outerOutline").append("opacity"), v -> parseDouble(v, true, 0, 1), v -> indicator.outerOutline().opacity(v));
-            case "outer-outline-fill-percent", "outline-fill-percent" -> ModePropertyHandler.of(prefix.append("outerOutline").append("fillPercent"), v -> parseDouble(v, true, 0, 1), v -> indicator.outerOutline().fillPercent(v));
-            case "outer-outline-fill-start-angle", "outline-fill-start-angle" -> ModePropertyHandler.of(prefix.append("outerOutline").append("fillStartAngle"), v -> parseDouble(v, true, 0, 360), v -> indicator.outerOutline().fillStartAngle(v));
-            case "outer-outline-fill-direction", "outline-fill-direction" -> ModePropertyHandler.of(prefix.append("outerOutline").append("fillDirection"), v -> FillDirection.fromString(v), v -> indicator.outerOutline().fillDirection(v));
-            case "inner-outline-thickness" -> ModePropertyHandler.of(prefix.append("innerOutline").append("thickness"), v -> parseDouble(v, true, 0, 100), v -> indicator.innerOutline().thickness(v));
-            case "inner-outline-color" -> ModePropertyHandler.of(prefix.append("innerOutline").append("hexColor"), v -> checkColorFormat(v), v -> indicator.innerOutline().hexColor(v));
-            case "inner-outline-opacity" -> ModePropertyHandler.of(prefix.append("innerOutline").append("opacity"), v -> parseDouble(v, true, 0, 1), v -> indicator.innerOutline().opacity(v));
-            case "inner-outline-fill-percent" -> ModePropertyHandler.of(prefix.append("innerOutline").append("fillPercent"), v -> parseDouble(v, true, 0, 1), v -> indicator.innerOutline().fillPercent(v));
-            case "inner-outline-fill-start-angle" -> ModePropertyHandler.of(prefix.append("innerOutline").append("fillStartAngle"), v -> parseDouble(v, true, 0, 360), v -> indicator.innerOutline().fillStartAngle(v));
-            case "inner-outline-fill-direction" -> ModePropertyHandler.of(prefix.append("innerOutline").append("fillDirection"), v -> FillDirection.fromString(v), v -> indicator.innerOutline().fillDirection(v));
-            case "shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("shadow").append("blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> indicator.shadow().blurRadius(v));
-            case "shadow-color" -> ModePropertyHandler.of(prefix.append("shadow").append("hexColor"), v -> checkColorFormat(v), v -> indicator.shadow().hexColor(v));
-            case "shadow-opacity" -> ModePropertyHandler.of(prefix.append("shadow").append("opacity"), v -> parseDouble(v, true, 0, 1), v -> indicator.shadow().opacity(v));
-            case "shadow-stack-count" -> ModePropertyHandler.of(prefix.append("shadow").append("stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> indicator.shadow().stackCount(v));
-            case "shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("shadow").append("horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> indicator.shadow().horizontalOffset(v));
-            case "shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("shadow").append("verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> indicator.shadow().verticalOffset(v));
-            case "label-enabled" -> ModePropertyHandler.of(prefix.append("labelEnabled"), v -> Boolean.parseBoolean(v), v -> indicator.labelEnabled(v));
-            case "label-text" -> ModePropertyHandler.of(prefix.append("labelText"), v -> v, v -> indicator.labelText(v));
-            case "label-font-name" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("name"), v -> parseFontName(v, fontAvailability), v -> indicator.labelFontStyle().name(v));
-            case "label-font-size" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("size"), v -> parseDouble(v, false, 0, 1000), v -> indicator.labelFontStyle().size(v));
-            case "label-font-color" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("hexColor"), v -> checkColorFormat(v), v -> indicator.labelFontStyle().hexColor(v));
-            case "label-font-weight" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("weight"), v -> FontWeight.of(v), v -> indicator.labelFontStyle().weight(v));
-            case "label-font-opacity" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("opacity"), v -> parseDouble(v, true, 0, 1), v -> indicator.labelFontStyle().opacity(v));
-            case "label-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> indicator.labelFontStyle().outlineThickness(v));
-            case "label-font-outline-color" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("outlineHexColor"), v -> checkColorFormat(v), v -> indicator.labelFontStyle().outlineHexColor(v));
-            case "label-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> indicator.labelFontStyle().outlineOpacity(v));
-            case "label-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("shadow").append("blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> indicator.labelFontStyle().shadow().blurRadius(v));
-            case "label-font-shadow-color" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("shadow").append("hexColor"), v -> checkColorFormat(v), v -> indicator.labelFontStyle().shadow().hexColor(v));
-            case "label-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("shadow").append("opacity"), v -> parseDouble(v, true, 0, 1), v -> indicator.labelFontStyle().shadow().opacity(v));
-            case "label-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("shadow").append("stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> indicator.labelFontStyle().shadow().stackCount(v));
-            case "label-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("shadow").append("horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> indicator.labelFontStyle().shadow().horizontalOffset(v));
-            case "label-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("labelFontStyle").append("shadow").append("verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> indicator.labelFontStyle().shadow().verticalOffset(v));
-            case "position" -> ModePropertyHandler.of(prefix.append("position"), v -> IndicatorPosition.fromString(v), v -> indicator.position(v));
+            case "render-as-cursor" -> ModePropertyHandler.of(prefix.append("renderAsCursor"), v -> Boolean.parseBoolean(v), v -> indicator.renderAsCursor(v));
+            case "exclude-from-capture" -> ModePropertyHandler.of(prefix.append("excludeFromCapture"), v -> Boolean.parseBoolean(v), v -> indicator.excludeFromCapture(v));
+            // @formatter:on
+            default -> null;
+        };
+    }
+
+    private static ModePropertyHandler indicatorLayerHandler(
+            IndicatorConfigurationBuilder indicator, String layerName,
+            String key, Map<String, GradientColor> colorAliases,
+            Map<String, KeyAlias> keyAliases, Set<String> positionHistoryNames) {
+        ModePropertyPath prefix =
+                new ModePropertyPath(List.of("indicator", "layerByName", layerName));
+        IndicatorLayerConfigurationBuilder layer = indicator.layer(layerName);
+        return switch (key) {
+            // @formatter:off
+            case "enabled" -> ModePropertyHandler.of(prefix.append("enabled"), v -> Boolean.parseBoolean(v), v -> layer.enabled(v));
+            case "fade-animation-enabled", "fade-animation-duration-millis", "transition-animation-duration-millis", "transition-animation-easing", "transition-animation-switch-at" -> throw new IllegalArgumentException(layerName + "." + key + " has been removed: animate the indicator with keyframes on an animation instead, like indicator.size=26 | _{clickburstanimation} -> 0% 1; 100% 78");
+            case "z" -> ModePropertyHandler.of(prefix.append("z"), v -> Integer.parseInt(v), v -> layer.z(v));
+            case "color", "opacity" -> throw new IllegalArgumentException(layerName + "." + key + " has been removed: use " + layerName + ".fill-" + key + " instead");
+            case "outer-outline-thickness", "outer-outline-color", "outer-outline-opacity", "outer-outline-fill-percent", "outer-outline-fill-start-angle", "outer-outline-fill-direction", "outline-thickness", "outline-color", "outline-opacity", "outline-fill-percent", "outline-fill-start-angle", "outline-fill-direction", "inner-outline-thickness", "inner-outline-color", "inner-outline-opacity", "inner-outline-fill-percent", "inner-outline-fill-start-angle", "inner-outline-fill-direction" -> throw new IllegalArgumentException(layerName + "." + key + " has been removed: an outline is the stroke of the layer (stroke-thickness, stroke-color, stroke-opacity, stroke-start-angle, stroke-length-percent, stroke-anchor), drawn centered on its edge, and a second outline is a second layer");
+            case "size" -> ModePropertyHandler.of(prefix.append("size"), v -> parseDouble(v, false, 0, Double.MAX_VALUE), v -> layer.size(v));
+            case "edge-count" -> throw new IllegalArgumentException(layerName + ".edge-count has been removed: use " + layerName + ".shape=circle, triangle, rectangle, star or path instead");
+            case "shape" -> ModePropertyHandler.of(prefix.append("shape"), v -> IndicatorShape.fromString(v), v -> layer.shape(v));
+            case "aspect-ratio" -> ModePropertyHandler.of(prefix.append("aspectRatio"), v -> parseDouble(v, false, 0, 100), v -> layer.aspectRatio(v));
+            case "border-radius" -> ModePropertyHandler.of(prefix.append("borderRadius"), v -> parseDouble(v, true, 0, 1000), v -> layer.borderRadius(v));
+            case "points" -> ModePropertyHandler.of(prefix.append("points"), v -> parsePoints(v), v -> layer.points(v));
+            case "x" -> ModePropertyHandler.of(prefix.append("x"), v -> parseDouble(v, true, -10_000, 10_000), v -> layer.x(v));
+            case "y" -> ModePropertyHandler.of(prefix.append("y"), v -> parseDouble(v, true, -10_000, 10_000), v -> layer.y(v));
+            case "distance" -> ModePropertyHandler.of(prefix.append("distance"), v -> parseDouble(v, true, -10_000, 10_000), v -> layer.distance(v));
+            case "angle" -> ModePropertyHandler.of(prefix.append("angle"), v -> parseDouble(v, true, -100_000, 100_000), v -> layer.angle(v));
+            case "rotation" -> ModePropertyHandler.of(prefix.append("rotation"), v -> parseDouble(v, true, -100_000, 100_000), v -> layer.rotation(v));
+            case "fill-color" -> ModePropertyHandler.of(prefix.append("fillColor"), v -> Color.parse(v, colorAliases), v -> layer.fillColor(v));
+            case "fill-opacity" -> ModePropertyHandler.of(prefix.append("fillOpacity"), v -> parseDouble(v, true, 0, 1), v -> layer.fillOpacity(v));
+            case "stroke-thickness" -> ModePropertyHandler.of(prefix.append("stroke").append("thickness"), v -> parseDouble(v, true, 0, 1000), v -> layer.stroke().thickness(v));
+            case "stroke-color" -> ModePropertyHandler.of(prefix.append("stroke").append("color"), v -> Color.parse(v, colorAliases), v -> layer.stroke().color(v));
+            case "stroke-opacity" -> ModePropertyHandler.of(prefix.append("stroke").append("opacity"), v -> parseDouble(v, true, 0, 1), v -> layer.stroke().opacity(v));
+            case "stroke-start-angle" -> ModePropertyHandler.of(prefix.append("stroke").append("startAngle"), v -> parseDouble(v, true, 0, 360), v -> layer.stroke().startAngle(v));
+            case "stroke-length-percent" -> ModePropertyHandler.of(prefix.append("stroke").append("lengthPercent"), v -> parseDouble(v, true, -1, 1), v -> layer.stroke().lengthPercent(v));
+            case "stroke-anchor" -> ModePropertyHandler.of(prefix.append("stroke").append("anchor"), v -> StrokeAnchor.fromString(v), v -> layer.stroke().anchor(v));
+            case "stroke-dash-length" -> ModePropertyHandler.of(prefix.append("stroke").append("dashLength"), v -> parseDouble(v, true, 0, 10_000), v -> layer.stroke().dashLength(v));
+            case "stroke-dash-gap" -> ModePropertyHandler.of(prefix.append("stroke").append("dashGap"), v -> parseDouble(v, true, 0, 10_000), v -> layer.stroke().dashGap(v));
+            case "stroke-dash-offset" -> ModePropertyHandler.of(prefix.append("stroke").append("dashOffset"), v -> parseDouble(v, true, -1_000_000, 1_000_000), v -> layer.stroke().dashOffset(v));
+            case "stroke-cap" -> ModePropertyHandler.of(prefix.append("stroke").append("cap"), v -> StrokeCap.fromString(v), v -> layer.stroke().cap(v));
+            case "shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("shadow").append("blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> layer.shadow().blurRadius(v));
+            case "shadow-color" -> ModePropertyHandler.of(prefix.append("shadow").append("color"), v -> Color.parse(v, colorAliases), v -> layer.shadow().color(v));
+            case "shadow-opacity" -> ModePropertyHandler.of(prefix.append("shadow").append("opacity"), v -> parseDouble(v, true, 0, 1), v -> layer.shadow().opacity(v));
+            case "shadow-stack-count" -> ModePropertyHandler.of(prefix.append("shadow").append("stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> layer.shadow().stackCount(v));
+            case "shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("shadow").append("horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> layer.shadow().horizontalOffset(v));
+            case "shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("shadow").append("verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> layer.shadow().verticalOffset(v));
+            case "label-enabled", "label-text", "label-font-name", "label-font-size", "label-font-color", "label-font-weight", "label-font-opacity", "label-font-outline-thickness", "label-font-outline-color", "label-font-outline-opacity", "label-font-shadow-blur-radius", "label-font-shadow-color", "label-font-shadow-opacity", "label-font-shadow-stack-count", "label-font-shadow-horizontal-offset", "label-font-shadow-vertical-offset" -> throw new IllegalArgumentException(layerName + "." + key + " has been removed: draw text with a layer of shape=text, set with text, font-name, font-size and font-weight, its fill coloring the letters and its stroke outlining them");
+            case "text" -> ModePropertyHandler.of(prefix.append("text"), v -> parseText(v, keyAliases, Set.of()), v -> layer.text(v));
+            case "font-name" -> ModePropertyHandler.of(prefix.append("fontName"), v -> v, v -> layer.fontName(v));
+            case "font-size" -> ModePropertyHandler.of(prefix.append("fontSize"), v -> parseDouble(v, false, 0, 1000), v -> layer.fontSize(v));
+            case "font-weight" -> ModePropertyHandler.of(prefix.append("fontWeight"), v -> FontWeight.of(v), v -> layer.fontWeight(v));
+            case "text-style-sheet" -> ModePropertyHandler.of(prefix.append("textStyleSheet"), v -> v, v -> layer.textStyleSheet(v));
+            case "position" -> ModePropertyHandler.of(prefix.append("position"), v -> IndicatorPosition.fromString(layerName + ".position", v, positionHistoryNames), v -> layer.position(v));
+            case "position-anchor" -> ModePropertyHandler.of(prefix.append("positionAnchor"), v -> PositionAnchor.fromString(v), v -> layer.positionAnchor(v));
+            case "end-position" -> ModePropertyHandler.of(prefix.append("endPosition"), v -> IndicatorPosition.fromString(layerName + ".end-position", v, positionHistoryNames), v -> layer.endPosition(v));
+            case "end-position-anchor" -> ModePropertyHandler.of(prefix.append("endPositionAnchor"), v -> PositionAnchor.fromString(v), v -> layer.endPositionAnchor(v));
+            case "area" -> ModePropertyHandler.of(prefix.append("area", "size", "source"), v -> parseAreaSizeSource(layerName + ".area", v), v -> layer.area().source(v));
+            case "area-width-percent" -> ModePropertyHandler.of(prefix.append("area", "size", "widthPercent"), v -> parseNonZeroPercent(v, 100), v -> layer.area().widthPercent(v));
+            case "area-height-percent" -> ModePropertyHandler.of(prefix.append("area", "size", "heightPercent"), v -> parseNonZeroPercent(v, 100), v -> layer.area().heightPercent(v));
+            case "area-top-inset" -> ModePropertyHandler.of(prefix.append("area", "size", "topInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> layer.area().topInset(v));
+            case "area-bottom-inset" -> ModePropertyHandler.of(prefix.append("area", "size", "bottomInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> layer.area().bottomInset(v));
+            case "area-left-inset" -> ModePropertyHandler.of(prefix.append("area", "size", "leftInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> layer.area().leftInset(v));
+            case "area-right-inset" -> ModePropertyHandler.of(prefix.append("area", "size", "rightInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> layer.area().rightInset(v));
+            case "area-center" -> ModePropertyHandler.of(prefix.append("area", "center"), v -> parseAreaCenter(layerName + ".area-center", v), v -> layer.area().center(v));
+            case "follow" -> ModePropertyHandler.of(prefix.append("follow"), v -> Boolean.parseBoolean(v), v -> layer.follow(v));
             // @formatter:on
             default -> null;
         };
     }
 
 
+    private static ModePropertyHandler decorationHandler(
+            ModePropertyPath prefix,
+            HintMeshConfigurationBuilder hintMeshBuilder,
+            ScreenFilter screenFilter,
+            String key,
+            Map<String, KeyAlias> keyAliases, KeyResolver keyResolver,
+            Map<String, GradientColor> colorAliases) {
+        final int index;
+        String suffix;
+        if (key.startsWith("subsubdecoration-")) {
+            index = 2;
+            suffix = key.substring("subsubdecoration-".length());
+        }
+        else if (key.startsWith("subdecoration-")) {
+            index = 1;
+            suffix = key.substring("subdecoration-".length());
+        }
+        else if (key.startsWith("decoration-")) {
+            index = 0;
+            suffix = key.substring("decoration-".length());
+        }
+        else
+            return null;
+        ModePropertyPath p = prefix.append("styleByFilter", "decoration" + index);
+        return switch (suffix) {
+            // @formatter:off
+            case "max-row-count" -> ModePropertyHandler.of(p.append("maxRowCount"), v -> parseUnsignedInteger(v, 1, 1_000), v -> hintMeshBuilder.style(screenFilter).decoration(index).maxRowCount(v));
+            case "max-column-count" -> ModePropertyHandler.of(p.append("maxColumnCount"), v -> parseUnsignedInteger(v, 1, 1_000), v -> hintMeshBuilder.style(screenFilter).decoration(index).maxColumnCount(v));
+            case "label-keys" -> ModePropertyHandler.of(p.append("labelKeys"), v -> parseHintKeys(v, keyAliases, keyResolver), v -> hintMeshBuilder.style(screenFilter).decoration(index).labelKeys(v));
+            case "label-override" -> ModePropertyHandler.of(p.append("labelOverride"), v -> parseKeyList(v, keyAliases, keyResolver), v -> hintMeshBuilder.style(screenFilter).decoration(index).labelOverride(v));
+            case "box-color" -> ModePropertyHandler.of(p.append("boxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxColor(v));
+            case "box-opacity" -> ModePropertyHandler.of(p.append("boxOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxOpacity(v));
+            case "box-border-thickness" -> ModePropertyHandler.of(p.append("boxBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxBorderThickness(v));
+            case "box-border-length" -> ModePropertyHandler.of(p.append("boxBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxBorderLength(v));
+            case "box-border-color" -> ModePropertyHandler.of(p.append("boxBorderColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxBorderColor(v));
+            case "box-border-opacity" -> ModePropertyHandler.of(p.append("boxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxBorderOpacity(v));
+            case "box-border-radius" -> ModePropertyHandler.of(p.append("boxBorderRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxBorderRadius(v));
+            case "box-framed" -> ModePropertyHandler.of(p.append("boxFramed"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxFramed(v));
+            case "box-horizontal-padding" -> ModePropertyHandler.of(p.append("boxHorizontalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxHorizontalPadding(v));
+            case "box-vertical-padding" -> ModePropertyHandler.of(p.append("boxVerticalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).decoration(index).boxVerticalPadding(v));
+            case "font-name" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().name(v));
+            case "font-weight" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().weight(v));
+            case "font-size" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().size(v));
+            case "font-color" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().color(v));
+            case "font-opacity" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().opacity(v));
+            case "font-spacing-percent" -> ModePropertyHandler.of(p.append("fontStyle", "spacingPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().spacingPercent(v));
+            case "font-vertical-alignment" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "verticalAlignment"), v -> FontVerticalAlignment.of(v), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().verticalAlignment(v));
+            case "font-outline-thickness" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().outlineThickness(v));
+            case "font-outline-color" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().outlineColor(v));
+            case "font-outline-opacity" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().outlineOpacity(v));
+            case "font-shadow-blur-radius" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().shadow().blurRadius(v));
+            case "font-shadow-color" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().shadow().color(v));
+            case "font-shadow-opacity" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().shadow().opacity(v));
+            case "font-shadow-stack-count" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().shadow().stackCount(v));
+            case "font-shadow-horizontal-offset" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().shadow().horizontalOffset(v));
+            case "font-shadow-vertical-offset" -> ModePropertyHandler.of(p.append("fontStyle", "defaultFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).decoration(index).fontStyle().defaultFontStyle().shadow().verticalOffset(v));
+            // @formatter:on
+            default -> null;
+        };
+    }
+
     private static ModePropertyHandler hintHandler(
             ModePropertyPath prefix,
             HintMeshConfigurationBuilder hintMeshBuilder,
-            ViewportFilter viewportFilter,
-            String key, Predicate<String> fontAvailability,
-            Map<String, KeyAlias> keyAliases, KeyResolver keyResolver) {
+            ScreenFilter screenFilter,
+            String key,
+            Map<String, KeyAlias> keyAliases, KeyResolver keyResolver,
+            Set<String> positionHistoryNames,
+            Map<String, GradientColor> colorAliases) {
+        ModePropertyHandler decorationHandler = decorationHandler(prefix, hintMeshBuilder,
+                screenFilter, key, keyAliases, keyResolver, colorAliases);
+        if (decorationHandler != null)
+            return decorationHandler;
         return switch (key) {
             // @formatter:off
             // Top-level properties
             case "enabled" -> ModePropertyHandler.of(prefix.append("enabled"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.enabled(v));
             case "visible" -> ModePropertyHandler.of(prefix.append("visible"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.visible(v));
-            case "mouse-movement" -> ModePropertyHandler.of(prefix.append("mouseMovement"), v -> parseHintMouseMovement("hint.mouse-movement", v), v -> hintMeshBuilder.mouseMovement(v));
+            case "exclude-from-capture" -> ModePropertyHandler.of(prefix.append("excludeFromCapture"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.excludeFromCapture(v));
+            case "mouse-follows-target" -> ModePropertyHandler.of(prefix.append("mouseFollowsTarget"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.mouseFollowsTarget(v));
+            case "target-follows-overlay-center" -> ModePropertyHandler.of(prefix.append("targetFollowsOverlayCenter"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.targetFollowsOverlayCenter(v));
+            case "saved-hints" -> ModePropertyHandler.of(prefix.append("savedPositionHistory"), v -> positionHistoryName("overlay.saved-hints", v, positionHistoryNames), v -> hintMeshBuilder.savedPositionHistory(v));
             case "eat-unused-selection-keys" -> ModePropertyHandler.of(prefix.append("eatUnusedSelectionKeys"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.eatUnusedSelectionKeys(v));
-            // Type property (sealed variant): uses Function for GRID because it
-            // needs the current area/gridLayout at mutation time, not parse time.
-            case "type" -> new ModePropertyHandler(prefix.append("type"), v -> {
-                HintMeshType.HintMeshTypeType typeType = parseHintMeshTypeType("hint.type", v);
-                return switch (typeType) {
-                    case GRID -> (Object) (Function<Object, Object>) currentType -> {
-                        if (currentType instanceof HintMeshType.HintGrid)
-                            return currentType;
-                        throw new IllegalArgumentException(
-                                "Cannot combo-trigger hint type to GRID: current type is " +
-                                currentType.getClass().getSimpleName());
-                    };
-                    case POSITION_HISTORY -> new HintMeshType.HintPositionHistory();
-                    case UI -> new HintMeshType.UiHintMesh();
-                };
-            }, v -> hintMeshBuilder.type().type(parseHintMeshTypeType("hint.type", v)));
-            // Grid area properties: uses Function for ACTIVE_SCREEN because it
-            // needs the current center at mutation time, not parse time.
-            case "grid-area" -> new ModePropertyHandler(prefix.append("type", "area"), v -> {
-                HintGridAreaType areaType = parseHintGridAreaType("hint.grid-area", v);
-                return switch (areaType) {
-                    case ACTIVE_SCREEN -> (Object) (Function<Object, Object>) currentArea -> {
-                        ActiveScreenHintGridAreaCenter center =
-                                currentArea instanceof HintGridArea.ActiveScreenHintGridArea activeScreen
-                                        ? activeScreen.center()
-                                        : ActiveScreenHintGridAreaCenter.MOUSE;
-                        return new HintGridArea.ActiveScreenHintGridArea(center);
-                    };
-                    case ACTIVE_WINDOW -> new HintGridArea.ActiveWindowHintGridArea();
-                    case ALL_SCREENS -> new HintGridArea.AllScreensHintGridArea();
-                };
-            }, v -> hintMeshBuilder.type().gridArea().type(parseHintGridAreaType("hint.grid-area", v)));
-            case "active-screen-grid-area-center" -> ModePropertyHandler.of(prefix.append("type", "area", "center"), v -> parseActiveScreenHintGridAreaCenter("hint.active-screen-grid-area-center", v), v -> hintMeshBuilder.type().gridArea().activeScreenHintGridAreaCenter(v));
-            // Grid layout properties (viewport-filtered)
-            case "grid-max-row-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "maxRowCount"), v -> parseUnsignedInteger(v, 1, 200), v -> hintMeshBuilder.type().gridLayout(viewportFilter).maxRowCount(v));
-            case "grid-max-column-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "maxColumnCount"), v -> parseUnsignedInteger(v, 1, 200), v -> hintMeshBuilder.type().gridLayout(viewportFilter).maxColumnCount(v));
-            case "grid-cell-width" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "cellWidth"), v -> parseDouble(v, false, 0, 10_000), v -> hintMeshBuilder.type().gridLayout(viewportFilter).cellWidth(v));
-            case "grid-cell-height" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "cellHeight"), v -> parseDouble(v, false, 0, 10_000), v -> hintMeshBuilder.type().gridLayout(viewportFilter).cellHeight(v));
-            case "layout-row-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "layoutRowCount"), v -> parseUnsignedInteger(v, 1, 1_000_000_000), v -> hintMeshBuilder.type().gridLayout(viewportFilter).layoutRowCount(v));
-            case "layout-column-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "layoutColumnCount"), v -> parseUnsignedInteger(v, 1, 1_000_000_000), v -> hintMeshBuilder.type().gridLayout(viewportFilter).layoutColumnCount(v));
-            case "layout-row-oriented" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "layoutRowOriented"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.type().gridLayout(viewportFilter).layoutRowOriented(v));
-            // Key properties (viewport-filtered)
-            case "selection-keys" -> ModePropertyHandler.of(prefix.append("keysByFilter", "selectionKeys"), v -> parseHintKeys(v, keyAliases, keyResolver), v -> hintMeshBuilder.keys(viewportFilter).selectionKeys(v));
-            case "row-key-offset" -> ModePropertyHandler.of(prefix.append("keysByFilter", "rowKeyOffset"), v -> parseUnsignedInteger(v, 0, 1_000), v -> hintMeshBuilder.keys(viewportFilter).rowKeyOffset(v));
+            case "z" -> ModePropertyHandler.of(prefix.append("z"), v -> Integer.parseInt(v), v -> hintMeshBuilder.z(v));
+            case "type" -> ModePropertyHandler.of(prefix.append("type"), v -> {
+                HintMeshType.HintMeshTypeType typeType =
+                        parseHintMeshTypeType("overlay.type", v, positionHistoryNames);
+                return new HintMeshType.TypeChange(typeType,
+                        typeType == HintMeshType.HintMeshTypeType.POSITION_HISTORY ? v : null);
+            }, typeChange -> {
+                hintMeshBuilder.type().type(typeChange.type());
+                if (typeChange.positionHistoryName() != null)
+                    hintMeshBuilder.type().positionHistoryName(typeChange.positionHistoryName());
+            });
+            case "ui-order" -> ModePropertyHandler.of(prefix.append("type", "order"), v -> parseUiHintOrder("overlay.ui-order", v), v -> hintMeshBuilder.type().uiOrder(v));
+            case "vision-density" -> ModePropertyHandler.of(prefix.append("type", "density"), v -> parseUnsignedInteger(v, 1, Vision.densities), v -> hintMeshBuilder.type().visionDensity(v));
+            case "vision-min-size" -> ModePropertyHandler.of(prefix.append("type", "minSize"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.type().visionMinSize(v));
+            // Area = size + center. Mutations set the record component directly
+            // (the mutator keeps the sibling component), so no Function is needed.
+            case "area" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "source"), v -> parseAreaSizeSource("overlay.area", v), v -> hintMeshBuilder.type().area().source(v));
+            case "area-width-percent" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "widthPercent"), v -> parseNonZeroPercent(v, 100), v -> hintMeshBuilder.type().area().widthPercent(v));
+            case "area-height-percent" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "heightPercent"), v -> parseNonZeroPercent(v, 100), v -> hintMeshBuilder.type().area().heightPercent(v));
+            case "area-top-inset" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "topInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> hintMeshBuilder.type().area().topInset(v));
+            case "area-bottom-inset" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "bottomInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> hintMeshBuilder.type().area().bottomInset(v));
+            case "area-left-inset" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "leftInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> hintMeshBuilder.type().area().leftInset(v));
+            case "area-right-inset" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "rightInset"), v -> parseDouble(v, true, -10_000, 10_000), v -> hintMeshBuilder.type().area().rightInset(v));
+            case "area-center" -> ModePropertyHandler.of(prefix.append("type", "area", "center"), v -> parseAreaCenter("overlay.area-center", v), v -> hintMeshBuilder.type().area().center(v));
+            // Grid layout properties (screen-filtered)
+            case "grid-max-row-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "maxRowCount"), v -> parseUnsignedInteger(v, 1, 200), v -> hintMeshBuilder.type().gridLayout(screenFilter).maxRowCount(v));
+            case "grid-max-column-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "maxColumnCount"), v -> parseUnsignedInteger(v, 1, 200), v -> hintMeshBuilder.type().gridLayout(screenFilter).maxColumnCount(v));
+            case "grid-cell-width" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "cellSizing", "cellWidth"), v -> parseDouble(v, false, 0, 10_000), v -> hintMeshBuilder.type().gridLayout(screenFilter).cellWidth(v));
+            case "grid-cell-height" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "cellSizing", "cellHeight"), v -> parseDouble(v, false, 0, 10_000), v -> hintMeshBuilder.type().gridLayout(screenFilter).cellHeight(v));
+            case "grid-cell-sizing" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "cellSizing", "type"), v -> parseHintCellSizingType("overlay.grid-cell-sizing", v), v -> hintMeshBuilder.type().gridLayout(screenFilter).cellSizingType(v));
+            case "layout-row-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "layoutRowCount"), v -> parseUnsignedInteger(v, 1, 1_000_000_000), v -> hintMeshBuilder.type().gridLayout(screenFilter).layoutRowCount(v));
+            case "layout-column-count" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "layoutColumnCount"), v -> parseUnsignedInteger(v, 1, 1_000_000_000), v -> hintMeshBuilder.type().gridLayout(screenFilter).layoutColumnCount(v));
+            case "layout-row-oriented" -> ModePropertyHandler.of(prefix.append("type", "gridLayoutByFilter", "layoutRowOriented"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.type().gridLayout(screenFilter).layoutRowOriented(v));
+            // Key properties (screen-filtered)
+            case "selection-keys" -> ModePropertyHandler.of(prefix.append("keysByFilter", "selectionKeys"), v -> parseHintKeys(v, keyAliases, keyResolver), v -> hintMeshBuilder.keys(screenFilter).selectionKeys(v));
+            case "row-key-offset" -> ModePropertyHandler.of(prefix.append("keysByFilter", "rowKeyOffset"), v -> parseUnsignedInteger(v, 0, 1_000), v -> hintMeshBuilder.keys(screenFilter).rowKeyOffset(v));
             // Style: main font
-            case "font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().name(v));
-            case "font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().weight(v));
-            case "font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().size(v));
-            case "font-color", "tip-font-color", "hint-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().hexColor(v));
-            case "font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().opacity(v));
-            case "font-spacing-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "spacingPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().spacingPercent(v));
-            case "font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().outlineThickness(v));
-            case "font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "outlineHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().outlineHexColor(v));
-            case "font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().outlineOpacity(v));
-            case "font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().blurRadius(v));
-            case "font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().hexColor(v));
-            case "font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().opacity(v));
-            case "font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().stackCount(v));
-            case "font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().horizontalOffset(v));
-            case "font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().defaultFontStyle().shadow().verticalOffset(v));
+            case "font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().name(v));
+            case "font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().weight(v));
+            case "font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().size(v));
+            case "font-color", "tip-font-color", "hint-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().color(v));
+            case "font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().opacity(v));
+            case "font-spacing-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "spacingPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().spacingPercent(v));
+            case "font-vertical-alignment" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "verticalAlignment"), v -> FontVerticalAlignment.of(v), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().verticalAlignment(v));
+            case "font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().outlineThickness(v));
+            case "font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().outlineColor(v));
+            case "font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().outlineOpacity(v));
+            case "font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().shadow().blurRadius(v));
+            case "font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().shadow().color(v));
+            case "font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().shadow().opacity(v));
+            case "font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().shadow().stackCount(v));
+            case "font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().shadow().horizontalOffset(v));
+            case "font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "defaultFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().defaultFontStyle().shadow().verticalOffset(v));
             // Style: selected font
-            case "selected-font-color", "tip-selected-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().hexColor(v));
-            case "selected-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().opacity(v));
-            case "selected-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().name(v));
-            case "selected-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().weight(v));
-            case "selected-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().size(v));
-            case "selected-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().outlineThickness(v));
-            case "selected-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "outlineHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().outlineHexColor(v));
-            case "selected-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().outlineOpacity(v));
-            case "selected-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().blurRadius(v));
-            case "selected-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().hexColor(v));
-            case "selected-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().opacity(v));
-            case "selected-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().stackCount(v));
-            case "selected-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().horizontalOffset(v));
-            case "selected-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().selectedFontStyle().shadow().verticalOffset(v));
+            case "selected-font-color", "tip-selected-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().color(v));
+            case "selected-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().opacity(v));
+            case "selected-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().name(v));
+            case "selected-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().weight(v));
+            case "selected-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().size(v));
+            case "selected-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().outlineThickness(v));
+            case "selected-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().outlineColor(v));
+            case "selected-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().outlineOpacity(v));
+            case "selected-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().shadow().blurRadius(v));
+            case "selected-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().shadow().color(v));
+            case "selected-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().shadow().opacity(v));
+            case "selected-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().shadow().stackCount(v));
+            case "selected-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().shadow().horizontalOffset(v));
+            case "selected-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "selectedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().selectedFontStyle().shadow().verticalOffset(v));
             // Style: focused font
-            case "focused-font-color", "tip-focused-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().hexColor(v));
-            case "focused-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().opacity(v));
-            case "focused-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().name(v));
-            case "focused-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().weight(v));
-            case "focused-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().size(v));
-            case "focused-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().outlineThickness(v));
-            case "focused-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "outlineHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().outlineHexColor(v));
-            case "focused-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().outlineOpacity(v));
-            case "focused-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().shadow().blurRadius(v));
-            case "focused-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().shadow().hexColor(v));
-            case "focused-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().shadow().opacity(v));
-            case "focused-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().shadow().stackCount(v));
-            case "focused-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().shadow().horizontalOffset(v));
-            case "focused-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).fontStyle().focusedFontStyle().shadow().verticalOffset(v));
+            case "focused-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().color(v));
+            case "focused-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().opacity(v));
+            case "focused-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().name(v));
+            case "focused-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().weight(v));
+            case "focused-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().size(v));
+            case "focused-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().outlineThickness(v));
+            case "focused-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().outlineColor(v));
+            case "focused-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().outlineOpacity(v));
+            case "focused-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().shadow().blurRadius(v));
+            case "focused-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().shadow().color(v));
+            case "focused-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().shadow().opacity(v));
+            case "focused-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().shadow().stackCount(v));
+            case "focused-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().shadow().horizontalOffset(v));
+            case "focused-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "focusedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().focusedFontStyle().shadow().verticalOffset(v));
+            // Style: saved font
+            case "saved-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().color(v));
+            case "saved-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().opacity(v));
+            case "saved-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().name(v));
+            case "saved-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().weight(v));
+            case "saved-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().size(v));
+            case "saved-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().outlineThickness(v));
+            case "saved-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().outlineColor(v));
+            case "saved-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().outlineOpacity(v));
+            case "saved-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().shadow().blurRadius(v));
+            case "saved-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().shadow().color(v));
+            case "saved-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().shadow().opacity(v));
+            case "saved-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().shadow().stackCount(v));
+            case "saved-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().shadow().horizontalOffset(v));
+            case "saved-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fontStyle", "savedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).fontStyle().savedFontStyle().shadow().verticalOffset(v));
             // Style: prefix font
-            case "prefix-in-background" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixInBackground"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(viewportFilter).prefixInBackground(v));
-            case "prefix-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().name(v));
-            case "prefix-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().weight(v));
-            case "prefix-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().size(v));
-            case "prefix-font-spacing-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "spacingPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().spacingPercent(v));
-            case "prefix-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().hexColor(v));
-            case "prefix-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().opacity(v));
-            case "prefix-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().outlineThickness(v));
-            case "prefix-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "outlineHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().outlineHexColor(v));
-            case "prefix-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().outlineOpacity(v));
-            case "prefix-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().shadow().blurRadius(v));
-            case "prefix-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().shadow().hexColor(v));
-            case "prefix-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().shadow().opacity(v));
-            case "prefix-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().shadow().stackCount(v));
-            case "prefix-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().shadow().horizontalOffset(v));
-            case "prefix-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().defaultFontStyle().shadow().verticalOffset(v));
+            case "prefix-in-background" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixInBackground"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(screenFilter).prefixInBackground(v));
+            case "prefix-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().name(v));
+            case "prefix-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().weight(v));
+            case "prefix-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().size(v));
+            case "prefix-font-spacing-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "spacingPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().spacingPercent(v));
+            case "prefix-font-vertical-alignment" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "verticalAlignment"), v -> FontVerticalAlignment.of(v), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().verticalAlignment(v));
+            case "prefix-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().color(v));
+            case "prefix-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().opacity(v));
+            case "prefix-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().outlineThickness(v));
+            case "prefix-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().outlineColor(v));
+            case "prefix-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().outlineOpacity(v));
+            case "prefix-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().shadow().blurRadius(v));
+            case "prefix-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().shadow().color(v));
+            case "prefix-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().shadow().opacity(v));
+            case "prefix-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().shadow().stackCount(v));
+            case "prefix-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().shadow().horizontalOffset(v));
+            case "prefix-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "defaultFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().defaultFontStyle().shadow().verticalOffset(v));
             // Style: prefix selected font
-            case "prefix-selected-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().hexColor(v));
-            case "prefix-selected-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().opacity(v));
-            case "prefix-selected-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().name(v));
-            case "prefix-selected-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().weight(v));
-            case "prefix-selected-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().size(v));
-            case "prefix-selected-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().outlineThickness(v));
-            case "prefix-selected-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "outlineHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().outlineHexColor(v));
-            case "prefix-selected-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().outlineOpacity(v));
-            case "prefix-selected-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().shadow().blurRadius(v));
-            case "prefix-selected-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().shadow().hexColor(v));
-            case "prefix-selected-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().shadow().opacity(v));
-            case "prefix-selected-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().shadow().stackCount(v));
-            case "prefix-selected-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().shadow().horizontalOffset(v));
-            case "prefix-selected-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().selectedFontStyle().shadow().verticalOffset(v));
+            case "prefix-selected-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().color(v));
+            case "prefix-selected-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().opacity(v));
+            case "prefix-selected-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().name(v));
+            case "prefix-selected-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().weight(v));
+            case "prefix-selected-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().size(v));
+            case "prefix-selected-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().outlineThickness(v));
+            case "prefix-selected-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().outlineColor(v));
+            case "prefix-selected-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().outlineOpacity(v));
+            case "prefix-selected-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().shadow().blurRadius(v));
+            case "prefix-selected-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().shadow().color(v));
+            case "prefix-selected-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().shadow().opacity(v));
+            case "prefix-selected-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().shadow().stackCount(v));
+            case "prefix-selected-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().shadow().horizontalOffset(v));
+            case "prefix-selected-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "selectedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().selectedFontStyle().shadow().verticalOffset(v));
             // Style: prefix focused font
-            case "prefix-focused-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().hexColor(v));
-            case "prefix-focused-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().opacity(v));
-            case "prefix-focused-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "name"), v -> parseFontName(v, fontAvailability), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().name(v));
-            case "prefix-focused-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().weight(v));
-            case "prefix-focused-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().size(v));
-            case "prefix-focused-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().outlineThickness(v));
-            case "prefix-focused-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "outlineHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().outlineHexColor(v));
-            case "prefix-focused-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().outlineOpacity(v));
-            case "prefix-focused-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().shadow().blurRadius(v));
-            case "prefix-focused-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().shadow().hexColor(v));
-            case "prefix-focused-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().shadow().opacity(v));
-            case "prefix-focused-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().shadow().stackCount(v));
-            case "prefix-focused-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().shadow().horizontalOffset(v));
-            case "prefix-focused-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).prefixFontStyle().focusedFontStyle().shadow().verticalOffset(v));
+            case "prefix-focused-font-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().color(v));
+            case "prefix-focused-font-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().opacity(v));
+            case "prefix-focused-font-name" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "name"), v -> v, v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().name(v));
+            case "prefix-focused-font-weight" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "weight"), v -> FontWeight.of(v), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().weight(v));
+            case "prefix-focused-font-size" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "size"), v -> parseDouble(v, false, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().size(v));
+            case "prefix-focused-font-outline-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "outlineThickness"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().outlineThickness(v));
+            case "prefix-focused-font-outline-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "outlineColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().outlineColor(v));
+            case "prefix-focused-font-outline-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "outlineOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().outlineOpacity(v));
+            case "prefix-focused-font-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().shadow().blurRadius(v));
+            case "prefix-focused-font-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().shadow().color(v));
+            case "prefix-focused-font-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().shadow().opacity(v));
+            case "prefix-focused-font-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().shadow().stackCount(v));
+            case "prefix-focused-font-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().shadow().horizontalOffset(v));
+            case "prefix-focused-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().shadow().verticalOffset(v));
             // Style: box
-            case "box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).boxHexColor(v));
-            case "box-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).boxOpacity(v));
-            case "box-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(viewportFilter).boxBorderThickness(v));
-            case "box-border-length" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(viewportFilter).boxBorderLength(v));
-            case "box-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).boxBorderHexColor(v));
-            case "box-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).boxBorderOpacity(v));
-            case "box-border-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).boxBorderRadius(v));
-            case "box-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).boxShadow().blurRadius(v));
-            case "box-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "hexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).boxShadow().hexColor(v));
-            case "box-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).boxShadow().opacity(v));
-            case "box-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(viewportFilter).boxShadow().stackCount(v));
-            case "box-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).boxShadow().horizontalOffset(v));
-            case "box-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(viewportFilter).boxShadow().verticalOffset(v));
+            case "box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).boxColor(v));
+            case "box-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).boxOpacity(v));
+            case "box-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).boxBorderThickness(v));
+            case "box-border-length" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).boxBorderLength(v));
+            case "box-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).boxBorderColor(v));
+            case "box-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).boxBorderOpacity(v));
+            case "box-border-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).boxBorderRadius(v));
+            case "box-framed" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxFramed"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(screenFilter).boxFramed(v));
+            case "box-shadow-blur-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "blurRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).boxShadow().blurRadius(v));
+            case "box-shadow-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "color"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).boxShadow().color(v));
+            case "box-shadow-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "opacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).boxShadow().opacity(v));
+            case "box-shadow-stack-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "stackCount"), v -> parseUnsignedInteger(v, 1, 100), v -> hintMeshBuilder.style(screenFilter).boxShadow().stackCount(v));
+            case "box-shadow-horizontal-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "horizontalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).boxShadow().horizontalOffset(v));
+            case "box-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxShadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).boxShadow().verticalOffset(v));
             // Style: prefix box
-            case "prefix-box-enabled" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxEnabled"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(viewportFilter).prefixBoxEnabled(v));
-            case "prefix-box-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> { if (hintMeshBuilder.style(viewportFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(viewportFilter).prefixBoxEnabled(true); hintMeshBuilder.style(viewportFilter).prefixBoxBorderThickness(v); });
-            case "prefix-box-border-length" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> { if (hintMeshBuilder.style(viewportFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(viewportFilter).prefixBoxEnabled(true); hintMeshBuilder.style(viewportFilter).prefixBoxBorderLength(v); });
-            case "prefix-box-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderHexColor"), v -> checkColorFormat(v), v -> { if (hintMeshBuilder.style(viewportFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(viewportFilter).prefixBoxEnabled(true); hintMeshBuilder.style(viewportFilter).prefixBoxBorderHexColor(v); });
-            case "prefix-box-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> { if (hintMeshBuilder.style(viewportFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(viewportFilter).prefixBoxEnabled(true); hintMeshBuilder.style(viewportFilter).prefixBoxBorderOpacity(v); });
+            case "prefix-box-enabled" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxEnabled"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(screenFilter).prefixBoxEnabled(v));
+            case "prefix-box-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> { if (hintMeshBuilder.style(screenFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(screenFilter).prefixBoxEnabled(true); hintMeshBuilder.style(screenFilter).prefixBoxBorderThickness(v); });
+            case "prefix-box-border-length" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> { if (hintMeshBuilder.style(screenFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(screenFilter).prefixBoxEnabled(true); hintMeshBuilder.style(screenFilter).prefixBoxBorderLength(v); });
+            case "prefix-box-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderColor"), v -> Color.parse(v, colorAliases), v -> { if (hintMeshBuilder.style(screenFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(screenFilter).prefixBoxEnabled(true); hintMeshBuilder.style(screenFilter).prefixBoxBorderColor(v); });
+            case "prefix-box-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> { if (hintMeshBuilder.style(screenFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(screenFilter).prefixBoxEnabled(true); hintMeshBuilder.style(screenFilter).prefixBoxBorderOpacity(v); });
+            case "prefix-box-framed" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixBoxFramed"), v -> Boolean.parseBoolean(v), v -> { if (hintMeshBuilder.style(screenFilter).prefixBoxEnabled() == null) hintMeshBuilder.style(screenFilter).prefixBoxEnabled(true); hintMeshBuilder.style(screenFilter).prefixBoxFramed(v); });
+            // Style: element box
+            case "ui-element-box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).uiElementBoxColor(v));
+            case "ui-element-box-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).uiElementBoxOpacity(v));
+            case "ui-element-box-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).uiElementBoxBorderThickness(v));
+            case "ui-element-box-border-length" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).uiElementBoxBorderLength(v));
+            case "ui-element-box-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxBorderColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).uiElementBoxBorderColor(v));
+            case "ui-element-box-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).uiElementBoxBorderOpacity(v));
+            case "saved-box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedBoxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).savedBoxColor(v));
+            case "saved-box-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedBoxOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).savedBoxOpacity(v));
+            case "saved-box-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedBoxBorderColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).savedBoxBorderColor(v));
+            case "saved-box-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedBoxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).savedBoxBorderOpacity(v));
+            case "saved-ui-element-box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedUiElementBoxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).savedUiElementBoxColor(v));
+            case "saved-ui-element-box-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedUiElementBoxOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).savedUiElementBoxOpacity(v));
+            case "saved-ui-element-box-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedUiElementBoxBorderColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).savedUiElementBoxBorderColor(v));
+            case "saved-ui-element-box-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "savedUiElementBoxBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).savedUiElementBoxBorderOpacity(v));
+            case "ui-element-box-border-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxBorderRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).uiElementBoxBorderRadius(v));
+            case "ui-element-box-horizontal-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxHorizontalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).uiElementBoxHorizontalPadding(v));
+            case "ui-element-box-vertical-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "uiElementBoxVerticalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).uiElementBoxVerticalPadding(v));
             // Style: box dimensions
-            case "box-width-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxWidthPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).boxWidthPercent(v));
-            case "box-height-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxHeightPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).boxHeightPercent(v));
-            case "cell-horizontal-padding", "box-horizontal-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "cellHorizontalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).cellHorizontalPadding(v));
-            case "cell-vertical-padding", "box-vertical-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "cellVerticalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(viewportFilter).cellVerticalPadding(v));
-            case "center-offset-x", "hint-center-offset-x" -> ModePropertyHandler.of(prefix.append("styleByFilter", "hintCenterOffsetX"), v -> parseDouble(v, true, -5000, 5000), v -> hintMeshBuilder.style(viewportFilter).hintCenterOffsetX(v));
-            // Style: subgrid
-            case "subgrid-row-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridRowCount"), v -> parseUnsignedInteger(v, 1, 1_000), v -> hintMeshBuilder.style(viewportFilter).subgridRowCount(v));
-            case "subgrid-column-count" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridColumnCount"), v -> parseUnsignedInteger(v, 1, 1_000), v -> hintMeshBuilder.style(viewportFilter).subgridColumnCount(v));
-            case "subgrid-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(viewportFilter).subgridBorderThickness(v));
-            case "subgrid-border-length" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(viewportFilter).subgridBorderLength(v));
-            case "subgrid-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridBorderHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).subgridBorderHexColor(v));
-            case "subgrid-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "subgridBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).subgridBorderOpacity(v));
-            // Style: animation & background
-            case "transition-animation-enabled" -> ModePropertyHandler.of(prefix.append("styleByFilter", "transitionAnimationEnabled"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(viewportFilter).transitionAnimationEnabled(v));
-            case "transition-animation-duration-millis" -> ModePropertyHandler.of(prefix.append("styleByFilter", "transitionAnimationDuration"), v -> parseDuration(v), v -> hintMeshBuilder.style(viewportFilter).transitionAnimationDuration(v));
-            case "fade-animation-enabled" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fadeAnimationEnabled"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(viewportFilter).fadeAnimationEnabled(v));
-            case "fade-animation-duration-millis" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fadeAnimationDuration"), v -> parseDuration(v), v -> hintMeshBuilder.style(viewportFilter).fadeAnimationDuration(v));
-            case "background-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundHexColor"), v -> checkColorFormat(v), v -> hintMeshBuilder.style(viewportFilter).backgroundHexColor(v));
-            case "background-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(viewportFilter).backgroundOpacity(v));
+            case "box-width-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxWidthPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).boxWidthPercent(v));
+            case "box-height-percent" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxHeightPercent"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).boxHeightPercent(v));
+            case "box-horizontal-padding", "cell-horizontal-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxHorizontalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).boxHorizontalPadding(v));
+            case "box-vertical-padding", "cell-vertical-padding" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxVerticalPadding"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).boxVerticalPadding(v));
+            case "center-offset-x", "hint-center-offset-x" -> ModePropertyHandler.of(prefix.append("styleByFilter", "hintCenterOffsetX"), v -> parseDouble(v, true, -5000, 5000), v -> hintMeshBuilder.style(screenFilter).hintCenterOffsetX(v));
+            case "label-override" -> ModePropertyHandler.of(prefix.append("styleByFilter", "labelOverride"), v -> parseKeyList(v, keyAliases, keyResolver), v -> hintMeshBuilder.style(screenFilter).labelOverride(v));
+            // Style: transitions & background
+            case "transition-enabled" -> ModePropertyHandler.of(prefix.append("styleByFilter", "transition", "enabled"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(screenFilter).transition().enabled(v));
+            case "transition-duration-millis" -> ModePropertyHandler.of(prefix.append("styleByFilter", "transition", "duration"), v -> parseDuration(v), v -> hintMeshBuilder.style(screenFilter).transition().duration(v));
+            case "transition-easing" -> ModePropertyHandler.of(prefix.append("styleByFilter", "transition", "easing"), v -> parseEasing(v), v -> hintMeshBuilder.style(screenFilter).transition().easing(v));
+            case "fade-enabled" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fade", "enabled"), v -> Boolean.parseBoolean(v), v -> hintMeshBuilder.style(screenFilter).fade().enabled(v));
+            case "fade-duration-millis" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fade", "duration"), v -> parseDuration(v), v -> hintMeshBuilder.style(screenFilter).fade().duration(v));
+            case "fade-easing" -> ModePropertyHandler.of(prefix.append("styleByFilter", "fade", "easing"), v -> parseEasing(v), v -> hintMeshBuilder.style(screenFilter).fade().easing(v));
+            case "background-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).backgroundColor(v));
+            case "background-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).backgroundOpacity(v));
+            case "background-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).backgroundBorderThickness(v));
+            case "background-border-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundBorderColor"), v -> Color.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).backgroundBorderColor(v));
+            case "background-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).backgroundBorderOpacity(v));
+            case "background-border-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundBorderRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).backgroundBorderRadius(v));
             // @formatter:on
             default -> null;
         };
-    }
-
-    private static String checkColorFormat(String propertyValue) {
-        if (!propertyValue.matches("^#?([a-fA-F0-9]{6})$"))
-            throw new IllegalArgumentException(
-                    "Invalid color " + propertyValue +
-                    ": a color should be in the #FFFFFF format");
-        return propertyValue;
     }
 
 
@@ -2547,6 +3635,107 @@ public class ConfigurationParser {
                                          List<ComboPropertyValue> comboValues) {
         record ComboPropertyValue(String comboString, String remapString,
                                   String valueString) {}
+    }
+
+    /** A property whose value is resolved per screen: one value per screen filter. */
+    private record ScreenFilterProperty(ScreenFilter screenFilter,
+                                        Function<ScreenFilter, ModePropertyHandler> handlerByFilter,
+                                        Map<String, Set<ScreenFilter>> aliasByName) {
+
+        Consumer<String> setter(ScreenFilter screenFilter) {
+            return handlerByFilter.apply(screenFilter).modeBuilderSetter();
+        }
+    }
+
+    private record ScreenFiltersAndRemainingCombo(Set<ScreenFilter> screenFilters,
+                                                  String remainingCombo) {
+    }
+
+    private static final Pattern comboPreconditionPattern =
+            Pattern.compile("_\\{([^{}]+)\\}");
+
+    /**
+     * Takes the screen filters out of a combo's preconditions: they pick the screens the
+     * value applies to, they are not conditions. A space means AND as it does between keys,
+     * so two filters have to be alternatives ({@code |}): a screen is never both.
+     */
+    private static ScreenFiltersAndRemainingCombo extractScreenFilters(
+            String comboString, String label,
+            Map<String, Set<ScreenFilter>> aliasByName) {
+        Set<ScreenFilter> screenFilters = new LinkedHashSet<>();
+        StringBuilder remainingCombo = new StringBuilder();
+        int appendBeginIndex = 0;
+        Matcher matcher = comboPreconditionPattern.matcher(comboString);
+        while (matcher.find()) {
+            List<String> remainingTokens = new ArrayList<>();
+            List<Set<ScreenFilter>> blockScreenFilters = new ArrayList<>();
+            for (String token : matcher.group(1).strip().split("\\s+")) {
+                Set<ScreenFilter> tokenScreenFilters =
+                        screenFilters(token, aliasByName);
+                if (tokenScreenFilters == null)
+                    remainingTokens.add(token);
+                else
+                    blockScreenFilters.add(tokenScreenFilters);
+            }
+            if (blockScreenFilters.isEmpty())
+                continue;
+            long separatorCount = remainingTokens.stream().filter("|"::equals).count();
+            boolean filtersOnly = separatorCount == remainingTokens.size();
+            if (filtersOnly) {
+                if (separatorCount != blockScreenFilters.size() - 1)
+                    throw screenFiltersCannotBeSatisfied(label, comboString);
+                remainingTokens.clear();
+            }
+            else if (blockScreenFilters.size() > 1 || separatorCount != 0)
+                throw screenFiltersCannotBeSatisfied(label, comboString);
+            blockScreenFilters.forEach(screenFilters::addAll);
+            remainingCombo.append(comboString, appendBeginIndex, matcher.start());
+            if (!remainingTokens.isEmpty())
+                remainingCombo.append("_{")
+                              .append(String.join(" ", remainingTokens))
+                              .append('}');
+            appendBeginIndex = matcher.end();
+        }
+        remainingCombo.append(comboString, appendBeginIndex, comboString.length());
+        return new ScreenFiltersAndRemainingCombo(screenFilters,
+                remainingCombo.toString().strip());
+    }
+
+    private static IllegalArgumentException screenFiltersCannotBeSatisfied(String label,
+                                                                           String comboString) {
+        return new IllegalArgumentException("[" + label + "] " + comboString +
+                                           " can never be satisfied: a screen matches a single screen filter, so separate filters with | or give each of them its own branch");
+    }
+
+    /** Gives each filter's entry the property's default, unless a branch already valued it. */
+    private static void writeDefaultToUnvaluedFilters(ScreenFilterProperty property,
+                                                      Set<ScreenFilter> screenFilters,
+                                                      Set<ScreenFilter> valuedScreenFilters,
+                                                      String defaultValue) {
+        for (ScreenFilter screenFilter : screenFilters)
+            if (valuedScreenFilters.add(screenFilter))
+                property.setter(screenFilter).accept(defaultValue);
+    }
+
+    /**
+     * The filters one token of a {@code _{}} block stands for: a filter, an alias, or a
+     * {@code *}-list of either. Null if the token is none of those.
+     */
+    private static Set<ScreenFilter> screenFilters(String token,
+                                                   Map<String, Set<ScreenFilter>> aliasByName) {
+        Set<ScreenFilter> screenFilters = new LinkedHashSet<>();
+        for (String orToken : token.split("\\*")) {
+            Set<ScreenFilter> aliasScreenFilters = aliasByName.get(orToken);
+            if (aliasScreenFilters != null) {
+                screenFilters.addAll(aliasScreenFilters);
+                continue;
+            }
+            ScreenFilter screenFilter = ScreenFilter.of(orToken);
+            if (screenFilter == null)
+                return null;
+            screenFilters.add(screenFilter);
+        }
+        return screenFilters;
     }
 
     /**
@@ -2618,42 +3807,75 @@ public class ConfigurationParser {
             Map<String, AppAlias> appAliases,
             KeyResolver keyResolver,
             Set<String> allVariableNames,
-            ViewportFilter viewportFilter) {
+            ScreenFilterProperty screenFilterProperty) {
         setPropertyPaths.add(propertyPath);
         SplitComboProperty splitComboProperty = splitComboProperties(propertyValue);
         if (splitComboProperty == null)
             return false;
-        if (splitComboProperty.defaultValue() != null)
-            modeBuilderSetter.accept(splitComboProperty.defaultValue());
+        String defaultValue = splitComboProperty.defaultValue();
+        if (defaultValue != null && isTimeline(defaultValue))
+            throw new IllegalArgumentException(
+                    "Invalid default value " + defaultValue +
+                    ": keyframes belong in a branch on an animation, like _{clickburstanimation} -> " +
+                    defaultValue);
+        if (defaultValue != null)
+            modeBuilderSetter.accept(defaultValue);
+        ScreenFilter screenFilter = screenFilterProperty == null ? null :
+                screenFilterProperty.screenFilter();
         ModePropertyPath mutationPath =
-                viewportFilter != null &&
-                !(viewportFilter instanceof AnyViewportFilter) ?
-                        propertyPath.withViewportFilter(viewportFilter) :
+                screenFilter != null &&
+                !(screenFilter instanceof AnyScreenFilter) ?
+                        propertyPath.withScreenFilter(screenFilter) :
                         propertyPath;
         String label = modeName + "." + String.join(".", propertyPath.fieldNames());
+        Set<ScreenFilter> valuedScreenFilters = new HashSet<>();
         for (SplitComboProperty.ComboPropertyValue comboPropertyValue : splitComboProperty.comboValues()) {
-            List<Combo> combos = parseCombos(comboPropertyValue.comboString(), label,
+            String comboString = comboPropertyValue.comboString();
+            List<ModePropertyPath> comboMutationPaths = List.of(mutationPath);
+            // A hint mesh spans screens, so a filter picks the entries the value applies to.
+            // Elsewhere, it stays in the combo string as the screen filter key it names.
+            if (screenFilterProperty != null) {
+                ScreenFiltersAndRemainingCombo screenFiltersAndRemainingCombo =
+                        extractScreenFilters(comboString, label,
+                                screenFilterProperty.aliasByName());
+                Set<ScreenFilter> comboScreenFilters =
+                        screenFiltersAndRemainingCombo.screenFilters();
+                if (!comboScreenFilters.isEmpty()) {
+                    comboString = screenFiltersAndRemainingCombo.remainingCombo();
+                    if (comboString.isEmpty()) {
+                        // The filters are the whole precondition: same as the property key suffix.
+                        for (ScreenFilter comboScreenFilter : comboScreenFilters)
+                            screenFilterProperty.setter(comboScreenFilter)
+                                                .accept(comboPropertyValue.valueString());
+                        valuedScreenFilters.addAll(comboScreenFilters);
+                        continue;
+                    }
+                    // The entries have to exist for the mutation to find them, without
+                    // overwriting what an earlier branch gave them.
+                    if (defaultValue != null)
+                        writeDefaultToUnvaluedFilters(screenFilterProperty,
+                                comboScreenFilters, valuedScreenFilters, defaultValue);
+                    comboMutationPaths = comboScreenFilters.stream()
+                                                           .map(propertyPath::withScreenFilter)
+                                                           .toList();
+                }
+            }
+            List<Combo> combos = parseCombos(comboString, label,
                     defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
                     allVariableNames);
             for (Combo combo : combos) {
                 Object parsedValue;
                 Set<String> aliasNames = combo.sequence().aliasNames();
                 Set<String> negatedNames = combo.sequence().negatedNames();
-                List<String> valueTokens = List.of(
-                        comboPropertyValue.valueString().split(" "));
-                List<String> unresolvedNames = new ArrayList<>();
-                Set<String> unresolvedNameNegatedSet = new HashSet<>();
-                for (String token : valueTokens) {
-                    if (aliasNames.contains(token)) {
-                        unresolvedNames.add(token);
-                    }
-                    else if (token.startsWith("!") &&
-                             negatedNames.contains(token.substring(1))) {
-                        unresolvedNames.add(token.substring(1));
-                        unresolvedNameNegatedSet.add(token.substring(1));
-                    }
-                }
-                if (!unresolvedNames.isEmpty()) {
+                Set<String> unresolvedPlaceholders = new HashSet<>();
+                Matcher placeholders = UnresolvedAliasComboPropertyValue.placeholderPattern
+                        .matcher(comboPropertyValue.valueString());
+                while (placeholders.find())
+                    if (placeholders.group(1).isEmpty() ?
+                            aliasNames.contains(placeholders.group(2)) :
+                            negatedNames.contains(placeholders.group(2)))
+                        unresolvedPlaceholders.add(placeholders.group());
+                if (!unresolvedPlaceholders.isEmpty()) {
                     Map<String, AliasRemap<String>> remap =
                             comboPropertyValue.remapString() != null ?
                                     AliasRemap.stringValues(
@@ -2662,16 +3884,29 @@ public class ConfigurationParser {
                                             "mutation") :
                                     Map.of();
                     parsedValue = new UnresolvedAliasComboPropertyValue(
-                            unresolvedNames, unresolvedNameNegatedSet, remap);
+                            parseText(comboPropertyValue.valueString(), keyAliases,
+                                    unresolvedPlaceholders), remap);
+                }
+                else if (isTimeline(comboPropertyValue.valueString())) {
+                    for (ModePropertyPath comboMutationPath : comboMutationPaths)
+                        if (!List.of("indicator", "hideCursor")
+                                 .contains(comboMutationPath.fieldNames().getFirst()))
+                            throw new IllegalArgumentException(
+                                    "Invalid keyframes " + comboPropertyValue.valueString() +
+                                    ": only indicator and hide-cursor properties have keyframes");
+                    parsedValue = parseTimeline(comboPropertyValue.valueString(), combo,
+                            valueParser, keyResolver);
                 }
                 else {
                     parsedValue = valueParser.apply(comboPropertyValue.valueString());
                 }
-                Command command = new Command.MutateMode(modeName, mutationPath,
-                        parsedValue, combo);
-                mutateModeCommandMap
-                        .computeIfAbsent(combo, c -> new ArrayList<>())
-                        .add(command);
+                for (ModePropertyPath comboMutationPath : comboMutationPaths) {
+                    Command command = new Command.MutateMode(modeName, comboMutationPath,
+                            parsedValue, combo);
+                    mutateModeCommandMap
+                            .computeIfAbsent(combo, c -> new ArrayList<>())
+                            .add(command);
+                }
             }
         }
         return true;
@@ -2689,6 +3924,26 @@ public class ConfigurationParser {
                     "Invalid property value in " + integer + ": " +
                     " must be less than or equal to " + max);
         return integer;
+    }
+
+    private static List<Point> parsePoints(String propertyValue) {
+        List<Point> points = new ArrayList<>();
+        for (String point : propertyValue.strip().split("\\s+")) {
+            String[] coordinates = point.split(",");
+            if (coordinates.length != 2)
+                throw new IllegalArgumentException(
+                        "Invalid point " + point + ": must be x,y, like 0,-10");
+            points.add(new Point(Double.parseDouble(coordinates[0]),
+                    Double.parseDouble(coordinates[1])));
+        }
+        if (points.size() < 3)
+            throw new IllegalArgumentException(
+                    "Invalid points " + propertyValue + ": a path needs at least 3 points");
+        if (points.stream().map(Point::x).distinct().count() == 1 ||
+            points.stream().map(Point::y).distinct().count() == 1)
+            throw new IllegalArgumentException(
+                    "Invalid points " + propertyValue + ": a path needs a width and a height");
+        return List.copyOf(points);
     }
 
     private static double parseNonZeroPercent(String propertyValue,
@@ -2710,14 +3965,22 @@ public class ConfigurationParser {
         return percent;
     }
 
-    private static List<Key> parseHintKeys(String propertyValue,
-                                           Map<String, KeyAlias> keyAliases,
-                                           KeyResolver keyResolver) {
+    private static List<Key> parseKeyList(String propertyValue,
+                                          Map<String, KeyAlias> keyAliases,
+                                          KeyResolver keyResolver) {
         KeyAlias alias = keyAliases.get(propertyValue);
         if (alias != null)
             return List.copyOf(alias.keys());
         String[] split = propertyValue.split("\\s+");
-        List<Key> hintKeys = Arrays.stream(split).map(keyResolver::resolve).toList();
+        return Arrays.stream(split).map(keyResolver::resolve).toList();
+    }
+
+    private static List<Key> parseHintKeys(String propertyValue,
+                                           Map<String, KeyAlias> keyAliases,
+                                           KeyResolver keyResolver) {
+        if (propertyValue.equals("none"))
+            return List.of();
+        List<Key> hintKeys = parseKeyList(propertyValue, keyAliases, keyResolver);
         if (hintKeys.size() <= 1)
             // Even 1 key is not enough because we use fixed-length hints.
             throw new IllegalArgumentException(
@@ -2726,78 +3989,143 @@ public class ConfigurationParser {
         return hintKeys;
     }
 
+    private static String positionHistoryName(String propertyKey, String propertyValue,
+                                              Set<String> positionHistoryNames) {
+        if (!positionHistoryNames.contains(propertyValue))
+            throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": undefined position history " + propertyValue);
+        return propertyValue;
+    }
+
     private static HintMeshType.HintMeshTypeType parseHintMeshTypeType(String propertyKey,
-                                                                       String propertyValue) {
+                                                                       String propertyValue,
+                                                                       Set<String> positionHistoryNames) {
+        if (isPositionHistoryName(propertyValue)) {
+            if (!positionHistoryNames.contains(propertyValue))
+                throw new IllegalArgumentException(
+                        "Invalid property value in " + propertyKey + "=" + propertyValue +
+                        ": undefined position history " + propertyValue);
+            return HintMeshType.HintMeshTypeType.POSITION_HISTORY;
+        }
         return switch (propertyValue) {
             case "grid" -> HintMeshType.HintMeshTypeType.GRID;
-            case "position-history" ->
-                    HintMeshType.HintMeshTypeType.POSITION_HISTORY;
-            case "ui" -> HintMeshType.HintMeshTypeType.UI;
+            case "ui-accessibility" -> HintMeshType.HintMeshTypeType.UI_ACCESSIBILITY;
+            case "ui" -> {
+                logger.warn(
+                        "hint.type=ui has been deprecated: use overlay.type=ui-accessibility instead");
+                yield HintMeshType.HintMeshTypeType.UI_ACCESSIBILITY;
+            }
+            case "ui-vision" -> HintMeshType.HintMeshTypeType.UI_VISION;
             default -> throw new IllegalArgumentException(
                     "Invalid property value in " + propertyKey + "=" + propertyValue +
                     ": type should be one of " +
-                    List.of("grid", "position-history", "ui"));
+                    List.of("grid", "position-history", "ui-accessibility",
+                            "ui-vision"));
         };
     }
 
-    private static HintGridAreaType parseHintGridAreaType(String propertyKey, String propertyValue) {
+    private static AreaSizeSource parseAreaSizeSource(String propertyKey, String propertyValue) {
         return switch (propertyValue) {
-            case "active-screen" -> HintGridAreaType.ACTIVE_SCREEN;
-            case "active-window" -> HintGridAreaType.ACTIVE_WINDOW;
-            case "all-screens" -> HintGridAreaType.ALL_SCREENS;
+            case "active-screen" -> AreaSizeSource.ACTIVE_SCREEN;
+            case "active-window" -> AreaSizeSource.ACTIVE_WINDOW;
+            case "all-screens" -> AreaSizeSource.ALL_SCREENS;
+            case "last-selected-hint-cell" -> AreaSizeSource.LAST_SELECTED_HINT_CELL;
+            case "last-overlay-area" -> AreaSizeSource.LAST_OVERLAY_AREA;
             default -> throw new IllegalArgumentException(
                     "Invalid property value in " + propertyKey + "=" + propertyValue +
-                    ": type should be one of " +
-                    List.of("active-screen", "active-window", "all-screens"));
+                    ": should be one of " +
+                    List.of("active-screen", "active-window", "all-screens",
+                            "last-selected-hint-cell", "last-overlay-area"));
         };
     }
 
-    private static ActiveScreenHintGridAreaCenter parseActiveScreenHintGridAreaCenter(
+    private static UiHintOrder parseUiHintOrder(String propertyKey, String propertyValue) {
+        return switch (propertyValue) {
+            case "top-to-bottom" -> UiHintOrder.TOP_TO_BOTTOM;
+            case "bottom-to-top" -> UiHintOrder.BOTTOM_TO_TOP;
+            case "left-to-right" -> UiHintOrder.LEFT_TO_RIGHT;
+            case "right-to-left" -> UiHintOrder.RIGHT_TO_LEFT;
+            case "active-screen-center" -> UiHintOrder.ACTIVE_SCREEN_CENTER;
+            case "mouse" -> UiHintOrder.MOUSE;
+            case "target" -> UiHintOrder.TARGET;
+            case "last-selected-hint" -> UiHintOrder.LAST_SELECTED_HINT;
+            case "active-window-center" -> UiHintOrder.ACTIVE_WINDOW_CENTER;
+            case "last-overlay-area-center" -> UiHintOrder.LAST_OVERLAY_AREA_CENTER;
+            default -> throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": should be one of " +
+                    List.of("top-to-bottom", "bottom-to-top", "left-to-right",
+                            "right-to-left", "active-screen-center", "mouse", "target",
+                            "last-selected-hint", "active-window-center",
+                            "last-overlay-area-center"));
+        };
+    }
+
+    private static HintCellSizing.HintCellSizingType parseHintCellSizingType(
             String propertyKey, String propertyValue) {
         return switch (propertyValue) {
-            case "screen-center" -> ActiveScreenHintGridAreaCenter.SCREEN_CENTER;
-            case "mouse" -> ActiveScreenHintGridAreaCenter.MOUSE;
-            case "last-selected-hint" -> ActiveScreenHintGridAreaCenter.LAST_SELECTED_HINT;
+            case "fixed" -> HintCellSizing.HintCellSizingType.FIXED;
+            case "fit" -> HintCellSizing.HintCellSizingType.FIT;
             default -> throw new IllegalArgumentException(
                     "Invalid property value in " + propertyKey + "=" + propertyValue +
-                    ": expected one of " + List.of("screen-center", "mouse", "last-selected-hint"));
+                    ": should be one of " + List.of("fixed", "fit"));
         };
     }
 
-    private static GridAreaType parseGridAreaType(String propertyKey,
+    private static AreaCenter parseAreaCenter(String propertyKey, String propertyValue) {
+        return switch (propertyValue) {
+            case "active-screen-center" -> AreaCenter.ACTIVE_SCREEN_CENTER;
+            case "screen-center" -> {
+                logger.warn(propertyKey + "=screen-center has been deprecated: use " +
+                            propertyKey + "=active-screen-center instead");
+                yield AreaCenter.ACTIVE_SCREEN_CENTER;
+            }
+            case "mouse" -> AreaCenter.MOUSE;
+            case "target" -> AreaCenter.TARGET;
+            case "last-selected-hint" -> AreaCenter.LAST_SELECTED_HINT;
+            case "active-window-center" -> AreaCenter.ACTIVE_WINDOW_CENTER;
+            case "last-overlay-area-center" -> AreaCenter.LAST_OVERLAY_AREA_CENTER;
+            default -> throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": expected one of " + List.of("active-screen-center", "mouse", "target",
+                            "last-selected-hint", "active-window-center",
+                            "last-overlay-area-center"));
+        };
+    }
+
+    private static PositionHistoryIsolation parsePositionHistoryIsolation(String propertyKey,
+                                                                         String propertyValue) {
+        return switch (propertyValue) {
+            case "none" -> PositionHistoryIsolation.NONE;
+            case "active-app" -> PositionHistoryIsolation.ACTIVE_APP;
+            default -> throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": expected one of " + List.of("none", "active-app"));
+        };
+    }
+
+    private static KeyRedaction parseKeyRedaction(String propertyKey,
                                                   String propertyValue) {
         return switch (propertyValue) {
-            case "active-screen" -> GridAreaType.ACTIVE_SCREEN;
-            case "active-window" -> GridAreaType.ACTIVE_WINDOW;
-            default -> throw new IllegalArgumentException(
-                    "Invalid property value in " + propertyKey + "=" + propertyValue +
-                    ": type should be one of " +
-                    List.of("active-screen", "active-window"));
-        };
-    }
-
-    private static Synchronization parseSynchronization(String propertyKey, String propertyValue) {
-        return switch (propertyValue) {
-            case "mouse-and-grid-center-unsynchronized" ->
-                    Synchronization.MOUSE_AND_GRID_CENTER_UNSYNCHRONIZED;
-            case "mouse-follows-grid-center" -> Synchronization.MOUSE_FOLLOWS_GRID_CENTER;
-            case "grid-center-follows-mouse" -> Synchronization.GRID_CENTER_FOLLOWS_MOUSE;
-            default -> throw new IllegalArgumentException(
-                    "Invalid property value in " + propertyKey + "=" + propertyValue +
-                    ": expected one of " + List.of("mouse-and-grid-center-unsynchronized",
-                            "mouse-follows-grid-center", "grid-center-follows-mouse"));
-        };
-    }
-
-    private static ZoomCenter parseZoomCenter(String propertyKey, String propertyValue) {
-        return switch (propertyValue) {
-            case "screen-center" -> ZoomCenter.SCREEN_CENTER;
-            case "mouse" -> ZoomCenter.MOUSE;
-            case "last-selected-hint" -> ZoomCenter.LAST_SELECTED_HINT;
+            case "none" -> KeyRedaction.NONE;
+            case "pseudonymize" -> KeyRedaction.PSEUDONYMIZE;
+            case "anonymize" -> KeyRedaction.ANONYMIZE;
             default -> throw new IllegalArgumentException(
                     "Invalid property value in " + propertyKey + "=" + propertyValue +
                     ": expected one of " +
-                    List.of("screen-center", "mouse", "last-selected-hint"));
+                    List.of("none", "pseudonymize", "anonymize"));
+        };
+    }
+
+    private static ZoomAreaSizeSource parseZoomAreaSizeSource(String propertyKey, String propertyValue) {
+        return switch (propertyValue) {
+            case "percent" -> ZoomAreaSizeSource.PERCENT;
+            case "last-selected-hint-cell" -> ZoomAreaSizeSource.LAST_SELECTED_HINT_CELL;
+            default -> throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": expected one of " +
+                    List.of("percent", "last-selected-hint-cell"));
         };
     }
 
@@ -2822,7 +4150,11 @@ public class ConfigurationParser {
             case "smootherstep" -> new Easing.Smootherstep();
             case "logarithmic" -> new Easing.Logarithmic();
             case "exponential" -> new Easing.Exponential();
-            default -> new Easing.Polynomial(Double.parseDouble(propertyValue));
+            case "step" -> new Easing.Step();
+            default -> propertyValue.startsWith("exponential-out-") ?
+                    new Easing.ExponentialOut(Double.parseDouble(
+                            propertyValue.substring("exponential-out-".length()))) :
+                    new Easing.Polynomial(Double.parseDouble(propertyValue));
         };
     }
 
@@ -2852,6 +4184,8 @@ public class ConfigurationParser {
         List<Combo> combos =
                 parseCombos(multiComboString, label, defaultComboMoveDuration,
                         keyAliases, appAliases, keyResolver, allVariableNames);
+        if (combos.isEmpty())
+            commandsByCombo.computeIfAbsent(null, combo -> new ArrayList<>()).add(command);
         for (Combo combo : combos)
             commandsByCombo.computeIfAbsent(combo, combo1 -> new ArrayList<>())
                            .add(command);
@@ -2864,6 +4198,8 @@ public class ConfigurationParser {
                                            Map<String, AppAlias> appAliases,
                                            KeyResolver keyResolver,
                                            Set<String> allVariableNames) {
+        if (multiComboString.equals("none"))
+            return List.of();
         return Combo.multiCombo(label, multiComboString, defaultComboMoveDuration,
                 keyAliases, appAliases, keyResolver, allVariableNames);
     }
@@ -2874,9 +4210,6 @@ public class ConfigurationParser {
     private record ModeNode(String modeName, List<ModeNode> referencedModes) {
     }
 
-    private record PropertyNode(PropertyKey propertyKey,
-                                List<PropertyNode> childProperties) {
-    }
 
     /**
      * Settings for {@code idle-mode.double-tap-to-normal.*}. When {@link #keyAlias} is set,
@@ -2897,10 +4230,11 @@ public class ConfigurationParser {
         Property<AtomicReference<Boolean>> pushModeToHistoryStack;
         Property<AtomicReference<String>> modeAfterUnhandledKeyPress;
         ComboMapConfigurationBuilder comboMap;
-        Property<MouseBuilder> mouse;
+        Property<MovementConfigurationBuilder> mouse;
+        Property<VelocityConfigurationBuilder> target;
         Property<WheelBuilder> wheel;
-        Property<GridConfigurationBuilder> grid;
         Property<HintMeshConfigurationBuilder> hintMesh;
+        Property<HintMeshConfigurationBuilder> grid;
         Property<ModeTimeoutBuilder> timeout;
         Property<IndicatorConfigurationBuilder> indicator;
         Property<HideCursorBuilder> hideCursor;
@@ -2942,15 +4276,21 @@ public class ConfigurationParser {
                         builder.set(parent.get());
                 }
             };
-            mouse = new Property<>("mouse", modeName, propertyByKey, new MouseBuilder()) {
+            mouse = new Property<>("mouse", modeName, propertyByKey, new MovementConfigurationBuilder()) {
                 @Override
                 void extend(Object parent_) {
-                    MouseBuilder parent = (MouseBuilder) parent_;
+                    MovementConfigurationBuilder parent = (MovementConfigurationBuilder) parent_;
                     extendVelocity(builder.velocity(), parent.velocity());
                     if (builder.smoothJumpEnabled() == null)
                         builder.smoothJumpEnabled(parent.smoothJumpEnabled());
                     if (builder.smoothJumpVelocity() == null)
                         builder.smoothJumpVelocity(parent.smoothJumpVelocity());
+                }
+            };
+            target = new Property<>("target", modeName, propertyByKey, new VelocityConfigurationBuilder()) {
+                @Override
+                void extend(Object parent_) {
+                    extendVelocity(builder, (VelocityConfigurationBuilder) parent_);
                 }
             };
             wheel = new Property<>("wheel", modeName, propertyByKey, new WheelBuilder()) {
@@ -2960,40 +4300,8 @@ public class ConfigurationParser {
                     extendVelocity(builder.velocity(), parent.velocity());
                 }
             };
-            grid = new Property<>("grid", modeName, propertyByKey,
-                    new GridConfigurationBuilder()) {
-                @Override
-                void extend(Object parent_) {
-                    GridConfigurationBuilder parent = (GridConfigurationBuilder) parent_;
-                    if (builder.area().type() == null)
-                        builder.area().type(parent.area().type());
-                    if (builder.area().widthPercent() == null)
-                        builder.area().widthPercent(parent.area().widthPercent());
-                    if (builder.area().heightPercent() == null)
-                        builder.area().heightPercent(parent.area().heightPercent());
-                    if (builder.area().topInset() == null)
-                        builder.area().topInset(parent.area().topInset());
-                    if (builder.area().bottomInset() == null)
-                        builder.area().bottomInset(parent.area().bottomInset());
-                    if (builder.area().leftInset() == null)
-                        builder.area().leftInset(parent.area().leftInset());
-                    if (builder.area().rightInset() == null)
-                        builder.area().rightInset(parent.area().rightInset());
-                    if (builder.synchronization() == null)
-                        builder.synchronization(parent.synchronization());
-                    if (builder.rowCount() == null)
-                        builder.rowCount(parent.rowCount());
-                    if (builder.columnCount() == null)
-                        builder.columnCount(parent.columnCount());
-                    if (builder.lineVisible() == null)
-                        builder.lineVisible(parent.lineVisible());
-                    if (builder.lineHexColor() == null)
-                        builder.lineHexColor(parent.lineHexColor());
-                    if (builder.lineThickness() == null)
-                        builder.lineThickness(parent.lineThickness());
-                }
-            };
-            hintMesh = new HintMeshProperty(modeName, propertyByKey);
+            hintMesh = new HintMeshProperty("overlay", modeName, propertyByKey);
+            grid = new HintMeshProperty("grid", modeName, propertyByKey);
             timeout = new Property<>("timeout", modeName, propertyByKey,
                     new ModeTimeoutBuilder()) {
                 @Override
@@ -3036,14 +4344,15 @@ public class ConfigurationParser {
                     ZoomConfigurationBuilder parent = (ZoomConfigurationBuilder) parent_;
                     if (builder.percent() == null)
                         builder.percent(parent.percent());
+                    if (builder.areaSizeSource() == null)
+                        builder.areaSizeSource(parent.areaSizeSource());
+                    if (builder.areaWidthPercent() == null)
+                        builder.areaWidthPercent(parent.areaWidthPercent());
+                    if (builder.areaHeightPercent() == null)
+                        builder.areaHeightPercent(parent.areaHeightPercent());
                     if (builder.center() == null)
                         builder.center(parent.center());
-                    if (builder.animationEnabled() == null)
-                        builder.animationEnabled(parent.animationEnabled());
-                    if (builder.animationEasing() == null)
-                        builder.animationEasing(parent.animationEasing());
-                    if (builder.animationDurationMillis() == null)
-                        builder.animationDurationMillis(parent.animationDurationMillis());
+                    builder.transition().extend(parent.transition());
                 }
             };
         }
@@ -3053,18 +4362,18 @@ public class ConfigurationParser {
                     pushModeToHistoryStack.builder.get(),
                     modeAfterUnhandledKeyPress.builder.get(),
                     comboMap.build(),
-                    mouse.builder.build(), wheel.builder.build(), grid.builder.build(),
+                    mouse.builder.build(), target.builder.build(), wheel.builder.build(),
                     hintMesh.builder.build(), timeout.builder.build(),
                     indicator.builder.build(), hideCursor.builder.build(),
-                    zoom.builder.build());
+                    zoom.builder.build(), Map.of());
         }
 
         private static class HintMeshProperty
                 extends Property<HintMeshConfigurationBuilder> {
 
-            public HintMeshProperty(String modeName,
+            public HintMeshProperty(String name, String modeName,
                                     Map<PropertyKey, Property<?>> propertyByKey) {
-                super("hint", modeName, propertyByKey,
+                super(name, modeName, propertyByKey,
                         new HintMeshConfigurationBuilder());
             }
 
@@ -3076,14 +4385,23 @@ public class ConfigurationParser {
                     builder.enabled(parent.enabled());
                 if (builder.visible() == null)
                     builder.visible(parent.visible());
-                if (builder.mouseMovement() == null)
-                    builder.mouseMovement(parent.mouseMovement());
+                if (builder.excludeFromCapture() == null)
+                    builder.excludeFromCapture(parent.excludeFromCapture());
+                if (builder.mouseFollowsTarget() == null)
+                    builder.mouseFollowsTarget(parent.mouseFollowsTarget());
+                if (builder.targetFollowsOverlayCenter() == null)
+                    builder.targetFollowsOverlayCenter(parent.targetFollowsOverlayCenter());
                 if (builder.type().type() == null)
                     builder.type().type(parent.type().type());
-                if (builder.type().gridArea().type() == null)
-                    builder.type().gridArea().type(parent.type().gridArea().type());
-                if (builder.type().gridArea().activeScreenHintGridAreaCenter() == null)
-                    builder.type().gridArea().activeScreenHintGridAreaCenter(parent.type().gridArea().activeScreenHintGridAreaCenter());
+                builder.type().area().extend(parent.type().area());
+                if (builder.type().uiOrder() == null)
+                    builder.type().uiOrder(parent.type().uiOrder());
+                if (builder.type().visionDensity() == null)
+                    builder.type().visionDensity(parent.type().visionDensity());
+                if (builder.type().visionMinSize() == null)
+                    builder.type().visionMinSize(parent.type().visionMinSize());
+                if (builder.type().positionHistoryName() == null)
+                    builder.type().positionHistoryName(parent.type().positionHistoryName());
                 for (var parentEntry : parent.type()
                                              .gridLayoutByFilter()
                                              .map()
@@ -3093,10 +4411,10 @@ public class ConfigurationParser {
                                              .toList()) {
                     HintGridLayoutBuilder parentLayout =
                             parentEntry.getValue();
-                    ViewportFilter filter = parentEntry.getKey();
+                    ScreenFilter filter = parentEntry.getKey();
                     HintGridLayoutBuilder childLayout =
                             builder.type().gridLayout(filter);
-                    ViewportFilterMapBuilder<HintGridLayoutBuilder, HintGridLayout>
+                    ScreenFilterMapBuilder<HintGridLayoutBuilder, HintGridLayout>
                             childLayoutByFilter = builder.type().gridLayoutByFilter();
                     if (!childDoesNotNeedParentProperty(
                             HintGridLayoutBuilder::maxRowCount, childLayoutByFilter,
@@ -3106,6 +4424,10 @@ public class ConfigurationParser {
                             HintGridLayoutBuilder::maxColumnCount,
                             childLayoutByFilter, filter))
                         childLayout.maxColumnCount(parentLayout.maxColumnCount());
+                    if (!childDoesNotNeedParentProperty(
+                            HintGridLayoutBuilder::cellSizingType, childLayoutByFilter,
+                            filter))
+                        childLayout.cellSizingType(parentLayout.cellSizingType());
                     if (!childDoesNotNeedParentProperty(
                             HintGridLayoutBuilder::cellWidth, childLayoutByFilter,
                             filter))
@@ -3135,9 +4457,9 @@ public class ConfigurationParser {
                                              .sorted(defaultFilterLastComparator())
                                              .toList()) {
                     HintMeshKeysBuilder parentKeys = parentEntry.getValue();
-                    ViewportFilter filter = parentEntry.getKey();
+                    ScreenFilter filter = parentEntry.getKey();
                     HintMeshKeysBuilder childKeys = builder.keys(filter);
-                    ViewportFilterMapBuilder<HintMeshKeysBuilder, HintMeshKeys>
+                    ScreenFilterMapBuilder<HintMeshKeysBuilder, HintMeshKeys>
                             childKeysByFilter = builder.keysByFilter();
                     if (!childDoesNotNeedParentProperty(
                             HintMeshKeysBuilder::selectionKeys, childKeysByFilter,
@@ -3154,9 +4476,9 @@ public class ConfigurationParser {
                                              .toList()) {
                     HintMeshStyleBuilder parentStyle =
                             parentEntry.getValue();
-                    ViewportFilter filter = parentEntry.getKey();
+                    ScreenFilter filter = parentEntry.getKey();
                     HintMeshStyleBuilder childStyle = builder.style(filter);
-                    ViewportFilterMapBuilder<HintMeshStyleBuilder, HintMeshStyle>
+                    ScreenFilterMapBuilder<HintMeshStyleBuilder, HintMeshStyle>
                             childStyleByFilter = builder.styleByFilter();
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::prefixInBackground,
@@ -3164,9 +4486,9 @@ public class ConfigurationParser {
                         childStyle.prefixInBackground(
                                 parentStyle.prefixInBackground());
                     if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::boxHexColor, childStyleByFilter,
+                            HintMeshStyleBuilder::boxColor, childStyleByFilter,
                             filter))
-                        childStyle.boxHexColor(parentStyle.boxHexColor());
+                        childStyle.boxColor(parentStyle.boxColor());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::boxOpacity, childStyleByFilter,
                             filter))
@@ -3181,9 +4503,9 @@ public class ConfigurationParser {
                             filter))
                         childStyle.boxBorderLength(parentStyle.boxBorderLength());
                     if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::boxBorderHexColor,
+                            HintMeshStyleBuilder::boxBorderColor,
                             childStyleByFilter, filter))
-                        childStyle.boxBorderHexColor(parentStyle.boxBorderHexColor());
+                        childStyle.boxBorderColor(parentStyle.boxBorderColor());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::boxBorderOpacity,
                             childStyleByFilter, filter))
@@ -3192,6 +4514,10 @@ public class ConfigurationParser {
                             HintMeshStyleBuilder::boxBorderRadius,
                             childStyleByFilter, filter))
                         childStyle.boxBorderRadius(parentStyle.boxBorderRadius());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::boxFramed,
+                            childStyleByFilter, filter))
+                        childStyle.boxFramed(parentStyle.boxFramed());
                     childStyle.boxShadow().extend(parentStyle.boxShadow());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::prefixBoxEnabled,
@@ -3208,13 +4534,85 @@ public class ConfigurationParser {
                             filter))
                         childStyle.prefixBoxBorderLength(parentStyle.prefixBoxBorderLength());
                     if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::prefixBoxBorderHexColor,
+                            HintMeshStyleBuilder::prefixBoxBorderColor,
                             childStyleByFilter, filter))
-                        childStyle.prefixBoxBorderHexColor(parentStyle.prefixBoxBorderHexColor());
+                        childStyle.prefixBoxBorderColor(parentStyle.prefixBoxBorderColor());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::prefixBoxBorderOpacity,
                             childStyleByFilter, filter))
                         childStyle.prefixBoxBorderOpacity(parentStyle.prefixBoxBorderOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::prefixBoxFramed,
+                            childStyleByFilter, filter))
+                        childStyle.prefixBoxFramed(parentStyle.prefixBoxFramed());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxColor,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxColor(parentStyle.uiElementBoxColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxOpacity,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxOpacity(parentStyle.uiElementBoxOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxBorderThickness,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxBorderThickness(parentStyle.uiElementBoxBorderThickness());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxBorderLength,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxBorderLength(parentStyle.uiElementBoxBorderLength());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxBorderColor,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxBorderColor(parentStyle.uiElementBoxBorderColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxBorderOpacity,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxBorderOpacity(parentStyle.uiElementBoxBorderOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedBoxColor,
+                            childStyleByFilter, filter))
+                        childStyle.savedBoxColor(parentStyle.savedBoxColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedBoxOpacity,
+                            childStyleByFilter, filter))
+                        childStyle.savedBoxOpacity(parentStyle.savedBoxOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedBoxBorderColor,
+                            childStyleByFilter, filter))
+                        childStyle.savedBoxBorderColor(parentStyle.savedBoxBorderColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedBoxBorderOpacity,
+                            childStyleByFilter, filter))
+                        childStyle.savedBoxBorderOpacity(parentStyle.savedBoxBorderOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedUiElementBoxColor,
+                            childStyleByFilter, filter))
+                        childStyle.savedUiElementBoxColor(parentStyle.savedUiElementBoxColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedUiElementBoxOpacity,
+                            childStyleByFilter, filter))
+                        childStyle.savedUiElementBoxOpacity(parentStyle.savedUiElementBoxOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedUiElementBoxBorderColor,
+                            childStyleByFilter, filter))
+                        childStyle.savedUiElementBoxBorderColor(parentStyle.savedUiElementBoxBorderColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::savedUiElementBoxBorderOpacity,
+                            childStyleByFilter, filter))
+                        childStyle.savedUiElementBoxBorderOpacity(parentStyle.savedUiElementBoxBorderOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxBorderRadius,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxBorderRadius(parentStyle.uiElementBoxBorderRadius());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxHorizontalPadding,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxHorizontalPadding(parentStyle.uiElementBoxHorizontalPadding());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::uiElementBoxVerticalPadding,
+                            childStyleByFilter, filter))
+                        childStyle.uiElementBoxVerticalPadding(parentStyle.uiElementBoxVerticalPadding());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::boxWidthPercent, childStyleByFilter,
                             filter))
@@ -3224,102 +4622,115 @@ public class ConfigurationParser {
                             childStyleByFilter, filter))
                         childStyle.boxHeightPercent(parentStyle.boxHeightPercent());
                     if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::cellHorizontalPadding,
+                            HintMeshStyleBuilder::boxHorizontalPadding,
                             childStyleByFilter, filter))
-                        childStyle.cellHorizontalPadding(parentStyle.cellHorizontalPadding());
+                        childStyle.boxHorizontalPadding(parentStyle.boxHorizontalPadding());
                     if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::cellVerticalPadding,
+                            HintMeshStyleBuilder::boxVerticalPadding,
                             childStyleByFilter, filter))
-                        childStyle.cellVerticalPadding(parentStyle.cellVerticalPadding());
+                        childStyle.boxVerticalPadding(parentStyle.boxVerticalPadding());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::hintCenterOffsetX,
                             childStyleByFilter, filter))
                         childStyle.hintCenterOffsetX(parentStyle.hintCenterOffsetX());
                     if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::subgridRowCount, childStyleByFilter,
-                            filter))
-                        childStyle.subgridRowCount(parentStyle.subgridRowCount());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::subgridColumnCount,
+                            HintMeshStyleBuilder::labelOverride,
                             childStyleByFilter, filter))
-                        childStyle.subgridColumnCount(
-                                parentStyle.subgridColumnCount());
+                        childStyle.labelOverride(
+                                parentStyle.labelOverride());
+                    for (int decorationIndex = 0;
+                         decorationIndex < childStyle.decorations().size();
+                         decorationIndex++) {
+                        final int i = decorationIndex;
+                        Decoration.DecorationBuilder cd = childStyle.decoration(i);
+                        Decoration.DecorationBuilder pd = parentStyle.decoration(i);
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).maxRowCount(), childStyleByFilter, filter))
+                            cd.maxRowCount(pd.maxRowCount());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).maxColumnCount(), childStyleByFilter, filter))
+                            cd.maxColumnCount(pd.maxColumnCount());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).labelKeys(), childStyleByFilter, filter))
+                            cd.labelKeys(pd.labelKeys());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).labelOverride(), childStyleByFilter, filter))
+                            cd.labelOverride(pd.labelOverride());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxColor(), childStyleByFilter, filter))
+                            cd.boxColor(pd.boxColor());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxOpacity(), childStyleByFilter, filter))
+                            cd.boxOpacity(pd.boxOpacity());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxBorderThickness(), childStyleByFilter, filter))
+                            cd.boxBorderThickness(pd.boxBorderThickness());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxBorderLength(), childStyleByFilter, filter))
+                            cd.boxBorderLength(pd.boxBorderLength());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxBorderColor(), childStyleByFilter, filter))
+                            cd.boxBorderColor(pd.boxBorderColor());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxBorderOpacity(), childStyleByFilter, filter))
+                            cd.boxBorderOpacity(pd.boxBorderOpacity());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxBorderRadius(), childStyleByFilter, filter))
+                            cd.boxBorderRadius(pd.boxBorderRadius());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxFramed(), childStyleByFilter, filter))
+                            cd.boxFramed(pd.boxFramed());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxHorizontalPadding(), childStyleByFilter, filter))
+                            cd.boxHorizontalPadding(pd.boxHorizontalPadding());
+                        if (!childDoesNotNeedParentProperty(b -> b.decoration(i).boxVerticalPadding(), childStyleByFilter, filter))
+                            cd.boxVerticalPadding(pd.boxVerticalPadding());
+                    }
+                    childStyle.transition().extend(parentStyle.transition());
+                    childStyle.fade().extend(parentStyle.fade());
                     if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::subgridBorderThickness,
+                            HintMeshStyleBuilder::backgroundColor,
                             childStyleByFilter, filter))
-                        childStyle.subgridBorderThickness(
-                                parentStyle.subgridBorderThickness());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::subgridBorderLength,
-                            childStyleByFilter, filter))
-                        childStyle.subgridBorderLength(
-                                parentStyle.subgridBorderLength());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::subgridBorderHexColor,
-                            childStyleByFilter, filter))
-                        childStyle.subgridBorderHexColor(
-                                parentStyle.subgridBorderHexColor());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::subgridBorderOpacity,
-                            childStyleByFilter, filter))
-                        childStyle.subgridBorderOpacity(
-                                parentStyle.subgridBorderOpacity());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::transitionAnimationEnabled,
-                            childStyleByFilter, filter))
-                        childStyle.transitionAnimationEnabled(
-                                parentStyle.transitionAnimationEnabled());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::transitionAnimationDuration,
-                            childStyleByFilter, filter))
-                        childStyle.transitionAnimationDuration(
-                                parentStyle.transitionAnimationDuration());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::fadeAnimationEnabled,
-                            childStyleByFilter, filter))
-                        childStyle.fadeAnimationEnabled(
-                                parentStyle.fadeAnimationEnabled());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::fadeAnimationDuration,
-                            childStyleByFilter, filter))
-                        childStyle.fadeAnimationDuration(
-                                parentStyle.fadeAnimationDuration());
-                    if (!childDoesNotNeedParentProperty(
-                            HintMeshStyleBuilder::backgroundHexColor,
-                            childStyleByFilter, filter))
-                        childStyle.backgroundHexColor(
-                                parentStyle.backgroundHexColor());
+                        childStyle.backgroundColor(
+                                parentStyle.backgroundColor());
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::backgroundOpacity,
                             childStyleByFilter, filter))
                         childStyle.backgroundOpacity(
                                 parentStyle.backgroundOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::backgroundBorderThickness,
+                            childStyleByFilter, filter))
+                        childStyle.backgroundBorderThickness(
+                                parentStyle.backgroundBorderThickness());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::backgroundBorderColor,
+                            childStyleByFilter, filter))
+                        childStyle.backgroundBorderColor(
+                                parentStyle.backgroundBorderColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::backgroundBorderOpacity,
+                            childStyleByFilter, filter))
+                        childStyle.backgroundBorderOpacity(
+                                parentStyle.backgroundBorderOpacity());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::backgroundBorderRadius,
+                            childStyleByFilter, filter))
+                        childStyle.backgroundBorderRadius(
+                                parentStyle.backgroundBorderRadius());
                 }
-                // Font-style cascade: for each viewport filter, resolve all font
+                // Font-style cascade: for each screen filter, resolve all font
                 // properties (child.X, child.any, parent.X, parent.any).
-                for (ViewportFilter filter : builder.styleByFilter().map().keySet()
-                        .stream()
-                        .sorted(Comparator.comparing(
-                                f -> f instanceof AnyViewportFilter ? 1 : 0))
-                        .toList()) {
+                for (ScreenFilter filter : builder.styleByFilter().map().keySet()
+                 .stream()
+                 .sorted(Comparator.comparing(
+                                f -> f instanceof AnyScreenFilter ? 1 : 0))
+                 .toList()) {
                     HintMeshStyleBuilder childX = builder.styleByFilter().map().get(filter);
                     HintMeshStyleBuilder childAny = builder.styleByFilter().map()
-                            .get(AnyViewportFilter.ANY_VIEWPORT_FILTER);
+                            .get(AnyScreenFilter.ANY_SCREEN_FILTER);
                     HintMeshStyleBuilder parentX = parent == null ? null :
                             parent.styleByFilter().map().get(filter);
                     HintMeshStyleBuilder parentAny = parent == null ? null :
                             parent.styleByFilter().map()
-                                    .get(AnyViewportFilter.ANY_VIEWPORT_FILTER);
+                                    .get(AnyScreenFilter.ANY_SCREEN_FILTER);
                     cascadeAllFontStyles(childX, childAny, parentX, parentAny);
                 }
                 if (builder.modeAfterSelection() == null)
                     builder.modeAfterSelection(parent.modeAfterSelection());
+                if (builder.savedPositionHistory() == null)
+                    builder.savedPositionHistory(parent.savedPositionHistory());
                 if (builder.eatUnusedSelectionKeys() == null)
                     builder.eatUnusedSelectionKeys(parent.eatUnusedSelectionKeys());
-                if (builder.selectCombos() == null)
-                    builder.selectCombos(parent.selectCombos());
-                if (builder.unselectCombos() == null)
-                    builder.unselectCombos(parent.unselectCombos());
+                if (builder.z() == null)
+                    builder.z(parent.z());
             }
 
         }
@@ -3330,16 +4741,16 @@ public class ConfigurationParser {
      * populated into the child, because childDoesNotNeedParentProperty() needs the child's
      * default to be unchanged.
      */
-    private static <B> Comparator<Map.Entry<ViewportFilter, B>> defaultFilterLastComparator() {
+    private static <B> Comparator<Map.Entry<ScreenFilter, B>> defaultFilterLastComparator() {
         return Map.Entry.comparingByKey(
                 Comparator.comparing(Object::getClass,
                         Comparator.comparingInt(
-                                c -> c == AnyViewportFilter.class ? 1 : 0)));
+                                c -> c == AnyScreenFilter.class ? 1 : 0)));
     }
 
     private static <B, V> boolean childDoesNotNeedParentProperty(
             Function<B, Object> fieldFunction,
-            ViewportFilterMapBuilder<B, V> childMapBuilder, ViewportFilter filter) {
+            ScreenFilterMapBuilder<B, V> childMapBuilder, ScreenFilter filter) {
         // Don't inherit parent property if child is defining the default.
         // For example:
         // position-history-mode.hint=hint1-mode.hint
@@ -3347,8 +4758,8 @@ public class ConfigurationParser {
         // If hint1-mode defines font-size.3840x2160-300%, we don't want to have it
         // in position-history-mode because we want position-history-mode.hint.font-size
         // to be used instead.
-        Map<ViewportFilter, B> childMap = childMapBuilder.map();
-        B defaultElement = childMap.get(AnyViewportFilter.ANY_VIEWPORT_FILTER);
+        Map<ScreenFilter, B> childMap = childMapBuilder.map();
+        B defaultElement = childMap.get(AnyScreenFilter.ANY_SCREEN_FILTER);
         B filterElement = childMap.get(filter);
         return defaultElement != null && fieldFunction.apply(defaultElement) != null
                || filterElement != null && fieldFunction.apply(filterElement) != null;
@@ -3356,35 +4767,38 @@ public class ConfigurationParser {
 
     private static void cascadeFontStyle(FontStyle.FontStyleBuilder target,
             FontStyle.FontStyleBuilder... sources) {
-        String name = null, hexColor = null, outlineHexColor = null;
+        String name = null;
+        Color color = null, outlineColor = null;
         FontWeight weight = null;
         Double size = null, opacity = null, outlineThickness = null, outlineOpacity = null;
         Double shadowBlur = null, shadowOpacity = null, shadowHOff = null, shadowVOff = null;
-        String shadowHexColor = null;
+        Color shadowColor = null;
         Integer shadowStackCount = null;
+        FontVerticalAlignment verticalAlignment = null;
         for (FontStyle.FontStyleBuilder source : sources) {
             if (source == null) continue;
             if (name == null) name = source.name();
             if (weight == null) weight = source.weight();
             if (size == null) size = source.size();
-            if (hexColor == null) hexColor = source.hexColor();
+            if (color == null) color = source.color();
             if (opacity == null) opacity = source.opacity();
             if (outlineThickness == null) outlineThickness = source.outlineThickness();
-            if (outlineHexColor == null) outlineHexColor = source.outlineHexColor();
+            if (outlineColor == null) outlineColor = source.outlineColor();
             if (outlineOpacity == null) outlineOpacity = source.outlineOpacity();
+            if (verticalAlignment == null) verticalAlignment = source.verticalAlignment();
             Shadow.ShadowBuilder sh = source.shadow();
             if (shadowBlur == null) shadowBlur = sh.blurRadius();
-            if (shadowHexColor == null) shadowHexColor = sh.hexColor();
+            if (shadowColor == null) shadowColor = sh.color();
             if (shadowOpacity == null) shadowOpacity = sh.opacity();
             if (shadowHOff == null) shadowHOff = sh.horizontalOffset();
             if (shadowVOff == null) shadowVOff = sh.verticalOffset();
             if (shadowStackCount == null) shadowStackCount = sh.stackCount();
         }
         target.name(name); target.weight(weight); target.size(size);
-        target.hexColor(hexColor); target.opacity(opacity);
-        target.outlineThickness(outlineThickness); target.outlineHexColor(outlineHexColor);
-        target.outlineOpacity(outlineOpacity);
-        target.shadow().blurRadius(shadowBlur); target.shadow().hexColor(shadowHexColor);
+        target.color(color); target.opacity(opacity);
+        target.outlineThickness(outlineThickness); target.outlineColor(outlineColor);
+        target.outlineOpacity(outlineOpacity); target.verticalAlignment(verticalAlignment);
+        target.shadow().blurRadius(shadowBlur); target.shadow().color(shadowColor);
         target.shadow().opacity(shadowOpacity); target.shadow().horizontalOffset(shadowHOff);
         target.shadow().verticalOffset(shadowVOff); target.shadow().stackCount(shadowStackCount);
     }
@@ -3405,6 +4819,10 @@ public class ConfigurationParser {
         FontStyle.FontStyleBuilder caFoc = childAny == null ? null : childAny.fontStyle().focusedFontStyle();
         FontStyle.FontStyleBuilder pxFoc = parentX == null ? null : parentX.fontStyle().focusedFontStyle();
         FontStyle.FontStyleBuilder paFoc = parentAny == null ? null : parentAny.fontStyle().focusedFontStyle();
+        FontStyle.FontStyleBuilder cxSav = childX.fontStyle().savedFontStyle();
+        FontStyle.FontStyleBuilder caSav = childAny == null ? null : childAny.fontStyle().savedFontStyle();
+        FontStyle.FontStyleBuilder pxSav = parentX == null ? null : parentX.fontStyle().savedFontStyle();
+        FontStyle.FontStyleBuilder paSav = parentAny == null ? null : parentAny.fontStyle().savedFontStyle();
         // prefixFontStyle sources
         FontStyle.FontStyleBuilder cxPSel = childX.prefixFontStyle().selectedFontStyle();
         FontStyle.FontStyleBuilder caPSel = childAny == null ? null : childAny.prefixFontStyle().selectedFontStyle();
@@ -3418,6 +4836,10 @@ public class ConfigurationParser {
         FontStyle.FontStyleBuilder caPFoc = childAny == null ? null : childAny.prefixFontStyle().focusedFontStyle();
         FontStyle.FontStyleBuilder pxPFoc = parentX == null ? null : parentX.prefixFontStyle().focusedFontStyle();
         FontStyle.FontStyleBuilder paPFoc = parentAny == null ? null : parentAny.prefixFontStyle().focusedFontStyle();
+        FontStyle.FontStyleBuilder cxPSav = childX.prefixFontStyle().savedFontStyle();
+        FontStyle.FontStyleBuilder caPSav = childAny == null ? null : childAny.prefixFontStyle().savedFontStyle();
+        FontStyle.FontStyleBuilder pxPSav = parentX == null ? null : parentX.prefixFontStyle().savedFontStyle();
+        FontStyle.FontStyleBuilder paPSav = parentAny == null ? null : parentAny.prefixFontStyle().savedFontStyle();
         // Cascade prefix font styles, then font styles.
         // Child sources are exhausted before parent sources.
         // prefix-selected: child(prefix-selected, prefix-default, selected, default),
@@ -3430,6 +4852,11 @@ public class ConfigurationParser {
         cascadeFontStyle(cxPFoc,
                 cxPFoc, caPFoc, cxPDef, caPDef, cxFoc, caFoc, cxDef, caDef,
                 pxPFoc, paPFoc, pxPDef, paPDef, pxFoc, paFoc, pxDef, paDef);
+        // prefix-saved: child(prefix-saved, prefix-default, saved, default),
+        //                parent(prefix-saved, prefix-default, saved, default)
+        cascadeFontStyle(cxPSav,
+                cxPSav, caPSav, cxPDef, caPDef, cxSav, caSav, cxDef, caDef,
+                pxPSav, paPSav, pxPDef, paPDef, pxSav, paSav, pxDef, paDef);
         // prefix-default: child(prefix-default, default), parent(prefix-default, default)
         cascadeFontStyle(cxPDef,
                 cxPDef, caPDef, cxDef, caDef,
@@ -3452,6 +4879,10 @@ public class ConfigurationParser {
         cascadeFontStyle(cxFoc,
                 cxFoc, caFoc, cxDef, caDef,
                 pxFoc, paFoc, pxDef, paDef);
+        // fontStyle saved: child(saved, default), parent(saved, default)
+        cascadeFontStyle(cxSav,
+                cxSav, caSav, cxDef, caDef,
+                pxSav, paSav, pxDef, paDef);
         // fontStyle default: child, parent
         cascadeFontStyle(cxDef, cxDef, caDef, pxDef, paDef);
         // fontStyle spacingPercent: child, parent
@@ -3460,6 +4891,37 @@ public class ConfigurationParser {
         if (fontSpacing == null && parentX != null) fontSpacing = parentX.fontStyle().spacingPercent();
         if (fontSpacing == null && parentAny != null) fontSpacing = parentAny.fontStyle().spacingPercent();
         childX.fontStyle().spacingPercent(fontSpacing);
+        // Decoration fonts (independent of the main font). Selected/focused/saved fall back to
+        // the decoration's own default (decorations are non-interactive, but the shared
+        // HintFontStyle builds all four, so they must be non-null).
+        for (int i = 0; i < childX.decorations().size(); i++) {
+            HintFontStyle.HintFontStyleBuilder cxF = childX.decoration(i).fontStyle();
+            HintFontStyle.HintFontStyleBuilder caF = childAny == null ? null : childAny.decoration(i).fontStyle();
+            HintFontStyle.HintFontStyleBuilder pxF = parentX == null ? null : parentX.decoration(i).fontStyle();
+            HintFontStyle.HintFontStyleBuilder paF = parentAny == null ? null : parentAny.decoration(i).fontStyle();
+            FontStyle.FontStyleBuilder cxDDef = cxF.defaultFontStyle();
+            FontStyle.FontStyleBuilder caDDef = caF == null ? null : caF.defaultFontStyle();
+            FontStyle.FontStyleBuilder pxDDef = pxF == null ? null : pxF.defaultFontStyle();
+            FontStyle.FontStyleBuilder paDDef = paF == null ? null : paF.defaultFontStyle();
+            cascadeFontStyle(cxF.selectedFontStyle(), cxF.selectedFontStyle(),
+                    caF == null ? null : caF.selectedFontStyle(), cxDDef, caDDef,
+                    pxF == null ? null : pxF.selectedFontStyle(),
+                    paF == null ? null : paF.selectedFontStyle(), pxDDef, paDDef);
+            cascadeFontStyle(cxF.focusedFontStyle(), cxF.focusedFontStyle(),
+                    caF == null ? null : caF.focusedFontStyle(), cxDDef, caDDef,
+                    pxF == null ? null : pxF.focusedFontStyle(),
+                    paF == null ? null : paF.focusedFontStyle(), pxDDef, paDDef);
+            cascadeFontStyle(cxF.savedFontStyle(), cxF.savedFontStyle(),
+                    caF == null ? null : caF.savedFontStyle(), cxDDef, caDDef,
+                    pxF == null ? null : pxF.savedFontStyle(),
+                    paF == null ? null : paF.savedFontStyle(), pxDDef, paDDef);
+            cascadeFontStyle(cxDDef, cxDDef, caDDef, pxDDef, paDDef);
+            Double spacing = cxF.spacingPercent();
+            if (spacing == null && caF != null) spacing = caF.spacingPercent();
+            if (spacing == null && pxF != null) spacing = pxF.spacingPercent();
+            if (spacing == null && paF != null) spacing = paF.spacingPercent();
+            cxF.spacingPercent(spacing);
+        }
     }
 
       @SuppressWarnings("unchecked")
@@ -3467,70 +4929,77 @@ public class ConfigurationParser {
         Property<Map<Combo, List<Command>>> to;
         Property<Map<Combo, List<Command>>> startMove;
         Property<Map<Combo, List<Command>>> stopMove;
+        Property<Map<Combo, List<Command>>> startMoveTarget;
+        Property<Map<Combo, List<Command>>> stopMoveTarget;
         Property<Map<Combo, List<Command>>> press;
         Property<Map<Combo, List<Command>>> release;
         Property<Map<Combo, List<Command>>> toggle;
         Property<Map<Combo, List<Command>>> startWheel;
         Property<Map<Combo, List<Command>>> stopWheel;
-        Property<Map<Combo, List<Command>>> snap;
-        Property<Map<Combo, List<Command>>> shrinkGrid;
-        Property<Map<Combo, List<Command>>> moveGrid;
-        Property<Map<Combo, List<Command>>> moveToGridCenter;
-        Property<Map<Combo, List<Command>>> moveToLastSelectedHint;
+        Property<Map<Combo, List<Command>>> shrinkOverlay;
+        Property<Map<Combo, List<Command>>> moveOverlayTo;
+        Property<Map<Combo, List<Command>>> moveTargetTo;
+        Property<Map<Combo, List<Command>>> moveTo;
         Property<Map<Combo, List<Command>>> savePosition;
         Property<Map<Combo, List<Command>>> unsavePosition;
+        Property<Map<Combo, List<Command>>> toggleSavePosition;
         Property<Map<Combo, List<Command>>> clearPositionHistory;
         Property<Map<Combo, List<Command>>> cycleNextPosition;
         Property<Map<Combo, List<Command>>> cyclePreviousPosition;
+        Property<Map<Combo, List<Command>>> startAnimation;
+        Property<Map<Combo, List<Command>>> stopAnimation;
         Property<Map<Combo, List<Command>>> breakComboPreparation;
         Property<Map<Combo, List<Command>>> breakMacro;
+        Property<Map<Combo, List<Command>>> exit;
+        Property<Map<Combo, List<Command>>> restart;
         Property<Map<Combo, List<Command>>> macro;
         Property<Map<Combo, List<Command>>> mutateMode;
         Property<Map<Combo, List<Command>>> noop;
         Property<Map<Combo, List<Command>>> setVariable;
         Property<Map<Combo, List<Command>>> unsetVariable;
-        Property<Map<Combo, List<Command>>> clearVariables;
-
-        List<Combo> hintSelectCombos;
-        List<Combo> hintUnselectCombos;
+        Property<Map<Combo, List<Command>>> resetVariables;
+        Property<Map<Combo, List<Command>>> select;
+        Property<Map<Combo, List<Command>>> deselect;
+        Property<Map<Combo, List<Command>>> deselectAll;
 
         public ComboMapConfigurationBuilder(String modeName,
                                             Map<PropertyKey, Property<?>> propertyByKey) {
             to = new ComboMapProperty("to", modeName, propertyByKey);
             startMove = new ComboMapProperty("start-move", modeName, propertyByKey);
             stopMove = new ComboMapProperty("stop-move", modeName, propertyByKey);
+            startMoveTarget = new ComboMapProperty("start-move-target", modeName, propertyByKey);
+            stopMoveTarget = new ComboMapProperty("stop-move-target", modeName, propertyByKey);
             press = new ComboMapProperty("press", modeName, propertyByKey);
             release = new ComboMapProperty("release", modeName, propertyByKey);
             toggle = new ComboMapProperty("toggle", modeName, propertyByKey);
             startWheel = new ComboMapProperty("start-wheel", modeName, propertyByKey);
             stopWheel = new ComboMapProperty("stop-wheel", modeName, propertyByKey);
-            snap = new ComboMapProperty("snap", modeName, propertyByKey);
-            shrinkGrid = new ComboMapProperty("shrink-grid", modeName, propertyByKey);
-            moveGrid = new ComboMapProperty("move-grid", modeName, propertyByKey);
-            moveToGridCenter = new ComboMapProperty("move-grid-to-center", modeName, propertyByKey);
-            moveToLastSelectedHint = new ComboMapProperty("move-to-last-selected-hint", modeName, propertyByKey);
-            savePosition = new ComboMapProperty("save-position", modeName, propertyByKey);
-            unsavePosition = new ComboMapProperty("unsave-position", modeName, propertyByKey);
+            shrinkOverlay = new ComboMapProperty("shrink-overlay", modeName, propertyByKey);
+            moveOverlayTo = new ComboMapProperty("move-overlay-to", modeName, propertyByKey);
+            moveTargetTo = new ComboMapProperty("move-target-to", modeName, propertyByKey);
+            moveTo = new ComboMapProperty("move-to", modeName, propertyByKey);
+            savePosition = new ComboMapProperty("save", modeName, propertyByKey);
+            unsavePosition = new ComboMapProperty("unsave", modeName, propertyByKey);
+            toggleSavePosition = new ComboMapProperty("toggle-save", modeName, propertyByKey);
             clearPositionHistory = new ComboMapProperty("clear", modeName, propertyByKey);
             cycleNextPosition = new ComboMapProperty("cycle-next", modeName, propertyByKey);
             cyclePreviousPosition = new ComboMapProperty("cycle-previous", modeName, propertyByKey);
+            startAnimation = new ComboMapProperty("start", modeName, propertyByKey);
+            stopAnimation = new ComboMapProperty("stop", modeName, propertyByKey);
             breakComboPreparation = new ComboMapProperty("break-combo-preparation", modeName, propertyByKey);
             breakMacro = new ComboMapProperty("break-macro", modeName, propertyByKey);
+            exit = new ComboMapProperty("exit", modeName, propertyByKey);
+            restart = new ComboMapProperty("restart", modeName, propertyByKey);
             macro = new ComboMapProperty("macro", modeName, propertyByKey);
             mutateMode = new ComboMapProperty("mutate-mode", modeName, propertyByKey);
             noop = new ComboMapProperty("noop", modeName, propertyByKey);
             setVariable = new ComboMapProperty("set-variable", modeName, propertyByKey);
             unsetVariable = new ComboMapProperty("unset-variable", modeName, propertyByKey);
-            clearVariables = new ComboMapProperty("clear-variables", modeName, propertyByKey);
+            resetVariables = new ComboMapProperty("reset-variables", modeName, propertyByKey);
+            select = new ComboMapProperty("select", modeName, propertyByKey);
+            deselect = new ComboMapProperty("deselect", modeName, propertyByKey);
+            deselectAll = new ComboMapProperty("deselect-all", modeName, propertyByKey);
         }
-
-          public void hintSelectCombos(List<Combo> combos) {
-              hintSelectCombos = combos;
-          }
-
-          public void hintUnselectCombos(List<Combo> combos) {
-              hintUnselectCombos = combos;
-          }
 
           private static class ComboMapProperty extends Property<Map<Combo, List<Command>>> {
 
@@ -3581,36 +5050,41 @@ public class ConfigurationParser {
 
         public Map<Combo, List<Command>> commandsByCombo() {
             Map<Combo, List<Command>> commandsByCombo = new LinkedHashMap<>();
-            if (hintSelectCombos != null)
-                add(commandsByCombo, hintSelectCombos.stream().collect(Collectors.toMap(Function.identity(), combo -> List.of(new SelectHintKey()))));
-            if (hintUnselectCombos != null)
-                add(commandsByCombo, hintUnselectCombos.stream().collect(Collectors.toMap(Function.identity(), combo -> List.of(new UnselectHintKey()))));
+            add(commandsByCombo, select.builder);
+            add(commandsByCombo, deselect.builder);
+            add(commandsByCombo, deselectAll.builder);
             add(commandsByCombo, to.builder);
             add(commandsByCombo, startMove.builder);
             add(commandsByCombo, stopMove.builder);
+            add(commandsByCombo, startMoveTarget.builder);
+            add(commandsByCombo, stopMoveTarget.builder);
+            add(commandsByCombo, shrinkOverlay.builder);
+            add(commandsByCombo, moveOverlayTo.builder);
+            add(commandsByCombo, moveTargetTo.builder);
+            add(commandsByCombo, moveTo.builder);
             add(commandsByCombo, press.builder);
             add(commandsByCombo, release.builder);
             add(commandsByCombo, toggle.builder);
             add(commandsByCombo, startWheel.builder);
             add(commandsByCombo, stopWheel.builder);
-            add(commandsByCombo, snap.builder);
-            add(commandsByCombo, shrinkGrid.builder);
-            add(commandsByCombo, moveGrid.builder);
-            add(commandsByCombo, moveToGridCenter.builder);
-            add(commandsByCombo, moveToLastSelectedHint.builder);
             add(commandsByCombo, savePosition.builder);
             add(commandsByCombo, unsavePosition.builder);
+            add(commandsByCombo, toggleSavePosition.builder);
             add(commandsByCombo, clearPositionHistory.builder);
             add(commandsByCombo, cycleNextPosition.builder);
             add(commandsByCombo, cyclePreviousPosition.builder);
+            add(commandsByCombo, startAnimation.builder);
+            add(commandsByCombo, stopAnimation.builder);
             add(commandsByCombo, breakComboPreparation.builder);
             add(commandsByCombo, breakMacro.builder);
+            add(commandsByCombo, exit.builder);
+            add(commandsByCombo, restart.builder);
             add(commandsByCombo, macro.builder);
             add(commandsByCombo, mutateMode.builder);
             add(commandsByCombo, noop.builder);
             add(commandsByCombo, setVariable.builder);
             add(commandsByCombo, unsetVariable.builder);
-            add(commandsByCombo, clearVariables.builder);
+            add(commandsByCombo, resetVariables.builder);
             return commandsByCombo;
         }
 
@@ -3618,6 +5092,8 @@ public class ConfigurationParser {
                                   Map<Combo, List<Command>> otherCommandsByCombo) {
               for (Map.Entry<Combo, List<Command>> entry : otherCommandsByCombo.entrySet()) {
                   Combo combo = entry.getKey();
+                  if (combo == null)
+                      continue;
                   List<Command> commands = entry.getValue();
                   commandsByCombo.computeIfAbsent(combo, combo1 -> new ArrayList<>())
                                  .addAll(commands);

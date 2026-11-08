@@ -1,5 +1,6 @@
 package mousemaster;
 
+import io.qt.core.QEvent;
 import io.qt.QtUtilities;
 import io.qt.widgets.QApplication;
 import org.slf4j.Logger;
@@ -9,35 +10,27 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 
 public class QtManager {
 
     private static final Logger logger = LoggerFactory.getLogger(QtManager.class.getName());
 
-    private static final List<String> windowsResourcesPaths = List.of(
+    private static final List<String> qtResourcesPaths = List.of(
             "qt/bin/Qt6Core.dll",
             "qt/bin/Qt6Gui.dll",
             "qt/bin/Qt6Widgets.dll",
-            "qt/plugins/platforms/qdirect2d.dll",
-            "qt/plugins/platforms/qdirect2dd.dll",
-            "qt/plugins/platforms/qminimal.dll",
-            "qt/plugins/platforms/qminimald.dll",
-            "qt/plugins/platforms/qoffscreen.dll",
-            "qt/plugins/platforms/qoffscreend.dll",
-            "qt/plugins/platforms/qwindows.dll",
-            "qt/plugins/platforms/qwindowsd.dll"
-    );
-
-    private static final List<String> qtJambiPaths = List.of(
-            "bin/QtJambi6.dll",
-            "bin/QtJambiCore6.dll",
-            "bin/QtJambiGui6.dll",
-            "bin/QtJambiWidgets6.dll"
+            "qt/bin/QtJambi6.dll",
+            "qt/bin/QtJambiCore6.dll",
+            "qt/bin/QtJambiGui6.dll",
+            "qt/bin/QtJambiWidgets6.dll",
+            "qt/plugins/platforms/qwindows.dll"
     );
 
     private static final List<String> msvcpDllPaths = List.of(
@@ -46,21 +39,15 @@ public class QtManager {
             "qt-msvcp/msvcp140_2.dll"
     );
 
+
     public static void initialize() throws IOException {
-        File extractDirectory = createExtractDirectory(
-                MousemasterApplication.tempDirectory);
-        for (String resourcesPath : windowsResourcesPaths) {
-            Path extractPath = Paths.get(extractDirectory.getAbsolutePath() + "/" + resourcesPath);
-            Files.createDirectories(extractPath.getParent());
-            extractResourceFile(resourcesPath, extractPath);
+        if (!Os.macos) {
+            File extractDirectory = createExtractDirectory(
+                    MousemasterApplication.tempDirectory);
+            extractQtFiles(extractDirectory);
+            System.setProperty("io.qt.library-path-override",
+                    extractDirectory.getAbsolutePath() + "/qt/bin");
         }
-        for (String qtJambiPath : qtJambiPaths) {
-            Path extractPath = Paths.get(extractDirectory.getAbsolutePath() + "/qt/" + qtJambiPath);
-            extractResourceFile(qtJambiPath, extractPath);
-        }
-        logger.trace("Extracted Qt files to " + extractDirectory.getAbsolutePath());
-        System.setProperty("io.qt.library-path-override",
-                extractDirectory.getAbsolutePath() + "/qt/bin");
         // QtJambi expects DLLs in io.qt.library-path-override, and io.qt.library-path-override/../plugins/platforms
 
 //        System.setProperty("QT_ENABLE_HIGHDPI_SCALING", "0");
@@ -72,6 +59,8 @@ public class QtManager {
             // Just to trigger the static initializer which loads DLLs.
             QtUtilities.jambiDeploymentDir();
         } catch (UnsatisfiedLinkError e) {
+            if (Os.macos)
+                throw e;
             for (String msvcpDllResourcePath : msvcpDllPaths) {
                 extractResourceFile(msvcpDllResourcePath,
                         Paths.get(msvcpDllResourcePath.replaceAll(".*/", "")));
@@ -82,24 +71,73 @@ public class QtManager {
             throw e2;
         }
         QtUtilities.putenv("QT_ENABLE_HIGHDPI_SCALING", "0"); // Only works on Windows?
-        logger.trace("highDpiScaleFactorRoundingPolicy is " + QApplication.highDpiScaleFactorRoundingPolicy());
+        // Qt's raster engine caches glyph masks only below this size and otherwise falls back to
+        // filling a path per glyph, ~50x slower. The default 64 is reached by a 16pt font at 300%
+        // scaling, well within what a hint mesh uses.
+        QtUtilities.putenv("QT_MAX_CACHED_GLYPH_SIZE", "256");
+        logger.trace("High DPI scale factor rounding policy is " + QApplication.highDpiScaleFactorRoundingPolicy());
         // Default font engine on Windows is directwrite. Antialiasing seems better with gdi.
-        QApplication.initialize(new String[] { "-platform", "windows:fontengine=gdi" });
+        QApplication.initialize(Os.macos ? new String[] {} :
+                new String[] { "-platform", "windows:fontengine=gdi" });
+        // The tray and the settings window must not quit the process when closed.
         QApplication.setQuitOnLastWindowClosed(false);
-//        QApplication.initialize(new String[] { });
+    }
+
+    /**
+     * Writing the DLLs is most of the startup time, so they are left in the temp
+     * directory and written again only once mousemaster.exe is newer than them.
+     */
+    private static void extractQtFiles(File extractDirectory) throws IOException {
+        if (qtFilesAreNewerThanExecutable(extractDirectory)) {
+            logger.trace("Reusing the Qt files in " + extractDirectory.getAbsolutePath());
+            return;
+        }
+        for (String resourcesPath : qtResourcesPaths) {
+            Path extractPath = extractPath(extractDirectory, resourcesPath);
+            Files.createDirectories(extractPath.getParent());
+            extractResourceFile(resourcesPath, extractPath);
+        }
+        logger.trace("Extracted Qt files to " + extractDirectory.getAbsolutePath());
+    }
+
+    private static boolean qtFilesAreNewerThanExecutable(File extractDirectory)
+            throws IOException {
+        String executable = ProcessHandle.current().info().command().orElse(null);
+        if (executable == null)
+            return false;
+        FileTime executableTime = Files.getLastModifiedTime(Paths.get(executable));
+        for (String resourcesPath : qtResourcesPaths) {
+            Path extractPath = extractPath(extractDirectory, resourcesPath);
+            if (!Files.exists(extractPath) ||
+                Files.getLastModifiedTime(extractPath).compareTo(executableTime) < 0)
+                return false;
+        }
+        return true;
+    }
+
+    private static Path extractPath(File extractDirectory, String resourcesPath) {
+        return Paths.get(extractDirectory.getAbsolutePath() + "/" + resourcesPath);
     }
 
     private static void extractResourceFile(String resourcesPath, Path extractPath)
             throws IOException {
-        try (InputStream inputStream = MousemasterApplication.class.getClassLoader().getResourceAsStream(
-                resourcesPath)) {
-            try (OutputStream outputStream = Files.newOutputStream(extractPath,
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE)) {
+        for (int attempt = 0; ; attempt++) {
+            try (InputStream inputStream = MousemasterApplication.resourceStream(resourcesPath);
+                 OutputStream outputStream = Files.newOutputStream(extractPath,
+                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+                         StandardOpenOption.WRITE)) {
                 inputStream.transferTo(outputStream);
-            } catch (IOException e) {
-                // java.nio.file.FileSystemException: C:\Users\x\AppData\Local\Temp\mousemaster-110364797\qt\bin\Qt6Core.dll: The process cannot access the file because it is being used by another process
-                // logger.debug("Unable to extract resource file " + resourcesPath, e);
+                return;
+            }
+            catch (FileSystemException e) {
+                if (attempt == 100)
+                    throw e;
+            }
+            try {
+                Thread.sleep(50);
+            }
+            catch (InterruptedException e) {
+                throw new IllegalStateException(e);
             }
         }
     }
@@ -110,6 +148,9 @@ public class QtManager {
 
     public static void processEvents() {
         QApplication.processEvents();
+        // disposeLater posts a deletion that only an exec() loop returning to itself carries
+        // out, and this application never runs one: without this the widgets pile up.
+        QApplication.sendPostedEvents(null, QEvent.Type.DeferredDispose);
     }
 
     private static File createExtractDirectory(String tempDirectory) throws IOException {

@@ -1,0 +1,447 @@
+package mousemaster.platform.windows;
+
+import com.sun.jna.Library;
+import com.sun.jna.Memory;
+import com.sun.jna.Native;
+import com.sun.jna.Pointer;
+import com.sun.jna.Structure;
+import com.sun.jna.platform.win32.COM.Unknown;
+import com.sun.jna.platform.win32.Guid;
+import com.sun.jna.platform.win32.WinNT.HRESULT;
+import com.sun.jna.ptr.IntByReference;
+import com.sun.jna.ptr.PointerByReference;
+import mousemaster.Rectangle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * Hands the on-screen desktop to {@link WindowsZoomRenderer} with DXGI Desktop Duplication,
+ * texture to texture, never through the CPU. Windows marked WDA_EXCLUDEFROMCAPTURE are left
+ * out of the frame.
+ */
+final class WindowsDesktopDuplication {
+
+    private static final Logger logger =
+            LoggerFactory.getLogger(WindowsDesktopDuplication.class);
+
+    private static final Guid.IID IID_IDXGIFactory1 =
+            new Guid.IID("770aae78-f26f-4dba-a829-253c83d1b387");
+    private static final Guid.IID IID_IDXGIOutput5 =
+            new Guid.IID("80a07424-ab52-42eb-833c-0c42fd282d98");
+    static final Guid.IID IID_ID3D11Texture2D =
+            new Guid.IID("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
+
+    // Vtable indices (stable COM ABI). IUnknown: 0 QueryInterface, 1 AddRef, 2 Release.
+    static final int RELEASE = 2;
+    private static final int IDXGIFACTORY1_ENUMADAPTERS1 = 12;
+    static final int IDXGIADAPTER_ENUMOUTPUTS = 7;
+    private static final int IDXGIOUTPUT_GETDESC = 7;
+    private static final int IDXGIOUTPUT5_DUPLICATEOUTPUT1 = 26;
+    private static final int IDXGIOUTPUTDUPLICATION_GETDESC = 7;
+    static final int IDXGIOUTPUTDUPLICATION_ACQUIRENEXTFRAME = 8;
+    static final int IDXGIOUTPUTDUPLICATION_RELEASEFRAME = 14;
+    static final int ID3D11DEVICECONTEXT_COPYRESOURCE = 47;
+
+    private static final int D3D_DRIVER_TYPE_UNKNOWN = 0;
+    static final int D3D11_SDK_VERSION = 7;
+    static final int D3D11_CREATE_DEVICE_BGRA_SUPPORT = 0x20;
+
+    static final int DXGI_FORMAT_B8G8R8A8_UNORM = 87;
+    static final int DXGI_FORMAT_R16G16B16A16_FLOAT = 10;
+    private static final int DXGI_MODE_ROTATION_UNSPECIFIED = 0;
+    private static final int DXGI_MODE_ROTATION_IDENTITY = 1;
+
+    static final int S_OK = 0;
+    private static final int DXGI_ERROR_NOT_FOUND = 0x887A0002;
+    static final int DXGI_ERROR_WAIT_TIMEOUT = 0x887A0027;
+
+    private static final int FRAME_INFO_SIZE = 48; // DXGI_OUTDUPL_FRAME_INFO, unread
+    private static final int DISPLAYCONFIG_PATH_INFO_SIZE = 72; // sourceInfo at 0, targetInfo at 20
+    private static final int DISPLAYCONFIG_MODE_INFO_SIZE = 64; // unread
+    private static final int DISPLAYCONFIG_DEVICE_INFO_HEADER_SIZE = 20;
+    private static final int DISPLAYCONFIG_SOURCE_DEVICE_NAME_SIZE = 84;
+    private static final int DISPLAYCONFIG_SDR_WHITE_LEVEL_SIZE = 24;
+    private static final int ACQUIRE_TIMEOUT_MILLIS = 60;
+    private static final Duration RETRY_DELAY = Duration.ofSeconds(1);
+
+    interface D3D11 extends Library {
+        D3D11 INSTANCE = Native.load("d3d11", D3D11.class);
+
+        HRESULT D3D11CreateDevice(Pointer adapter, int driverType, Pointer software,
+                                  int flags, Pointer featureLevels, int numFeatureLevels,
+                                  int sdkVersion, PointerByReference device,
+                                  IntByReference featureLevel, PointerByReference context);
+    }
+
+    private interface Dxgi extends Library {
+        Dxgi INSTANCE = Native.load("dxgi", Dxgi.class);
+
+        HRESULT CreateDXGIFactory1(Guid.IID riid, PointerByReference factory);
+    }
+
+    private Pointer device;
+    private Pointer context;
+    private Pointer duplication;
+    private Rectangle outputBounds;
+    private int format;
+    private float sdrWhiteLevel;
+    private boolean copied;
+    private boolean unavailable;
+    private long retryAtNanos;
+
+    Pointer device() {
+        return device;
+    }
+
+    Pointer context() {
+        return context;
+    }
+
+    /** The output the duplication covers, in desktop coordinates. */
+    Rectangle outputBounds() {
+        return outputBounds;
+    }
+
+    int format() {
+        return format;
+    }
+
+    /** The frame value of SDR white: above 1 on an HDR desktop. */
+    float sdrWhiteLevel() {
+        return sdrWhiteLevel;
+    }
+
+    /** Makes the next copy wait for a new frame instead of reporting the screen unchanged. */
+    void discardFrame() {
+        copied = false;
+    }
+
+    boolean ensureInitialized(Rectangle bounds) {
+        if (unavailable || System.nanoTime() < retryAtNanos)
+            return false;
+        try {
+            if (duplication != null && !outputBounds.contains(bounds))
+                releaseDuplication();
+            if (duplication == null)
+                initialize(bounds);
+            return true;
+        }
+        catch (Throwable e) {
+            logger.debug("Desktop Duplication unavailable: " + e.getMessage());
+            releaseDuplication();
+            // Enumerating costs a device creation, and a display that cannot be duplicated
+            // stays that way until it is reconfigured: not worth retrying every frame.
+            retryAtNanos = System.nanoTime() + RETRY_DELAY.toNanos();
+            // A lost duplication comes back on the next call; a missing DLL does not.
+            if (e instanceof UnsatisfiedLinkError || e instanceof NoClassDefFoundError)
+                unavailable = true;
+            return false;
+        }
+    }
+
+    /** False means the screen has not changed and destination still holds the last frame. */
+    boolean copyFrameInto(Rectangle bounds, Pointer destination) {
+        if (!ensureInitialized(bounds))
+            return false;
+        try {
+            PointerByReference resourceOut = new PointerByReference();
+            // Only the first frame is worth waiting for; without it there is nothing to show.
+            HRESULT hr = call(duplication, IDXGIOUTPUTDUPLICATION_ACQUIRENEXTFRAME,
+                    copied ? 0 : ACQUIRE_TIMEOUT_MILLIS, new Memory(FRAME_INFO_SIZE),
+                    resourceOut);
+            if (hr.intValue() == DXGI_ERROR_WAIT_TIMEOUT)
+                return false;
+            check(hr, "AcquireNextFrame");
+            Pointer resource = resourceOut.getValue();
+            try {
+                Pointer texture = queryInterface(resource, IID_ID3D11Texture2D);
+                callVoid(context, ID3D11DEVICECONTEXT_COPYRESOURCE, destination, texture);
+                release(texture);
+                copied = true;
+                return true;
+            }
+            finally {
+                release(resource);
+                call(duplication, IDXGIOUTPUTDUPLICATION_RELEASEFRAME);
+            }
+        }
+        catch (Throwable e) {
+            logger.debug("Desktop Duplication frame copy failed: " + e.getMessage());
+            releaseDuplication();
+            return false;
+        }
+    }
+
+    /** The adapter and output whose desktop coordinates cover bounds. */
+    record Output(Pointer adapter, Pointer output, Rectangle bounds, String deviceName) {
+    }
+
+    static Output findOutputCovering(Rectangle bounds) {
+        PointerByReference factoryOut = new PointerByReference();
+        check(Dxgi.INSTANCE.CreateDXGIFactory1(IID_IDXGIFactory1, factoryOut),
+                "CreateDXGIFactory1");
+        Pointer factory = factoryOut.getValue();
+        try {
+            for (int adapterIndex = 0; ; adapterIndex++) {
+                PointerByReference adapterOut = new PointerByReference();
+                HRESULT hr = call(factory, IDXGIFACTORY1_ENUMADAPTERS1, adapterIndex,
+                        adapterOut);
+                if (hr.intValue() == DXGI_ERROR_NOT_FOUND)
+                    throw new IllegalStateException("no output covers " + bounds);
+                check(hr, "EnumAdapters1");
+                Pointer adapter = adapterOut.getValue();
+                Output found = findOutput(adapter, bounds);
+                if (found != null)
+                    return found;
+                release(adapter);
+            }
+        }
+        finally {
+            release(factory);
+        }
+    }
+
+    private void initialize(Rectangle bounds) {
+        Output found = findOutputCovering(bounds);
+        Pointer adapter = found.adapter();
+        Pointer output = found.output();
+        outputBounds = found.bounds();
+        try {
+            createDevice(adapter);
+            Duplication outputDuplication = duplicateOutput(found, device);
+            duplication = outputDuplication.pointer();
+            format = outputDuplication.format();
+            sdrWhiteLevel = outputDuplication.sdrWhiteLevel();
+        }
+        finally {
+            release(output);
+            release(adapter);
+        }
+    }
+
+    record Duplication(Pointer pointer, int format, float sdrWhiteLevel) {
+    }
+
+    static Duplication duplicateOutput(Output found, Pointer device) {
+        Pointer output5 = queryInterface(found.output(), IID_IDXGIOutput5);
+        Memory formats = new Memory(8);
+        formats.setInt(0, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        formats.setInt(4, DXGI_FORMAT_B8G8R8A8_UNORM);
+        PointerByReference duplicationOut = new PointerByReference();
+        HRESULT hr = call(output5, IDXGIOUTPUT5_DUPLICATEOUTPUT1, device, 0, 2, formats,
+                duplicationOut);
+        release(output5);
+        check(hr, "DuplicateOutput1");
+        Pointer duplication = duplicationOut.getValue();
+        try {
+            OutduplDesc desc = new OutduplDesc();
+            callVoid(duplication, IDXGIOUTPUTDUPLICATION_GETDESC, desc.getPointer());
+            desc.read();
+            float sdrWhiteLevel = desc.format == DXGI_FORMAT_R16G16B16A16_FLOAT ?
+                    sdrWhiteLevel(found.deviceName()) : 1;
+            logger.debug("Initialized Desktop Duplication on " + found.bounds() +
+                         " (format " + desc.format + ", SDR white level " +
+                         sdrWhiteLevel + ")");
+            return new Duplication(duplication, desc.format, sdrWhiteLevel);
+        }
+        catch (RuntimeException e) {
+            release(duplication);
+            throw e;
+        }
+    }
+
+    private static float sdrWhiteLevel(String deviceName) {
+        IntByReference pathCount = new IntByReference();
+        IntByReference modeCount = new IntByReference();
+        check(new HRESULT(ExtendedUser32.INSTANCE.GetDisplayConfigBufferSizes(
+                ExtendedUser32.QDC_ONLY_ACTIVE_PATHS, pathCount, modeCount)),
+                "GetDisplayConfigBufferSizes");
+        Memory paths = new Memory((long) DISPLAYCONFIG_PATH_INFO_SIZE * pathCount.getValue());
+        Memory modes = new Memory((long) DISPLAYCONFIG_MODE_INFO_SIZE * modeCount.getValue());
+        check(new HRESULT(ExtendedUser32.INSTANCE.QueryDisplayConfig(
+                ExtendedUser32.QDC_ONLY_ACTIVE_PATHS, pathCount, paths, modeCount, modes,
+                Pointer.NULL)), "QueryDisplayConfig");
+        for (int pathIndex = 0; pathIndex < pathCount.getValue(); pathIndex++) {
+            Pointer path = paths.share((long) DISPLAYCONFIG_PATH_INFO_SIZE * pathIndex);
+            Memory sourceName = deviceInfo(
+                    ExtendedUser32.DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+                    DISPLAYCONFIG_SOURCE_DEVICE_NAME_SIZE,
+                    path.getLong(0), path.getInt(8));
+            if (!sourceName.getWideString(DISPLAYCONFIG_DEVICE_INFO_HEADER_SIZE)
+                           .equals(deviceName))
+                continue;
+            Memory whiteLevel = deviceInfo(
+                    ExtendedUser32.DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL,
+                    DISPLAYCONFIG_SDR_WHITE_LEVEL_SIZE,
+                    path.getLong(20), path.getInt(28));
+            return whiteLevel.getInt(DISPLAYCONFIG_DEVICE_INFO_HEADER_SIZE) / 1000f;
+        }
+        throw new IllegalStateException("no display path for " + deviceName);
+    }
+
+    private static Memory deviceInfo(int type, int size, long adapterId, int id) {
+        Memory packet = new Memory(size);
+        packet.clear();
+        packet.setInt(0, type);
+        packet.setInt(4, size);
+        packet.setLong(8, adapterId);
+        packet.setInt(16, id);
+        check(new HRESULT(ExtendedUser32.INSTANCE.DisplayConfigGetDeviceInfo(packet)),
+                "DisplayConfigGetDeviceInfo");
+        return packet;
+    }
+
+    /** The adapter's output covering bounds, or null. */
+    private static Output findOutput(Pointer adapter, Rectangle bounds) {
+        for (int outputIndex = 0; ; outputIndex++) {
+            PointerByReference outputOut = new PointerByReference();
+            HRESULT hr = call(adapter, IDXGIADAPTER_ENUMOUTPUTS, outputIndex, outputOut);
+            if (hr.intValue() == DXGI_ERROR_NOT_FOUND)
+                return null;
+            check(hr, "EnumOutputs");
+            Pointer output = outputOut.getValue();
+            OutputDesc desc = new OutputDesc();
+            check(call(output, IDXGIOUTPUT_GETDESC, desc.getPointer()), "GetDesc");
+            desc.read();
+            Rectangle rectangle = new Rectangle(desc.left, desc.top,
+                    desc.right - desc.left, desc.bottom - desc.top);
+            // A rotated output duplicates in the unrotated orientation.
+            if (desc.attachedToDesktop != 0 &&
+                (desc.rotation == DXGI_MODE_ROTATION_IDENTITY ||
+                 desc.rotation == DXGI_MODE_ROTATION_UNSPECIFIED) &&
+                rectangle.contains(bounds)) {
+                return new Output(adapter, output, rectangle,
+                        Native.toString(desc.deviceName));
+            }
+            release(output);
+        }
+    }
+
+    /** The default adapter of a hybrid-GPU laptop often drives no output. */
+    private void createDevice(Pointer adapter) {
+        PointerByReference deviceOut = new PointerByReference();
+        PointerByReference contextOut = new PointerByReference();
+        // An explicit adapter requires the driver type to be UNKNOWN.
+        check(D3D11.INSTANCE.D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN,
+                Pointer.NULL, D3D11_CREATE_DEVICE_BGRA_SUPPORT, Pointer.NULL, 0,
+                D3D11_SDK_VERSION, deviceOut, null, contextOut), "D3D11CreateDevice");
+        device = deviceOut.getValue();
+        context = contextOut.getValue();
+    }
+
+    void releaseDuplication() {
+        release(duplication);
+        duplication = null;
+        outputBounds = null;
+        copied = false;
+        // The device goes with it: it can only duplicate an output of the adapter it was
+        // created on, and the next output may be on another one.
+        release(context);
+        context = null;
+        release(device);
+        device = null;
+    }
+
+    /** Exposes {@code _invokeNativeObject}, which is protected to Unknown's subclasses. */
+    private static final class Com extends Unknown {
+        Com(Pointer p) {
+            super(p);
+        }
+
+        HRESULT hr(int vtableIndex, Object... args) {
+            return (HRESULT) _invokeNativeObject(vtableIndex, prepend(args), HRESULT.class);
+        }
+
+        void voidHr(int vtableIndex, Object... args) {
+            _invokeNativeObject(vtableIndex, prepend(args), Integer.class);
+        }
+
+        Object invoke(int vtableIndex, Class<?> returnType, Object... args) {
+            return _invokeNativeObject(vtableIndex, prepend(args), returnType);
+        }
+
+        private Object[] prepend(Object[] args) {
+            Object[] all = new Object[args.length + 1];
+            all[0] = getPointer();
+            System.arraycopy(args, 0, all, 1, args.length);
+            return all;
+        }
+    }
+
+    static Pointer queryInterface(Pointer iface, Guid.IID iid) {
+        PointerByReference out = new PointerByReference();
+        check(new Com(iface).hr(0, iid, out), "QueryInterface");
+        return out.getValue();
+    }
+
+    static HRESULT call(Pointer iface, int vtableIndex, Object... args) {
+        return new Com(iface).hr(vtableIndex, args);
+    }
+
+    static Object invoke(Pointer iface, int vtableIndex, Class<?> returnType,
+                         Object... args) {
+        return new Com(iface).invoke(vtableIndex, returnType, args);
+    }
+
+    static void callVoid(Pointer iface, int vtableIndex, Object... args) {
+        new Com(iface).voidHr(vtableIndex, args);
+    }
+
+    static void release(Pointer iface) {
+        if (iface != null)
+            new Com(iface).voidHr(RELEASE);
+    }
+
+    static void check(HRESULT hr, String what) {
+        if (hr.intValue() != S_OK)
+            throw new IllegalStateException(
+                    what + " failed: 0x" + Integer.toHexString(hr.intValue()));
+    }
+
+    public static class OutputDesc extends Structure {
+        public char[] deviceName = new char[32];
+        public int left, top, right, bottom;     // RECT DesktopCoordinates inlined
+        public int attachedToDesktop;
+        public int rotation;
+        public Pointer monitor;
+
+        @Override
+        protected List<String> getFieldOrder() {
+            return List.of("deviceName", "left", "top", "right", "bottom",
+                    "attachedToDesktop", "rotation", "monitor");
+        }
+    }
+
+    public static class OutduplDesc extends Structure {
+        public int width, height;                  // DXGI_MODE_DESC inlined
+        public int refreshRateNumerator, refreshRateDenominator;
+        public int format;
+        public int scanlineOrdering, scaling;
+        public int rotation;
+        public int desktopImageInSystemMemory;
+
+        @Override
+        protected List<String> getFieldOrder() {
+            return List.of("width", "height", "refreshRateNumerator",
+                    "refreshRateDenominator", "format", "scanlineOrdering", "scaling",
+                    "rotation", "desktopImageInSystemMemory");
+        }
+    }
+
+    public static class Texture2DDesc extends Structure {
+        public int width, height, mipLevels, arraySize, format;
+        public int sampleCount, sampleQuality; // DXGI_SAMPLE_DESC inlined
+        public int usage, bindFlags, cpuAccessFlags, miscFlags;
+
+        @Override
+        protected List<String> getFieldOrder() {
+            return List.of("width", "height", "mipLevels", "arraySize", "format",
+                    "sampleCount", "sampleQuality", "usage", "bindFlags",
+                    "cpuAccessFlags", "miscFlags");
+        }
+    }
+
+}

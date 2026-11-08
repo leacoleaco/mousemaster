@@ -1,27 +1,64 @@
 package mousemaster;
 
+import mousemaster.platform.ActiveAppFinder;
+import mousemaster.platform.Console;
+import mousemaster.platform.KeyboardController;
+import mousemaster.platform.Overlay;
+import mousemaster.platform.UiAutomation;
+
 import java.util.List;
+import java.util.Set;
 
 public interface Platform extends ModeListener {
 
     void update(double delta);
 
-    void windowsMessagePump();
+    void pumpEvents();
 
     void sleep() throws InterruptedException;
 
-    void reset(MouseController mouseController, KeyboardManager keyboardManager,
+    void reset(MouseManager mouseManager, KeyboardManager keyboardManager,
+               KeyRegurgitator keyRegurgitator, MacroPlayer macroPlayer,
+               KeyRedactor keyRedactor,
+               boolean logLastKeyEventsOnExit,
                ModeMap modeMap,
+               ZoomManager zoomManager,
+               IndicatorManager indicatorManager,
+               HintManager hintManager,
                List<MousePositionListener> mousePositionListeners,
                KeyboardLayout activeKeyboardLayout,
                boolean suppressCapsLockOsPassthrough);
 
     void shutdown();
 
-    KeyRegurgitator keyRegurgitator();
+    /**
+     * Shuts down, then kills the process instead of exiting it: Qt's and the CRT's teardown
+     * warns and can hang for seconds when it runs off the main thread.
+     */
+    void killProcess(int exitCode);
 
-    PlatformClock clock();
+    void requestKillProcess();
+
+    void requestRestartProcess();
+
+    Clock clock();
 
     KeyboardLayout activeKeyboardLayout();
+
+    KeyboardController keyboard();
+
+    mousemaster.platform.MouseController mouse();
+
+    Set<Screen> screens();
+
+    Overlay overlay();
+
+    UiAutomation uiAutomation();
+
+    Vision vision();
+
+    ActiveAppFinder activeAppFinder();
+
+    Console console();
 
 }

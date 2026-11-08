@@ -1,0 +1,214 @@
+package mousemaster;
+
+import java.util.List;
+
+/**
+ * A purely visual grid drawn over the hints (never consumes input). Held by
+ * {@link HintMeshStyle} as a list indexed by descent depth: index 0 = the
+ * whole-area decoration (the grid treated as one big cell), index 1 =
+ * subdecoration (one grid inside each top cell), index 2 = subsubdecoration, ...
+ */
+public record Decoration(int maxRowCount, int maxColumnCount,
+                         List<Key> labelKeys, List<Key> labelOverride,
+                         GradientColor boxColor, double boxOpacity,
+                         double boxBorderThickness, double boxBorderLength,
+                         Color boxBorderColor, double boxBorderOpacity,
+                         double boxBorderRadius, boolean boxFramed,
+                         double boxHorizontalPadding, double boxVerticalPadding,
+                         HintFontStyle fontStyle) {
+
+    public DecorationBuilder builder() {
+        return new DecorationBuilder(this);
+    }
+
+    public static class DecorationBuilder {
+        private Integer maxRowCount;
+        private Integer maxColumnCount;
+        private List<Key> labelKeys;
+        private List<Key> labelOverride;
+        private GradientColor boxColor;
+        private Double boxOpacity;
+        private Double boxBorderThickness;
+        private Double boxBorderLength;
+        private Color boxBorderColor;
+        private Double boxBorderOpacity;
+        private Double boxBorderRadius;
+        private Boolean boxFramed;
+        private Double boxHorizontalPadding;
+        private Double boxVerticalPadding;
+        private HintFontStyle.HintFontStyleBuilder fontStyle =
+                new HintFontStyle.HintFontStyleBuilder();
+
+        public DecorationBuilder() {
+        }
+
+        public DecorationBuilder(Decoration decoration) {
+            this.maxRowCount = decoration.maxRowCount;
+            this.maxColumnCount = decoration.maxColumnCount;
+            this.labelKeys = decoration.labelKeys;
+            this.labelOverride = decoration.labelOverride;
+            this.boxColor = decoration.boxColor;
+            this.boxOpacity = decoration.boxOpacity;
+            this.boxBorderThickness = decoration.boxBorderThickness;
+            this.boxBorderLength = decoration.boxBorderLength;
+            this.boxBorderColor = decoration.boxBorderColor;
+            this.boxBorderOpacity = decoration.boxBorderOpacity;
+            this.boxBorderRadius = decoration.boxBorderRadius;
+            this.boxFramed = decoration.boxFramed;
+            this.boxHorizontalPadding = decoration.boxHorizontalPadding;
+            this.boxVerticalPadding = decoration.boxVerticalPadding;
+            this.fontStyle = decoration.fontStyle.builder();
+        }
+
+        public Integer maxRowCount() {
+            return maxRowCount;
+        }
+
+        public Integer maxColumnCount() {
+            return maxColumnCount;
+        }
+
+        public List<Key> labelKeys() {
+            return labelKeys;
+        }
+
+        public List<Key> labelOverride() {
+            return labelOverride;
+        }
+
+        public GradientColor boxColor() {
+            return boxColor;
+        }
+
+        public Double boxOpacity() {
+            return boxOpacity;
+        }
+
+        public Double boxBorderThickness() {
+            return boxBorderThickness;
+        }
+
+        public Double boxBorderLength() {
+            return boxBorderLength;
+        }
+
+        public Color boxBorderColor() {
+            return boxBorderColor;
+        }
+
+        public Double boxBorderOpacity() {
+            return boxBorderOpacity;
+        }
+
+        public Double boxBorderRadius() {
+            return boxBorderRadius;
+        }
+
+        public HintFontStyle.HintFontStyleBuilder fontStyle() {
+            return fontStyle;
+        }
+
+        public Boolean boxFramed() {
+            return boxFramed;
+        }
+
+        public Double boxHorizontalPadding() {
+            return boxHorizontalPadding;
+        }
+
+        public Double boxVerticalPadding() {
+            return boxVerticalPadding;
+        }
+
+        public DecorationBuilder maxRowCount(Integer maxRowCount) {
+            this.maxRowCount = maxRowCount;
+            return this;
+        }
+
+        public DecorationBuilder maxColumnCount(Integer maxColumnCount) {
+            this.maxColumnCount = maxColumnCount;
+            return this;
+        }
+
+        public DecorationBuilder labelKeys(List<Key> labelKeys) {
+            this.labelKeys = labelKeys;
+            return this;
+        }
+
+        public DecorationBuilder labelOverride(List<Key> labelOverride) {
+            this.labelOverride = labelOverride;
+            return this;
+        }
+
+        public DecorationBuilder boxColor(GradientColor boxColor) {
+            this.boxColor = boxColor;
+            return this;
+        }
+
+        public DecorationBuilder boxOpacity(Double boxOpacity) {
+            this.boxOpacity = boxOpacity;
+            return this;
+        }
+
+        public DecorationBuilder boxBorderThickness(Double boxBorderThickness) {
+            this.boxBorderThickness = boxBorderThickness;
+            return this;
+        }
+
+        public DecorationBuilder boxBorderLength(Double boxBorderLength) {
+            this.boxBorderLength = boxBorderLength;
+            return this;
+        }
+
+        public DecorationBuilder boxBorderColor(Color boxBorderColor) {
+            this.boxBorderColor = boxBorderColor;
+            return this;
+        }
+
+        public DecorationBuilder boxBorderOpacity(Double boxBorderOpacity) {
+            this.boxBorderOpacity = boxBorderOpacity;
+            return this;
+        }
+
+        public DecorationBuilder boxBorderRadius(Double boxBorderRadius) {
+            this.boxBorderRadius = boxBorderRadius;
+            return this;
+        }
+
+        public DecorationBuilder boxFramed(Boolean boxFramed) {
+            this.boxFramed = boxFramed;
+            return this;
+        }
+
+        public DecorationBuilder boxHorizontalPadding(Double boxHorizontalPadding) {
+            this.boxHorizontalPadding = boxHorizontalPadding;
+            return this;
+        }
+
+        public DecorationBuilder boxVerticalPadding(Double boxVerticalPadding) {
+            this.boxVerticalPadding = boxVerticalPadding;
+            return this;
+        }
+
+        public Decoration build(Decoration defaultDecoration) {
+            return new Decoration(
+                    maxRowCount == null ? defaultDecoration.maxRowCount : maxRowCount,
+                    maxColumnCount == null ? defaultDecoration.maxColumnCount : maxColumnCount,
+                    labelKeys == null ? defaultDecoration.labelKeys : labelKeys,
+                    labelOverride == null ? defaultDecoration.labelOverride : labelOverride,
+                    boxColor == null ? defaultDecoration.boxColor : boxColor,
+                    boxOpacity == null ? defaultDecoration.boxOpacity : boxOpacity,
+                    boxBorderThickness == null ? defaultDecoration.boxBorderThickness : boxBorderThickness,
+                    boxBorderLength == null ? defaultDecoration.boxBorderLength : boxBorderLength,
+                    boxBorderColor == null ? defaultDecoration.boxBorderColor : boxBorderColor,
+                    boxBorderOpacity == null ? defaultDecoration.boxBorderOpacity : boxBorderOpacity,
+                    boxBorderRadius == null ? defaultDecoration.boxBorderRadius : boxBorderRadius,
+                    boxFramed == null ? defaultDecoration.boxFramed : boxFramed,
+                    boxHorizontalPadding == null ? defaultDecoration.boxHorizontalPadding : boxHorizontalPadding,
+                    boxVerticalPadding == null ? defaultDecoration.boxVerticalPadding : boxVerticalPadding,
+                    fontStyle.build()
+            );
+        }
+    }
+
+}

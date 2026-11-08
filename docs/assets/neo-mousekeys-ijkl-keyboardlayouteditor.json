@@ -1,0 +1,203 @@
+[
+  {
+    "css": ""
+  },
+  [
+    {
+      "c": "#f7e98c"
+    },
+    "`\n\n\n\n\n\nFollow",
+    {
+      "c": "#cccccc"
+    },
+    "!\n1",
+    "@\n2",
+    "#\n3",
+    "$\n4",
+    "%\n5",
+    "^\n6",
+    "&\n7",
+    "*\n8",
+    "(\n9",
+    ")\n0",
+    "_\n-",
+    "+\n=",
+    {
+      "w": 2
+    },
+    "Backspace"
+  ],
+  [
+    {
+      "w": 1.5
+    },
+    "Tab",
+    {
+      "c": "#cdaef0"
+    },
+    "Q\n\n\n\n\n\nDisable",
+    {
+      "c": "#cccccc"
+    },
+    "W",
+    {
+      "c": "#cdaef0"
+    },
+    "E\n(+Alt)\n\n\n\n\nEnable",
+    {
+      "c": "#f7e98c"
+    },
+    "R\nRecurse\n\n\n\n\nHints",
+    {
+      "c": "#cccccc"
+    },
+    "T",
+    {
+      "c": "#b6c6d9"
+    },
+    "Y\nForward\n\n\n\n\nNav",
+    {
+      "c": "#a8dfe6"
+    },
+    "U\nLeft\n\n\n\n\nWheel",
+    {
+      "c": "#c6d5fc"
+    },
+    "I\n↑(+Alt)\n\n\n\n\nUp",
+    {
+      "c": "#a8dfe6"
+    },
+    "O\nRight\n\n\n\n\nWheel",
+    {
+      "c": "#cdaef0"
+    },
+    "P\n\n\n\n\n\nDisable",
+    {
+      "c": "#cccccc"
+    },
+    "{\n[",
+    "}\n]",
+    {
+      "w": 1.5
+    },
+    "|\n\\"
+  ],
+  [
+    {
+      "c": "#cdaef0",
+      "w": 1.75
+    },
+    "Caps Lock\nSuper Slow\n\n\n\n\nEnable (+Alt)",
+    {
+      "c": "#cccccc"
+    },
+    "A",
+    "S",
+    "D",
+    {
+      "c": "#f7e98c"
+    },
+    "F\n\n\n\n\n\nHints",
+    "G\n\n\n\n\n\nGrid",
+    {
+      "c": "#b6c6d9"
+    },
+    "H\nBack\n\n\n\n\nNav",
+    {
+      "c": "#c6d5fc"
+    },
+    "J\n←(+Alt)\n\n\n\n\nLeft",
+    "K\n↓(+Alt)\n\n\n\n\nDown",
+    "L\n→(+Alt)\n\n\n\n\nRight",
+    {
+      "c": "#d4e9b6"
+    },
+    ";\nUI(+Alt)\n\n\n\n\nClick",
+    "'\nRight\n\n\n\n\nClick",
+    {
+      "c": "#cccccc",
+      "w": 2.25
+    },
+    "Enter"
+  ],
+  [
+    {
+      "c": "#f8bfba",
+      "w": 2.25
+    },
+    "Shift\nWheel Slow\n\n\n\n\nMouse Slow",
+    {
+      "c": "#cccccc"
+    },
+    "Z",
+    "X",
+    {
+      "c": "#f7e98c"
+    },
+    "C\nSelect\n\n\n\n\nScreen",
+    {
+      "c": "#f8bfba"
+    },
+    "V\nFast\n\n\n\n\nWheel",
+    "B\nFast\n\n\n\n\nWheel",
+    {
+      "c": "#b2e2c6"
+    },
+    "N\nLClick\n\n\n\n\nToggle",
+    {
+      "c": "#a8dfe6"
+    },
+    "M\nDown\n\n\n\n\nWheel",
+    ",\nUp\n\n\n\n\nWheel",
+    {
+      "c": "#d4e9b6"
+    },
+    ".\nClick Then Disable",
+    {
+      "c": "#f9cc9a"
+    },
+    "?\nSheet\n\n\n\n\nCheat",
+    {
+      "c": "#d4e9b6",
+      "w": 2.75
+    },
+    "Shift\n\n\n\n\n\nClick Middle"
+  ],
+  [
+    {
+      "c": "#cccccc",
+      "w": 1.25
+    },
+    "Ctrl",
+    {
+      "w": 1.25
+    },
+    "Win",
+    {
+      "c": "#cdaef0",
+      "w": 1.25
+    },
+    "Alt\n+E/Caps\n\n\n\n\nEnable",
+    {
+      "c": "#cccccc",
+      "a": 7,
+      "w": 6.25
+    },
+    "",
+    {
+      "c": "#f4b8d3",
+      "a": 4,
+      "w": 1.75
+    },
+    "Alt\n(+IJKL)\n\n\n\n\nEdges",
+    {
+      "c": "#cccccc",
+      "w": 1.75
+    },
+    "Win",
+    {
+      "w": 1.5
+    },
+    "Ctrl"
+  ]
+]

@@ -1,0 +1,466 @@
+package mousemaster.qt;
+
+import io.qt.core.QPointF;
+import io.qt.core.QRect;
+import io.qt.core.QRectF;
+import mousemaster.Os;
+import io.qt.gui.QColor;
+import io.qt.gui.QFont;
+import io.qt.gui.QFontDatabase;
+import io.qt.gui.QFontMetrics;
+import io.qt.gui.QImage;
+import io.qt.gui.QPainter;
+import io.qt.gui.QPainterPath;
+import io.qt.widgets.QApplication;
+import mousemaster.FontStyle;
+import mousemaster.FontWeight;
+import mousemaster.HintFontStyle;
+import mousemaster.HintMeshConfiguration;
+import mousemaster.HintMeshStyle;
+import mousemaster.Rectangle;
+import mousemaster.Shadow;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Builds Qt font styles from the cross-platform hint font model.
+ */
+public final class QtHintFont {
+
+    private static final Logger logger = LoggerFactory.getLogger(QtHintFont.class);
+
+    private static final Set<String> missingFonts = new HashSet<>();
+
+    public static final boolean gdiFontEngine =
+            Os.windows;
+
+    private QtHintFont() {
+    }
+
+    private record FontKey(String name, int weight, double size, double screenScale,
+                           double primaryScreenDpi) {
+    }
+
+    private static final Map<FontKey, QFontMetrics> metricsByFont = new HashMap<>();
+    /** Qt resolves a point size against the primary screen, so measuring through the paint font
+     *  would be off by the dpi ratio on any other screen. */
+    private static final Map<QFontMetrics, QFont> fontByMetrics = new IdentityHashMap<>();
+    private static final Map<QFontMetrics, Map<String, Rectangle>>
+            tightBoundsByTextByMetrics = new IdentityHashMap<>();
+    private static final Map<QFontMetrics, Map<String, Ink>> inkByTextByMetrics =
+            new IdentityHashMap<>();
+
+    /** The ink bounds of the text, kept once measured: ~100us a query under the GDI font engine. */
+    public static Rectangle tightBounds(QFontMetrics metrics, String text) {
+        return tightBoundsByTextByMetrics.computeIfAbsent(metrics, m -> new HashMap<>())
+                                         .computeIfAbsent(text, t -> {
+                                             QRect tight = metrics.tightBoundingRect(t);
+                                             Rectangle bounds =
+                                                     new Rectangle(tight.x(), tight.y(),
+                                                             tight.width(), tight.height());
+                                             tight.dispose();
+                                             return bounds;
+                                         });
+    }
+
+    /**
+     * The ink of the text on the outline that is drawn, relative to the baseline: a round letter
+     * overshoots the cap line and the baseline by a fraction of a pixel, which
+     * {@link #tightBounds} rounds away and a scaled screen then makes visible.
+     */
+    public static Ink ink(QFontMetrics metrics, String text) {
+        return inkByTextByMetrics.computeIfAbsent(metrics, m -> new HashMap<>())
+                                 .computeIfAbsent(text, t -> {
+                                     QPainterPath glyphs = new QPainterPath();
+                                     glyphs.addText(0, 0, fontByMetrics.get(metrics), t);
+                                     QRectF bounds = glyphs.boundingRect();
+                                     Ink ink = new Ink(bounds.x(), bounds.y(),
+                                             bounds.x() + bounds.width(),
+                                             bounds.y() + bounds.height());
+                                     bounds.dispose();
+                                     glyphs.dispose();
+                                     return ink;
+                                 });
+    }
+
+    /** How far the ink reaches above and below the baseline, which is 0, down being positive. */
+    public record Ink(double left, double top, double right, double bottom) {
+
+        public double height() {
+            return bottom - top;
+        }
+
+    }
+
+    private static final Map<QFontMetrics, Double> capHeightByMetrics = new IdentityHashMap<>();
+
+    /**
+     * How far above the baseline a capital inks once rasterized, which is not
+     * {@link QFontMetrics#capHeight}: that one is rounded to a whole unit, and smoothing or hinting
+     * moves the rasterized cap line off the outline's by a fraction of a pixel.
+     */
+    public static double capHeight(QFontMetrics metrics, double devicePixelRatio) {
+        return capHeightByMetrics.computeIfAbsent(metrics, m -> {
+            int baseline = (int) Math.ceil(m.ascent() * devicePixelRatio);
+            QImage image = new QImage((int) Math.ceil(m.maxWidth() * devicePixelRatio), baseline,
+                    QImage.Format.Format_ARGB32_Premultiplied);
+            image.setDevicePixelRatio(devicePixelRatio);
+            image.fill(0);
+            QPainter painter = new QPainter(image);
+            painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, true);
+            painter.setFont(fontByMetrics.get(m));
+            painter.setPen(new QColor(255, 255, 255));
+            painter.drawText(new QPointF(0, baseline / devicePixelRatio), "H");
+            painter.end();
+            double capHeight = 0;
+            for (int y = 0; y < baseline && capHeight == 0; y++) {
+                int alpha = 0;
+                for (int x = 0; x < image.width(); x++)
+                    alpha = Math.max(alpha, image.pixel(x, y) >>> 24);
+                if (alpha != 0)
+                    capHeight = (baseline - y - 1 + alpha / 255d) / devicePixelRatio;
+            }
+            painter.dispose();
+            image.dispose();
+            return capHeight;
+        });
+    }
+
+    private static final Map<QFontMetrics, Map<String, Ink>> rasterizedInkByTextByMetrics =
+            new IdentityHashMap<>();
+
+    /**
+     * The {@link #ink} of the text drawn at a whole pixel, once rasterized: GDI hints the glyphs
+     * off their outline, and CoreText smooths them half a pixel past it on the left.
+     */
+    public static Ink rasterizedInk(QFontMetrics metrics, String text, double devicePixelRatio) {
+        return rasterizedInkByTextByMetrics.computeIfAbsent(metrics, m -> new HashMap<>())
+                                           .computeIfAbsent(text,
+                                                   t -> rasterizedInk(metrics, t,
+                                                           devicePixelRatio, 0));
+    }
+
+    private static final Map<QFontMetrics, Integer> glyphPositionsPerPixelByMetrics =
+            new IdentityHashMap<>();
+
+    /**
+     * Where in a pixel a glyph can start: GDI starts it on the pixel, CoreText on either half of
+     * it, up to a size past which it drops the fraction too.
+     */
+    public static int glyphPositionsPerPixel(QFontMetrics metrics, double devicePixelRatio) {
+        return glyphPositionsPerPixelByMetrics.computeIfAbsent(metrics, m -> {
+            double halfPixel = 0.5 / devicePixelRatio;
+            return rasterizedInk(m, "H", devicePixelRatio, halfPixel).left() >
+                   rasterizedInk(m, "H", devicePixelRatio, 0).left() + halfPixel / 2 ? 2 : 1;
+        });
+    }
+
+    /** Drawn x past a whole pixel, and measured from that pixel. */
+    private static Ink rasterizedInk(QFontMetrics metrics, String text, double devicePixelRatio,
+                                     double x) {
+        Ink outline = ink(metrics, text);
+        // Whole units, so the origin is on a pixel, with room for the smoothing.
+        int originX = 2 - (int) Math.floor(outline.left());
+        int originY = 2 - (int) Math.floor(outline.top());
+        QImage image = new QImage(
+                (int) Math.ceil((originX + outline.right() + 3) * devicePixelRatio),
+                (int) Math.ceil((originY + outline.bottom() + 2) * devicePixelRatio),
+                QImage.Format.Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(devicePixelRatio);
+        image.fill(0);
+        QPainter painter = new QPainter(image);
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, true);
+        painter.setFont(fontByMetrics.get(metrics));
+        painter.setPen(new QColor(255, 255, 255));
+        painter.drawText(new QPointF(originX + x, originY), text);
+        painter.end();
+        double left = Double.MAX_VALUE, top = Double.MAX_VALUE;
+        double right = -Double.MAX_VALUE, bottom = -Double.MAX_VALUE;
+        for (int y = 0; y < image.height(); y++) {
+            for (int column = 0; column < image.width(); column++) {
+                double alpha = (image.pixel(column, y) >>> 24) / 255d;
+                if (alpha == 0)
+                    continue;
+                left = Math.min(left, column + 1 - alpha);
+                top = Math.min(top, y + 1 - alpha);
+                right = Math.max(right, column + alpha);
+                bottom = Math.max(bottom, y + alpha);
+            }
+        }
+        painter.dispose();
+        image.dispose();
+        return new Ink(left / devicePixelRatio - originX, top / devicePixelRatio - originY,
+                right / devicePixelRatio - originX, bottom / devicePixelRatio - originY);
+    }
+
+    private static final Map<QFontMetrics, Map<String, QPainterPath>> textPathsByMetrics =
+            new IdentityHashMap<>();
+
+    /** The paths are only ever copied into a painter, so they can be freed outright; the metrics
+     *  are kept, rebuilding one re-initializes the GDI font engine. */
+    public static void clearCaches() {
+        for (Map<String, QPainterPath> pathsByText : textPathsByMetrics.values())
+            for (QPainterPath path : pathsByText.values())
+                path.dispose();
+        textPathsByMetrics.clear();
+        tightBoundsByTextByMetrics.clear();
+        inkByTextByMetrics.clear();
+        rasterizedInkByTextByMetrics.clear();
+    }
+
+    /** Adds the text's glyph outline to {@code path}, baseline origin at (x, y). Outlines are kept
+     *  at the origin and copied into place: ~90us to build one under the GDI font engine. Keyed by
+     *  the metrics, which are cached per font, unlike the QFont, which callers may resize. */
+    static void addTextPath(QPainterPath path, QFontMetrics metrics, String text,
+                            double x, double y) {
+        QPainterPath glyphs =
+                textPathsByMetrics.computeIfAbsent(metrics, m -> new HashMap<>())
+                                  .computeIfAbsent(text, t -> {
+                                      QPainterPath origin = new QPainterPath();
+                                      origin.addText(0, 0, fontByMetrics.get(metrics), t);
+                                      return origin;
+                                  });
+        glyphs.translate(x, y);
+        path.addPath(glyphs);
+        glyphs.translate(-x, -y);
+    }
+
+    /** Qt resolves a point size at 96dpi per scale step on Windows but always at 72dpi on
+     *  macOS, where the scale goes to the widget instead. */
+    private static final double pointScale = Os.macos ? 96d / 72d : 1;
+
+    public static QFont qFont(String fontName, double fontSize, FontWeight fontWeight) {
+        QFont font = new QFont(available(fontName),
+                (int) Math.round(fontSize * pointScale),
+                fontWeight.qtWeight().value());
+        antialiasing(font);
+        font.setHintingPreference(QFont.HintingPreference.PreferFullHinting);
+        return font;
+    }
+
+    private static String available(String fontName) {
+        if (QFontDatabase.hasFamily(fontName))
+            return fontName;
+        if (missingFonts.add(fontName))
+            logger.info("Font " + fontName + " not found, falling back to " +
+                        FontStyle.defaultName);
+        return FontStyle.defaultName;
+    }
+
+    /**
+     * Greyscale antialiasing rather than subpixel: ClearType bakes the display's stripe layout
+     * and an opaque backdrop into the pixels, and the overlay this text is drawn on is
+     * translucent and composited over anything. Replaces PreferAntialias rather than joining it,
+     * QtJambi's StyleStrategy being a plain enum, so the quality request falls back to the
+     * system font smoothing setting.
+     */
+    private static void antialiasing(QFont font) {
+        font.setStyleStrategy(QFont.StyleStrategy.NoSubpixelAntialias);
+    }
+
+    /** One Qt font style (font + DPI-corrected metrics + colors) for a single FontStyle,
+     *  e.g. a decoration label. */
+    public static QtFontStyle qtFontStyle(FontStyle fontStyle, double screenScale,
+                                          String lastSelectedHintBoxHexColor) {
+        QFont font = qFont(fontStyle.name(), fontStyle.size(), fontStyle.weight());
+        QFontMetrics metrics = correctedFontMetricsForScreenDpi(font, fontStyle.size(), screenScale);
+        return qtFontStyle(fontStyle, font, metrics, screenScale, lastSelectedHintBoxHexColor);
+    }
+
+    public static QtHintFontStyle qtHintFontStyle(HintFontStyle hintFontStyle,
+                                                  HintFontStyle prefixHintFontStyle,
+                                                  double screenScale,
+                                                  String lastSelectedHintBoxHexColor) {
+        FontStyle defaultFontStyle = hintFontStyle.defaultFontStyle();
+        FontStyle selectedFontStyle = hintFontStyle.selectedFontStyle();
+        FontStyle focusedFontStyle = hintFontStyle.focusedFontStyle();
+        boolean perKeyFont = !fontShapeEquals(defaultFontStyle, selectedFontStyle) ||
+                             !fontShapeEquals(defaultFontStyle, focusedFontStyle);
+        if (prefixHintFontStyle != null) {
+            perKeyFont = perKeyFont ||
+                         !fontShapeEquals(defaultFontStyle, prefixHintFontStyle.defaultFontStyle()) ||
+                         !fontShapeEquals(defaultFontStyle, prefixHintFontStyle.selectedFontStyle()) ||
+                         !fontShapeEquals(defaultFontStyle, prefixHintFontStyle.focusedFontStyle());
+        }
+        Shadow defaultShadow = defaultFontStyle.shadow();
+        boolean perKeyShadow =
+                shadowsNeedPerKeyProcessing(defaultShadow, selectedFontStyle.shadow()) ||
+                shadowsNeedPerKeyProcessing(defaultShadow, focusedFontStyle.shadow());
+        if (prefixHintFontStyle != null) {
+            perKeyShadow = perKeyShadow ||
+                           shadowsNeedPerKeyProcessing(defaultShadow, prefixHintFontStyle.defaultFontStyle().shadow()) ||
+                           shadowsNeedPerKeyProcessing(defaultShadow, prefixHintFontStyle.selectedFontStyle().shadow()) ||
+                           shadowsNeedPerKeyProcessing(defaultShadow, prefixHintFontStyle.focusedFontStyle().shadow());
+        }
+        QFont defaultFont = qFont(defaultFontStyle.name(), defaultFontStyle.size(), defaultFontStyle.weight());
+        QFontMetrics defaultMetrics = correctedFontMetricsForScreenDpi(defaultFont, defaultFontStyle.size(), screenScale);
+        QtFontStyle defaultQtFontStyle = qtFontStyle(defaultFontStyle, defaultFont, defaultMetrics, screenScale, lastSelectedHintBoxHexColor);
+        QtFontStyle selectedQtFontStyle;
+        QtFontStyle focusedQtFontStyle;
+        if (perKeyFont) {
+            QFont selectedFont = qFont(selectedFontStyle.name(), selectedFontStyle.size(), selectedFontStyle.weight());
+            QFontMetrics selectedMetrics = correctedFontMetricsForScreenDpi(selectedFont, selectedFontStyle.size(), screenScale);
+            selectedQtFontStyle = qtFontStyle(selectedFontStyle, selectedFont, selectedMetrics, screenScale, lastSelectedHintBoxHexColor);
+            QFont focusedFont = qFont(focusedFontStyle.name(), focusedFontStyle.size(), focusedFontStyle.weight());
+            QFontMetrics focusedMetrics = correctedFontMetricsForScreenDpi(focusedFont, focusedFontStyle.size(), screenScale);
+            focusedQtFontStyle = qtFontStyle(focusedFontStyle, focusedFont, focusedMetrics, screenScale, lastSelectedHintBoxHexColor);
+        }
+        else {
+            selectedQtFontStyle = qtFontStyle(selectedFontStyle, defaultFont, defaultMetrics, screenScale, lastSelectedHintBoxHexColor);
+            focusedQtFontStyle = qtFontStyle(focusedFontStyle, defaultFont, defaultMetrics, screenScale, lastSelectedHintBoxHexColor);
+        }
+        QtFontStyle prefixDefaultQtFontStyle = null;
+        QtFontStyle prefixSelectedQtFontStyle = null;
+        QtFontStyle prefixFocusedQtFontStyle = null;
+        if (prefixHintFontStyle != null) {
+            FontStyle prefixDefaultFs = prefixHintFontStyle.defaultFontStyle();
+            FontStyle prefixSelectedFs = prefixHintFontStyle.selectedFontStyle();
+            FontStyle prefixFocusedFs = prefixHintFontStyle.focusedFontStyle();
+            if (perKeyFont) {
+                QFont prefixDefaultFont = qFont(prefixDefaultFs.name(), prefixDefaultFs.size(), prefixDefaultFs.weight());
+                QFontMetrics prefixDefaultMetrics = correctedFontMetricsForScreenDpi(prefixDefaultFont, prefixDefaultFs.size(), screenScale);
+                prefixDefaultQtFontStyle = qtFontStyle(prefixDefaultFs, prefixDefaultFont, prefixDefaultMetrics, screenScale, lastSelectedHintBoxHexColor);
+                QFont prefixSelectedFont = qFont(prefixSelectedFs.name(), prefixSelectedFs.size(), prefixSelectedFs.weight());
+                QFontMetrics prefixSelectedMetrics = correctedFontMetricsForScreenDpi(prefixSelectedFont, prefixSelectedFs.size(), screenScale);
+                prefixSelectedQtFontStyle = qtFontStyle(prefixSelectedFs, prefixSelectedFont, prefixSelectedMetrics, screenScale, lastSelectedHintBoxHexColor);
+                QFont prefixFocusedFont = qFont(prefixFocusedFs.name(), prefixFocusedFs.size(), prefixFocusedFs.weight());
+                QFontMetrics prefixFocusedMetrics = correctedFontMetricsForScreenDpi(prefixFocusedFont, prefixFocusedFs.size(), screenScale);
+                prefixFocusedQtFontStyle = qtFontStyle(prefixFocusedFs, prefixFocusedFont, prefixFocusedMetrics, screenScale, lastSelectedHintBoxHexColor);
+            }
+            else {
+                prefixDefaultQtFontStyle = qtFontStyle(prefixDefaultFs, defaultFont, defaultMetrics, screenScale, lastSelectedHintBoxHexColor);
+                prefixSelectedQtFontStyle = qtFontStyle(prefixSelectedFs, defaultFont, defaultMetrics, screenScale, lastSelectedHintBoxHexColor);
+                prefixFocusedQtFontStyle = qtFontStyle(prefixFocusedFs, defaultFont, defaultMetrics, screenScale, lastSelectedHintBoxHexColor);
+            }
+        }
+        return new QtHintFontStyle(defaultQtFontStyle, selectedQtFontStyle, focusedQtFontStyle,
+                prefixDefaultQtFontStyle, prefixSelectedQtFontStyle, prefixFocusedQtFontStyle,
+                perKeyFont, perKeyShadow, hintFontStyle.spacingPercent());
+    }
+
+    /**
+     * An outline or a text shadow is in pixels and grows with the text, so it takes the screen's
+     * scale. Only Windows leaves that to the caller: elsewhere Qt paints text in points and
+     * applies the scale itself.
+     */
+    private static double textPixelScale(double screenScale) {
+        return Os.windows ? screenScale : 1;
+    }
+
+    private static QtFontStyle qtFontStyle(FontStyle fs, QFont font,
+                                           QFontMetrics metrics,
+                                           double screenScale, String lastSelectedHintBoxHexColor) {
+        double textPixelScale = textPixelScale(screenScale);
+        return new QtFontStyle(
+                font, metrics,
+                QtColorUtil.qColor(fs.color().hexColor(lastSelectedHintBoxHexColor), fs.opacity()),
+                QtColorUtil.qColor(fs.outlineColor().hexColor(lastSelectedHintBoxHexColor), fs.outlineOpacity()),
+                (int) Math.round(fs.outlineThickness() * textPixelScale),
+                QtColorUtil.shadow(fs.shadow(), lastSelectedHintBoxHexColor),
+                fs.shadow().stackCount(),
+                fs.shadow().blurRadius() * textPixelScale,
+                fs.shadow().horizontalOffset() * textPixelScale,
+                fs.shadow().verticalOffset() * textPixelScale
+        );
+    }
+
+    /**
+     * Returns true if the two shadows differ and at least one has non-zero opacity.
+     * When both are zero-opacity neither renders, so no per-key processing is needed.
+     * When one is zero and the other is not, per-key processing is needed to exclude
+     * the zero-opacity keys from the other's shadow.
+     */
+    private static boolean shadowsNeedPerKeyProcessing(Shadow a, Shadow b) {
+        return (a.opacity() != 0 || b.opacity() != 0) && !a.equals(b);
+    }
+
+    private static boolean fontShapeEquals(FontStyle a, FontStyle b) {
+        return a.name().equals(b.name()) &&
+               a.weight() == b.weight() &&
+               Double.compare(a.size(), b.size()) == 0;
+    }
+
+    /**
+     * GDI renders text at the monitor's actual DPI, but QFontMetrics uses Qt's
+     * logical DPI (the primary screen's DPI when QT_ENABLE_HIGHDPI_SCALING=0).
+     * On multi-monitor setups with different scales, create a pixel-size font
+     * for metrics so they match the actual GDI rendering on the target screen.
+     *
+     * Note: we use the primary screen's DPI rather than window.logicalDpiX()
+     * because QFontMetrics always resolves point-size fonts using the primary
+     * screen's DPI, but window.logicalDpiX() can change after the window is
+     * shown on a non-primary screen (Qt detects the monitor DPI), creating a
+     * false "no correction needed" match on subsequent calls.
+     */
+    private static QFontMetrics correctedFontMetricsForScreenDpi(QFont renderFont,
+                                                                 double fontSizePoints,
+                                                                 double screenScale) {
+        double primaryScreenDpi = QApplication.primaryScreen().logicalDotsPerInchX();
+        // Kept per font so rebuilds share one instance, and with it everything measured through it.
+        return metricsByFont.computeIfAbsent(
+                new FontKey(renderFont.family(), renderFont.weight().value(), fontSizePoints,
+                        screenScale, primaryScreenDpi),
+                key -> {
+                    double targetDpi = screenScale * 96.0;
+                    if (!gdiFontEngine || Math.abs(primaryScreenDpi - targetDpi) < 1) {
+                        // QFontMetrics already matches how the text will be rendered.
+                        QFontMetrics metrics = new QFontMetrics(renderFont);
+                        fontByMetrics.put(metrics, renderFont);
+                        return metrics;
+                    }
+                    // Create a metrics-only font with the pixel size that GDI will use.
+                    int correctedPixelSize =
+                            (int) Math.round(fontSizePoints * targetDpi / 72.0);
+                    QFont metricsFont = new QFont(renderFont.family());
+                    metricsFont.setPixelSize(correctedPixelSize);
+                    metricsFont.setWeight(renderFont.weight());
+                    antialiasing(metricsFont);
+                    metricsFont.setHintingPreference(QFont.HintingPreference.PreferFullHinting);
+                    QFontMetrics metrics = new QFontMetrics(metricsFont);
+                    fontByMetrics.put(metrics, metricsFont);
+                    return metrics;
+                });
+    }
+
+    public static void preWarm(Set<HintMeshConfiguration> hintMeshConfigurations) {
+        long before = System.nanoTime();
+        Set<HintFontStyle> fontStyles = new HashSet<>();
+        for (HintMeshConfiguration hintMeshConfiguration : hintMeshConfigurations) {
+            for (HintMeshStyle style : hintMeshConfiguration.styleByFilter().map().values()) {
+                fontStyles.add(style.fontStyle());
+                fontStyles.add(style.prefixFontStyle());
+                fontStyles.add(style.fontStyle().saved());
+                fontStyles.add(style.prefixFontStyle().saved());
+            }
+        }
+        for (HintFontStyle hintFontStyle : fontStyles) {
+            QFont font = qFont(hintFontStyle.defaultFontStyle().name(), hintFontStyle.defaultFontStyle().size(), hintFontStyle.defaultFontStyle().weight());
+            QFontMetrics fontMetrics = new QFontMetrics(font);
+            fontMetrics.horizontalAdvance("x");
+            fontMetrics.dispose();
+            font.dispose();
+            if (!fontShapeEquals(hintFontStyle.defaultFontStyle(), hintFontStyle.selectedFontStyle())) {
+                QFont selectedFont = qFont(hintFontStyle.selectedFontStyle().name(), hintFontStyle.selectedFontStyle().size(), hintFontStyle.selectedFontStyle().weight());
+                QFontMetrics selectedFontMetrics = new QFontMetrics(selectedFont);
+                selectedFontMetrics.horizontalAdvance("x");
+                selectedFontMetrics.dispose();
+                selectedFont.dispose();
+            }
+            if (!fontShapeEquals(hintFontStyle.defaultFontStyle(), hintFontStyle.focusedFontStyle())) {
+                QFont focusedFont = qFont(hintFontStyle.focusedFontStyle().name(), hintFontStyle.focusedFontStyle().size(), hintFontStyle.focusedFontStyle().weight());
+                QFontMetrics focusedFontMetrics = new QFontMetrics(focusedFont);
+                focusedFontMetrics.horizontalAdvance("x");
+                focusedFontMetrics.dispose();
+                focusedFont.dispose();
+            }
+        }
+        logger.debug("Pre-warmed " + fontStyles.size() + " hint font styles in " +
+                (long) ((System.nanoTime() - before) / 1e6) + "ms");
+    }
+}

@@ -1,0 +1,327 @@
+package mousemaster;
+
+import mousemaster.IndicatorPosition.PointIndicatorPosition;
+import mousemaster.IndicatorPosition.PositionHistoryIndicatorPosition;
+import mousemaster.renderer.IndicatorRenderer;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class IndicatorLayerTest {
+
+    private static Configuration parse(String... lines) {
+        return ConfigurationParser.parse(List.of(lines),
+                KeyboardLayout.keyboardLayout("00000409", null));
+    }
+
+    private static IndicatorLayerConfiguration layer(Mode mode, String layerName) {
+        return mode.indicator().layerByName().get(layerName);
+    }
+
+    @Test
+    void aLayerTakesItsDefaultsFromTheDefaultIndicatorNotFromTheModeIndicator() {
+        Mode mode = parse("idle-mode.indicator.size=40",
+                "idle-mode.ripple-indicator.fill-color=#00FF00").modeMap().get(Mode.IDLE_MODE_NAME);
+        assertTrue(layer(mode, "ripple-indicator").enabled());
+        assertEquals(26, layer(mode, "ripple-indicator").size());
+        assertEquals(Color.parse("#00FF00"), layer(mode, "ripple-indicator").fillColor());
+        assertEquals(40, layer(mode, "indicator").size());
+    }
+
+    @Test
+    void aChildModeExtendsEachLayerByName() {
+        Mode mode = parse("idle-mode.to.normal-mode=+leftshift",
+                "idle-mode.ripple-indicator.size=40",
+                "normal-mode=idle-mode",
+                "normal-mode.ripple-indicator.fill-color=#00FF00").modeMap().get("normal-mode");
+        assertEquals(40, layer(mode, "ripple-indicator").size());
+        assertEquals(Color.parse("#00FF00"), layer(mode, "ripple-indicator").fillColor());
+        assertFalse(layer(mode, "indicator").enabled());
+    }
+
+    @Test
+    void aLayerIsDrawnInTheOrderOfItsZ() {
+        Mode mode = parse("idle-mode.indicator.size=40",
+                "idle-mode.ripple-indicator.z=-1").modeMap().get(Mode.IDLE_MODE_NAME);
+        assertEquals(0, layer(mode, "indicator").z());
+        assertEquals(-1, layer(mode, "ripple-indicator").z());
+    }
+
+    @Test
+    void aLayerFollowsTheMouseUnlessItIsAnchored() {
+        Mode mode = parse("idle-mode.indicator.size=40",
+                "idle-mode.ripple-indicator.follow=false").modeMap().get(Mode.IDLE_MODE_NAME);
+        assertTrue(layer(mode, "indicator").followMouse());
+        assertFalse(layer(mode, "ripple-indicator").followMouse());
+    }
+
+    @Test
+    void followMouseIsFollow() {
+        assertEquals(parse("idle-mode.indicator.follow=false").modeMap().get(Mode.IDLE_MODE_NAME),
+                parse("idle-mode.indicator.follow-mouse=false").modeMap()
+                                                               .get(Mode.IDLE_MODE_NAME));
+    }
+
+    @Test
+    void aLayerWithAnAreaTakesItsPositionAndSizeFromIt() {
+        IndicatorLayerConfiguration layer = layer(parse("idle-mode.indicator.area=active-window",
+                "idle-mode.indicator.area-top-inset=-0.5").modeMap().get(Mode.IDLE_MODE_NAME),
+                "indicator");
+        assertEquals(-0.5, layer.area().size().topInset());
+        assertEquals(AreaCenter.ACTIVE_WINDOW_CENTER, layer.area().centerOrDefault());
+        assertFalse(layer.followMouse());
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.area=active-window",
+                        "idle-mode.indicator.size=40"));
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.area=active-window",
+                        "idle-mode.indicator.position=target"));
+    }
+
+    @Test
+    void aMutationReachesALayer() {
+        Mode mode = parse("idle-mode.ripple-indicator.size=40 | _{isidling} -> 50")
+                .modeMap().get(Mode.IDLE_MODE_NAME);
+        Command.MutateMode mutateMode = mode.comboMap().commandsByCombo().values().stream()
+                                            .flatMap(List::stream)
+                                            .filter(Command.MutateMode.class::isInstance)
+                                            .map(Command.MutateMode.class::cast)
+                                            .findFirst().orElseThrow();
+        mode = mode.mutate(mutateMode.propertyPath(), mutateMode.newPropertyValue());
+        assertEquals(50, layer(mode, "ripple-indicator").size());
+        assertEquals(26, layer(mode, "indicator").size());
+    }
+
+    @Test
+    void renderAsCursorAndExcludeFromCaptureBelongToTheIndicator() {
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.ripple-indicator.render-as-cursor=true"));
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.ripple-indicator.exclude-from-capture=true"));
+        assertTrue(parse("idle-mode.indicator.exclude-from-capture=true").modeMap()
+                .get(Mode.IDLE_MODE_NAME).indicator().excludeFromCapture());
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.to.normal-mode=+leftshift",
+                        "idle-mode.ripple-indicator.size=40",
+                        "normal-mode.ripple-indicator=idle-mode.ripple-indicator"));
+    }
+
+    @Test
+    void aLayerHasItsOwnShadow() {
+        Mode mode = parse("idle-mode.indicator.shadow-opacity=1",
+                "idle-mode.ripple-indicator.shadow-color=#00FF00").modeMap()
+                                                                  .get(Mode.IDLE_MODE_NAME);
+        assertEquals(1, layer(mode, "indicator").shadow().opacity());
+        assertEquals(0, layer(mode, "ripple-indicator").shadow().opacity());
+        assertEquals(Color.parse("#00FF00"), layer(mode, "ripple-indicator").shadow().color());
+    }
+
+    @Test
+    void aStrokeLengthIsAPercentOfThePerimeter() {
+        Mode mode = parse("idle-mode.indicator.stroke-length-percent=-0.6",
+                "idle-mode.indicator.stroke-anchor=middle").modeMap().get(Mode.IDLE_MODE_NAME);
+        assertEquals(-0.6, layer(mode, "indicator").stroke().lengthPercent());
+        assertEquals(StrokeAnchor.MIDDLE, layer(mode, "indicator").stroke().anchor());
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.stroke-length-percent=60%"));
+    }
+
+    @Test
+    void theOutlinesAreGone() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.inner-outline-thickness=1"));
+        assertTrue(e.getMessage().contains("stroke"), e.getMessage());
+        e = assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.color=#FF0000"));
+        assertTrue(e.getMessage().contains("fill-color"), e.getMessage());
+    }
+
+    @Test
+    void aLayerIsAShapeInABoxOfItsSizeAndAspectRatio() {
+        Mode mode = parse("idle-mode.indicator.shape=rectangle",
+                "idle-mode.indicator.aspect-ratio=2",
+                "idle-mode.indicator.border-radius=4",
+                "idle-mode.path-indicator.shape=path",
+                "idle-mode.path-indicator.points=0,0 10,0 5,8").modeMap().get(Mode.IDLE_MODE_NAME);
+        assertEquals(IndicatorShape.RECTANGLE, layer(mode, "indicator").shape());
+        assertEquals(2, layer(mode, "indicator").aspectRatio());
+        assertEquals(4, layer(mode, "indicator").borderRadius());
+        assertEquals(IndicatorShape.PATH, layer(mode, "path-indicator").shape());
+        assertEquals(List.of(new Point(0, 0), new Point(10, 0), new Point(5, 8)),
+                layer(mode, "path-indicator").points());
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.points=0,0 10,0"));
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.points=0,0 10,0 5,0"));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.edge-count=6"));
+        assertTrue(e.getMessage().contains("shape"), e.getMessage());
+    }
+
+    @Test
+    void aLayerCanBeOffsetAndRotated() {
+        Mode mode = parse("idle-mode.indicator.x=30", "idle-mode.indicator.y=-10",
+                "idle-mode.indicator.rotation=45").modeMap().get(Mode.IDLE_MODE_NAME);
+        assertEquals(30, layer(mode, "indicator").x());
+        assertEquals(-10, layer(mode, "indicator").y());
+        assertEquals(45, layer(mode, "indicator").rotation());
+    }
+
+    @Test
+    void aStrokeCanBeDashedAndCapped() {
+        IndicatorStroke stroke = layer(parse("idle-mode.indicator.stroke-dash-length=6",
+                "idle-mode.indicator.stroke-dash-gap=4",
+                "idle-mode.indicator.stroke-dash-offset=2",
+                "idle-mode.indicator.stroke-cap=round").modeMap().get(Mode.IDLE_MODE_NAME),
+                "indicator").stroke();
+        assertEquals(6, stroke.dashLength());
+        assertEquals(4, stroke.dashGap());
+        assertEquals(2, stroke.dashOffset());
+        assertEquals(StrokeCap.ROUND, stroke.cap());
+    }
+
+    @Test
+    void textIsALayerOfShapeText() {
+        IndicatorLayerConfiguration layer = layer(parse("idle-mode.text-indicator.shape=text",
+                "idle-mode.text-indicator.text=ab", "idle-mode.text-indicator.font-name=Consolas",
+                "idle-mode.text-indicator.font-size=12",
+                "idle-mode.text-indicator.font-weight=bold").modeMap().get(Mode.IDLE_MODE_NAME),
+                "text-indicator");
+        assertEquals(IndicatorShape.TEXT, layer.shape());
+        assertEquals("ab", layer.text());
+        assertEquals("Consolas", layer.fontName());
+        assertEquals(12, layer.fontSize());
+        assertEquals(FontWeight.BOLD, layer.fontWeight());
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.label-text=ab"));
+        assertTrue(e.getMessage().contains("shape=text"), e.getMessage());
+    }
+
+    @Test
+    void aTextNamesTheKeysOfAKeyAlias() {
+        Mode mode = parse("key-alias.exit=q p",
+                "idle-mode.indicator.text={exit}  exit").modeMap().get(Mode.IDLE_MODE_NAME);
+        assertEquals("q p  exit", layer(mode, "indicator").text());
+    }
+
+    @Test
+    void aTextNamesOnlyKeyAliases() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.text={exit}  exit"));
+        assertTrue(e.getMessage().contains("exit is not a key alias"), e.getMessage());
+    }
+
+    @Test
+    void aLayerWithAnEndPositionTakesItsAspectRatioFromItsPositions() {
+        Mode mode = parse("idle-mode.indicator.position=last-selected-hint",
+                "idle-mode.indicator.end-position=target")
+                .modeMap().get(Mode.IDLE_MODE_NAME);
+        assertEquals(PointIndicatorPosition.LAST_SELECTED_HINT,
+                layer(mode, "indicator").position());
+        assertEquals(PointIndicatorPosition.TARGET, layer(mode, "indicator").endPosition());
+        assertFalse(layer(mode, "indicator").followMouse());
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.position=mouse",
+                        "idle-mode.indicator.end-position=target",
+                        "idle-mode.indicator.aspect-ratio=2"));
+        parse("idle-mode.indicator.position=mouse", "idle-mode.indicator.end-position=target",
+                "idle-mode.indicator.size=10", "idle-mode.indicator.rotation=90");
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.position=mouse target"));
+    }
+
+    @Test
+    void aPositionHistoryStandsForItsPositions() {
+        Mode mode = parse("idle-mode.save.position-history=+f1",
+                "idle-mode.indicator.position=position-history")
+                .modeMap().get(Mode.IDLE_MODE_NAME);
+        assertEquals(new PositionHistoryIndicatorPosition("position-history"),
+                layer(mode, "indicator").position());
+        assertNull(layer(mode, "indicator").endPosition());
+        assertFalse(layer(mode, "indicator").followMouse());
+        parse("idle-mode.save.position-history=+f1",
+                "idle-mode.indicator.position=position-history",
+                "idle-mode.indicator.aspect-ratio=2");
+        assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.save.position-history=+f1",
+                        "idle-mode.indicator.position=position-history",
+                        "idle-mode.indicator.end-position=position-history",
+                        "idle-mode.indicator.aspect-ratio=2"));
+    }
+
+    @Test
+    void aLayerOnTheActiveWindowOrTheLastOverlayAreaDoesNotFollowTheMouse() {
+        for (String position : List.of("active-window-center", "last-overlay-area-center"))
+            assertFalse(layer(parse("idle-mode.indicator.position=" + position).modeMap()
+                                    .get(Mode.IDLE_MODE_NAME), "indicator").followMouse());
+    }
+
+    @Test
+    void aPositionIsRelativeToTheMouseOrTheScreen() {
+        Mode mode = parse("idle-mode.indicator.position=mouse-top-left").modeMap()
+                                                                     .get(Mode.IDLE_MODE_NAME);
+        assertEquals(PointIndicatorPosition.MOUSE_TOP_LEFT, layer(mode, "indicator").position());
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> parse("idle-mode.indicator.position=center"));
+        assertTrue(e.getMessage().endsWith("renamed mouse"), e.getMessage());
+    }
+
+    @Test
+    void anIndicatorSplitsIntoTheLayersThatFollowTheMouseAndTheOthers() {
+        IndicatorConfiguration indicator = parse("idle-mode.indicator.enabled=true",
+                "idle-mode.sheet-indicator.follow=false").modeMap().get(Mode.IDLE_MODE_NAME)
+                                                              .indicator();
+        assertTrue(indicator.layerByName().get("indicator").followMouse());
+        assertEquals(List.of(Set.of("sheet-indicator")),
+                layerNames(IndicatorRenderer.anchoredLayers(indicator, List.of(), Set.of())));
+    }
+
+    @Test
+    void theCursorImageDrawsTheLayersAtTheMouseWithoutATextOrAnEndPosition() {
+        IndicatorConfiguration indicator = parse("idle-mode.indicator.enabled=true",
+                "idle-mode.corner-indicator.position=mouse-top-left",
+                "idle-mode.screen-indicator.position=active-screen-center",
+                "idle-mode.text-indicator.text=a",
+                "idle-mode.line-indicator.end-position=mouse-top-left",
+                "idle-mode.still-indicator.follow=false").modeMap().get(Mode.IDLE_MODE_NAME)
+                                                         .indicator();
+        assertEquals(Set.of("indicator"),
+                IndicatorRenderer.cursorLayers(indicator).layerByName().keySet());
+    }
+
+    @Test
+    void theLayersThatChangedAreDrawnApartFromTheOthersInZOrder() {
+        List<String> lines = List.of("idle-mode.a-indicator.follow=false",
+                "idle-mode.b-indicator.follow=false", "idle-mode.b-indicator.z=1",
+                "idle-mode.c-indicator.follow=false", "idle-mode.c-indicator.z=2");
+        IndicatorConfiguration indicator = parse(lines.toArray(String[]::new)).modeMap()
+                .get(Mode.IDLE_MODE_NAME).indicator();
+        List<IndicatorConfiguration> current =
+                IndicatorRenderer.anchoredLayers(indicator, List.of(), Set.of());
+        assertEquals(List.of(Set.of("a-indicator", "b-indicator", "c-indicator")),
+                layerNames(current));
+        assertEquals(List.of(Set.of("a-indicator", "b-indicator", "c-indicator")),
+                layerNames(IndicatorRenderer.anchoredLayers(indicator, current, Set.of())));
+        List<String> changedLines = new ArrayList<>(lines);
+        changedLines.add("idle-mode.b-indicator.size=40");
+        IndicatorConfiguration changed = parse(changedLines.toArray(String[]::new)).modeMap()
+                .get(Mode.IDLE_MODE_NAME).indicator();
+        List<IndicatorConfiguration> split =
+                IndicatorRenderer.anchoredLayers(changed, current, Set.of());
+        assertEquals(List.of(Set.of("a-indicator"), Set.of("b-indicator"), Set.of("c-indicator")),
+                layerNames(split));
+        assertEquals(List.of(Set.of("a-indicator"), Set.of("b-indicator"), Set.of("c-indicator")),
+                layerNames(IndicatorRenderer.anchoredLayers(changed, split, Set.of())));
+        assertEquals(List.of(Set.of("a-indicator", "b-indicator"), Set.of("c-indicator")),
+                layerNames(IndicatorRenderer.anchoredLayers(indicator, current,
+                        Set.of("a-indicator", "b-indicator"))));
+    }
+
+    private static List<Set<String>> layerNames(List<IndicatorConfiguration> indicators) {
+        return indicators.stream().map(indicator -> indicator.layerByName().keySet()).toList();
+    }
+}

@@ -1,6 +1,6 @@
 package mousemaster;
 
-import com.sun.jna.platform.win32.WinDef;
+import mousemaster.platform.windows.WindowsCursorPing;
 
 /**
  * When leaving idle for normal mode, plays a short double ripple at the cursor
@@ -14,11 +14,8 @@ public class CursorPingManager implements ModeListener {
     public void modeChanged(Mode newMode) {
         if (previousModeName != null
             && previousModeName.equals(Mode.IDLE_MODE_NAME)
-            && "normal-mode".equals(newMode.name())) {
-            WinDef.POINT p = WindowsMouse.tryFindMousePosition();
-            if (p != null)
-                WindowsOverlay.startCursorPing(p.x, p.y);
-        }
+            && "normal-mode".equals(newMode.name()))
+            WindowsCursorPing.startAtCursor();
         previousModeName = newMode.name();
     }
 

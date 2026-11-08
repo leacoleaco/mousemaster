@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.*;
 
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ComboWatcherRetainTest {
@@ -16,8 +17,9 @@ class ComboWatcherRetainTest {
             new ComboMoveDuration(Duration.ZERO, null);
 
     static final KeyResolver identityKeyResolver = new KeyResolver(
-            new KeyboardLayout("test", "test", "test", "test", List.of()),
-            new KeyboardLayout("test", "test", "test", "test", List.of()));
+            new KeyboardLayout("test", "test", "test", "test", null, List.of()),
+            new KeyboardLayout("test", "test", "test", "test", null, List.of()), Set.of(),
+            Set.of());
 
     static final ComboPrecondition emptyPrecondition = new ComboPrecondition(
             new ComboKeyPrecondition(Set.of(), new PressedKeyPrecondition(List.of())),
@@ -38,19 +40,19 @@ class ComboWatcherRetainTest {
             map.put(combo, List.of());
         }
         Mode mode = new Mode("test-mode", false, false, null,
-                new ComboMap(map), null, null, null, null, null, null, null, null);
+                new ComboMap(map), null, null, null, null, null, null, null, null, Map.of());
         return new ModeMap(Set.of(mode));
     }
 
     static Duration retainDuration(String... comboStrings) {
         ModeMap modeMap = modeMap(comboStrings);
-        return ComboWatcher.comboPreparationRetainDurationByMode(modeMap)
+        return ComboWatcher.comboPreparationRetainDurationByModeName(modeMap)
                            .values().iterator().next();
     }
 
     static int retainEventCount(String... comboStrings) {
         ModeMap modeMap = modeMap(comboStrings);
-        return ComboWatcher.comboPreparationMinRetainEventCountByMode(modeMap)
+        return ComboWatcher.comboPreparationMinRetainEventCountByModeName(modeMap)
                            .values().iterator().next();
     }
 

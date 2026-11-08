@@ -1,79 +1,142 @@
 package mousemaster;
 
-import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 public record HintMeshStyle(HintFontStyle fontStyle,
                             boolean prefixInBackground,
                             HintFontStyle prefixFontStyle,
-                            String boxHexColor,
+                            GradientColor boxColor,
                             double boxOpacity,
                             double boxBorderThickness,
                             double boxBorderLength,
-                            String boxBorderHexColor,
+                            Color boxBorderColor,
                             double boxBorderOpacity,
                             double boxBorderRadius,
+                            boolean boxFramed,
                             Shadow boxShadow,
                             boolean prefixBoxEnabled,
                             double prefixBoxBorderThickness,
                             double prefixBoxBorderLength,
-                            String prefixBoxBorderHexColor,
+                            Color prefixBoxBorderColor,
                             double prefixBoxBorderOpacity,
+                            boolean prefixBoxFramed,
+                            GradientColor uiElementBoxColor,
+                            double uiElementBoxOpacity,
+                            double uiElementBoxBorderThickness,
+                            double uiElementBoxBorderLength,
+                            Color uiElementBoxBorderColor,
+                            double uiElementBoxBorderOpacity,
+                            double uiElementBoxBorderRadius,
+                            double uiElementBoxHorizontalPadding,
+                            double uiElementBoxVerticalPadding,
+                            GradientColor savedBoxColor,
+                            Double savedBoxOpacity,
+                            Color savedBoxBorderColor,
+                            Double savedBoxBorderOpacity,
+                            GradientColor savedUiElementBoxColor,
+                            Double savedUiElementBoxOpacity,
+                            Color savedUiElementBoxBorderColor,
+                            Double savedUiElementBoxBorderOpacity,
                             double boxWidthPercent,
                             double boxHeightPercent,
-                            double cellHorizontalPadding,
-                            double cellVerticalPadding,
+                            double boxHorizontalPadding,
+                            double boxVerticalPadding,
                             double hintCenterOffsetX,
-                            int subgridRowCount,
-                            int subgridColumnCount,
-                            double subgridBorderThickness,
-                            double subgridBorderLength,
-                            String subgridBorderHexColor,
-                            double subgridBorderOpacity,
-                            boolean transitionAnimationEnabled,
-                            Duration transitionAnimationDuration,
-                            boolean fadeAnimationEnabled,
-                            Duration fadeAnimationDuration,
-                            String backgroundHexColor,
-                            double backgroundOpacity) {
+                            List<Decoration> decorations,
+                            Transition transition,
+                            Transition fade,
+                            Color backgroundColor,
+                            double backgroundOpacity,
+                            double backgroundBorderThickness,
+                            Color backgroundBorderColor,
+                            double backgroundBorderOpacity,
+                            double backgroundBorderRadius,
+                            List<Key> labelOverride) {
 
     public HintMeshStyleBuilder builder() {
         return new HintMeshStyleBuilder(this);
+    }
+
+    /** The style of a hint at a saved position: the saved values where they are set. */
+    public HintMeshStyle saved() {
+        HintMeshStyleBuilder saved = new HintMeshStyleBuilder(this)
+                .fontStyle(fontStyle.saved())
+                .prefixFontStyle(prefixFontStyle.saved());
+        if (savedBoxColor != null)
+            saved.boxColor(savedBoxColor);
+        if (savedBoxOpacity != null)
+            saved.boxOpacity(savedBoxOpacity);
+        if (savedBoxBorderColor != null)
+            saved.boxBorderColor(savedBoxBorderColor);
+        if (savedBoxBorderOpacity != null)
+            saved.boxBorderOpacity(savedBoxBorderOpacity);
+        if (savedUiElementBoxColor != null)
+            saved.uiElementBoxColor(savedUiElementBoxColor);
+        if (savedUiElementBoxOpacity != null)
+            saved.uiElementBoxOpacity(savedUiElementBoxOpacity);
+        if (savedUiElementBoxBorderColor != null)
+            saved.uiElementBoxBorderColor(savedUiElementBoxBorderColor);
+        if (savedUiElementBoxBorderOpacity != null)
+            saved.uiElementBoxBorderOpacity(savedUiElementBoxBorderOpacity);
+        return saved.build(null);
     }
 
     public static class HintMeshStyleBuilder {
         private HintFontStyle.HintFontStyleBuilder fontStyle = new HintFontStyle.HintFontStyleBuilder();
         private Boolean prefixInBackground;
         private HintFontStyle.HintFontStyleBuilder prefixFontStyle = new HintFontStyle.HintFontStyleBuilder();
-        private String boxHexColor;
+        private GradientColor boxColor;
         private Double boxOpacity;
         private Double boxBorderThickness;
         private Double boxBorderLength;
-        private String boxBorderHexColor;
+        private Color boxBorderColor;
         private Double boxBorderOpacity;
         private Double boxBorderRadius;
+        private Boolean boxFramed;
         private Shadow.ShadowBuilder boxShadow = new Shadow.ShadowBuilder();
         private Boolean prefixBoxEnabled;
         private Double prefixBoxBorderThickness;
         private Double prefixBoxBorderLength;
-        private String prefixBoxBorderHexColor;
+        private Color prefixBoxBorderColor;
         private Double prefixBoxBorderOpacity;
+        private Boolean prefixBoxFramed;
+        private GradientColor uiElementBoxColor;
+        private Double uiElementBoxOpacity;
+        private Double uiElementBoxBorderThickness;
+        private Double uiElementBoxBorderLength;
+        private Color uiElementBoxBorderColor;
+        private Double uiElementBoxBorderOpacity;
+        private Double uiElementBoxBorderRadius;
+        private Double uiElementBoxHorizontalPadding;
+        private Double uiElementBoxVerticalPadding;
+        private GradientColor savedBoxColor;
+        private Double savedBoxOpacity;
+        private Color savedBoxBorderColor;
+        private Double savedBoxBorderOpacity;
+        private GradientColor savedUiElementBoxColor;
+        private Double savedUiElementBoxOpacity;
+        private Color savedUiElementBoxBorderColor;
+        private Double savedUiElementBoxBorderOpacity;
         private Double boxWidthPercent;
         private Double boxHeightPercent;
-        private Double cellHorizontalPadding;
-        private Double cellVerticalPadding;
+        private Double boxHorizontalPadding;
+        private Double boxVerticalPadding;
         private Double hintCenterOffsetX;
-        private Integer subgridRowCount;
-        private Integer subgridColumnCount;
-        private Double subgridBorderThickness;
-        private Double subgridBorderLength;
-        private String subgridBorderHexColor;
-        private Double subgridBorderOpacity;
-        private Boolean transitionAnimationEnabled;
-        private Duration transitionAnimationDuration;
-        private Boolean fadeAnimationEnabled;
-        private Duration fadeAnimationDuration;
-        private String backgroundHexColor;
+        // Index 0 = whole-area decoration, 1 = subdecoration, 2 = subsubdecoration.
+        private final List<Decoration.DecorationBuilder> decorations = new ArrayList<>(
+                List.of(new Decoration.DecorationBuilder(),
+                        new Decoration.DecorationBuilder(),
+                        new Decoration.DecorationBuilder()));
+        private Transition.TransitionBuilder transition = new Transition.TransitionBuilder();
+        private Transition.TransitionBuilder fade = new Transition.TransitionBuilder();
+        private Color backgroundColor;
         private Double backgroundOpacity;
+        private Double backgroundBorderThickness;
+        private Color backgroundBorderColor;
+        private Double backgroundBorderOpacity;
+        private Double backgroundBorderRadius;
+        private List<Key> labelOverride;
 
         public HintMeshStyleBuilder() {
 
@@ -83,36 +146,55 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             this.fontStyle = style.fontStyle.builder();
             this.prefixInBackground = style.prefixInBackground;
             this.prefixFontStyle = style.prefixFontStyle.builder();
-            this.boxHexColor = style.boxHexColor;
+            this.boxColor = style.boxColor;
             this.boxOpacity = style.boxOpacity;
             this.boxBorderThickness = style.boxBorderThickness;
             this.boxBorderLength = style.boxBorderLength;
-            this.boxBorderHexColor = style.boxBorderHexColor;
+            this.boxBorderColor = style.boxBorderColor;
             this.boxBorderOpacity = style.boxBorderOpacity;
             this.boxBorderRadius = style.boxBorderRadius;
+            this.boxFramed = style.boxFramed;
             this.boxShadow = new Shadow.ShadowBuilder(style.boxShadow);
             this.prefixBoxEnabled = style.prefixBoxEnabled;
             this.prefixBoxBorderThickness = style.prefixBoxBorderThickness;
             this.prefixBoxBorderLength = style.prefixBoxBorderLength;
-            this.prefixBoxBorderHexColor = style.prefixBoxBorderHexColor;
+            this.prefixBoxBorderColor = style.prefixBoxBorderColor;
             this.prefixBoxBorderOpacity = style.prefixBoxBorderOpacity;
+            this.prefixBoxFramed = style.prefixBoxFramed;
+            this.uiElementBoxColor = style.uiElementBoxColor;
+            this.uiElementBoxOpacity = style.uiElementBoxOpacity;
+            this.uiElementBoxBorderThickness = style.uiElementBoxBorderThickness;
+            this.uiElementBoxBorderLength = style.uiElementBoxBorderLength;
+            this.uiElementBoxBorderColor = style.uiElementBoxBorderColor;
+            this.uiElementBoxBorderOpacity = style.uiElementBoxBorderOpacity;
+            this.uiElementBoxBorderRadius = style.uiElementBoxBorderRadius;
+            this.uiElementBoxHorizontalPadding = style.uiElementBoxHorizontalPadding;
+            this.uiElementBoxVerticalPadding = style.uiElementBoxVerticalPadding;
+            this.savedBoxColor = style.savedBoxColor;
+            this.savedBoxOpacity = style.savedBoxOpacity;
+            this.savedBoxBorderColor = style.savedBoxBorderColor;
+            this.savedBoxBorderOpacity = style.savedBoxBorderOpacity;
+            this.savedUiElementBoxColor = style.savedUiElementBoxColor;
+            this.savedUiElementBoxOpacity = style.savedUiElementBoxOpacity;
+            this.savedUiElementBoxBorderColor = style.savedUiElementBoxBorderColor;
+            this.savedUiElementBoxBorderOpacity = style.savedUiElementBoxBorderOpacity;
             this.boxWidthPercent = style.boxWidthPercent;
             this.boxHeightPercent = style.boxHeightPercent;
-            this.cellHorizontalPadding = style.cellHorizontalPadding;
-            this.cellVerticalPadding = style.cellVerticalPadding;
+            this.boxHorizontalPadding = style.boxHorizontalPadding;
+            this.boxVerticalPadding = style.boxVerticalPadding;
             this.hintCenterOffsetX = style.hintCenterOffsetX;
-            this.subgridRowCount = style.subgridRowCount;
-            this.subgridColumnCount = style.subgridColumnCount;
-            this.subgridBorderThickness = style.subgridBorderThickness;
-            this.subgridBorderLength = style.subgridBorderLength;
-            this.subgridBorderHexColor = style.subgridBorderHexColor;
-            this.subgridBorderOpacity = style.subgridBorderOpacity;
-            this.transitionAnimationEnabled = style.transitionAnimationEnabled;
-            this.transitionAnimationDuration = style.transitionAnimationDuration;
-            this.fadeAnimationEnabled = style.fadeAnimationEnabled;
-            this.fadeAnimationDuration = style.fadeAnimationDuration;
-            this.backgroundHexColor = style.backgroundHexColor;
+            this.decorations.clear();
+            for (Decoration decoration : style.decorations)
+                this.decorations.add(decoration.builder());
+            this.transition = new Transition.TransitionBuilder(style.transition);
+            this.fade = new Transition.TransitionBuilder(style.fade);
+            this.backgroundColor = style.backgroundColor;
             this.backgroundOpacity = style.backgroundOpacity;
+            this.backgroundBorderThickness = style.backgroundBorderThickness;
+            this.backgroundBorderColor = style.backgroundBorderColor;
+            this.backgroundBorderOpacity = style.backgroundBorderOpacity;
+            this.backgroundBorderRadius = style.backgroundBorderRadius;
+            this.labelOverride = style.labelOverride;
         }
 
         public HintMeshStyleBuilder prefixInBackground(
@@ -121,8 +203,8 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return this;
         }
 
-        public HintMeshStyleBuilder boxHexColor(String boxHexColor) {
-            this.boxHexColor = boxHexColor;
+        public HintMeshStyleBuilder boxColor(GradientColor boxColor) {
+            this.boxColor = boxColor;
             return this;
         }
 
@@ -141,8 +223,8 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return this;
         }
 
-        public HintMeshStyleBuilder boxBorderHexColor(String boxBorderHexColor) {
-            this.boxBorderHexColor = boxBorderHexColor;
+        public HintMeshStyleBuilder boxBorderColor(Color boxBorderColor) {
+            this.boxBorderColor = boxBorderColor;
             return this;
         }
 
@@ -153,6 +235,11 @@ public record HintMeshStyle(HintFontStyle fontStyle,
 
         public HintMeshStyleBuilder boxBorderRadius(Double boxBorderRadius) {
             this.boxBorderRadius = boxBorderRadius;
+            return this;
+        }
+
+        public HintMeshStyleBuilder boxFramed(Boolean boxFramed) {
+            this.boxFramed = boxFramed;
             return this;
         }
 
@@ -171,13 +258,103 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return this;
         }
 
-        public HintMeshStyleBuilder prefixBoxBorderHexColor(String prefixBoxBorderHexColor) {
-            this.prefixBoxBorderHexColor = prefixBoxBorderHexColor;
+        public HintMeshStyleBuilder prefixBoxBorderColor(Color prefixBoxBorderColor) {
+            this.prefixBoxBorderColor = prefixBoxBorderColor;
             return this;
         }
 
         public HintMeshStyleBuilder prefixBoxBorderOpacity(Double prefixBoxBorderOpacity) {
             this.prefixBoxBorderOpacity = prefixBoxBorderOpacity;
+            return this;
+        }
+
+        public HintMeshStyleBuilder prefixBoxFramed(Boolean prefixBoxFramed) {
+            this.prefixBoxFramed = prefixBoxFramed;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxColor(GradientColor uiElementBoxColor) {
+            this.uiElementBoxColor = uiElementBoxColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxOpacity(Double uiElementBoxOpacity) {
+            this.uiElementBoxOpacity = uiElementBoxOpacity;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxBorderThickness(Double uiElementBoxBorderThickness) {
+            this.uiElementBoxBorderThickness = uiElementBoxBorderThickness;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxBorderLength(Double uiElementBoxBorderLength) {
+            this.uiElementBoxBorderLength = uiElementBoxBorderLength;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxBorderColor(Color uiElementBoxBorderColor) {
+            this.uiElementBoxBorderColor = uiElementBoxBorderColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxBorderOpacity(Double uiElementBoxBorderOpacity) {
+            this.uiElementBoxBorderOpacity = uiElementBoxBorderOpacity;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxBorderRadius(Double uiElementBoxBorderRadius) {
+            this.uiElementBoxBorderRadius = uiElementBoxBorderRadius;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxHorizontalPadding(Double uiElementBoxHorizontalPadding) {
+            this.uiElementBoxHorizontalPadding = uiElementBoxHorizontalPadding;
+            return this;
+        }
+
+        public HintMeshStyleBuilder uiElementBoxVerticalPadding(Double uiElementBoxVerticalPadding) {
+            this.uiElementBoxVerticalPadding = uiElementBoxVerticalPadding;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedBoxColor(GradientColor savedBoxColor) {
+            this.savedBoxColor = savedBoxColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedBoxOpacity(Double savedBoxOpacity) {
+            this.savedBoxOpacity = savedBoxOpacity;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedBoxBorderColor(Color savedBoxBorderColor) {
+            this.savedBoxBorderColor = savedBoxBorderColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedBoxBorderOpacity(Double savedBoxBorderOpacity) {
+            this.savedBoxBorderOpacity = savedBoxBorderOpacity;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedUiElementBoxColor(GradientColor savedUiElementBoxColor) {
+            this.savedUiElementBoxColor = savedUiElementBoxColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedUiElementBoxOpacity(Double savedUiElementBoxOpacity) {
+            this.savedUiElementBoxOpacity = savedUiElementBoxOpacity;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedUiElementBoxBorderColor(Color savedUiElementBoxBorderColor) {
+            this.savedUiElementBoxBorderColor = savedUiElementBoxBorderColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder savedUiElementBoxBorderOpacity(Double savedUiElementBoxBorderOpacity) {
+            this.savedUiElementBoxBorderOpacity = savedUiElementBoxBorderOpacity;
             return this;
         }
 
@@ -191,13 +368,13 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return this;
         }
 
-        public HintMeshStyleBuilder cellHorizontalPadding(Double cellHorizontalPadding) {
-            this.cellHorizontalPadding = cellHorizontalPadding;
+        public HintMeshStyleBuilder boxHorizontalPadding(Double boxHorizontalPadding) {
+            this.boxHorizontalPadding = boxHorizontalPadding;
             return this;
         }
 
-        public HintMeshStyleBuilder cellVerticalPadding(Double cellVerticalPadding) {
-            this.cellVerticalPadding = cellVerticalPadding;
+        public HintMeshStyleBuilder boxVerticalPadding(Double boxVerticalPadding) {
+            this.boxVerticalPadding = boxVerticalPadding;
             return this;
         }
 
@@ -206,58 +383,16 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return this;
         }
 
-        public HintMeshStyleBuilder subgridRowCount(Integer subgridRowCount) {
-            this.subgridRowCount = subgridRowCount;
-            return this;
+        public Decoration.DecorationBuilder decoration(int index) {
+            return decorations.get(index);
         }
 
-        public HintMeshStyleBuilder subgridColumnCount(Integer subgridColumnCount) {
-            this.subgridColumnCount = subgridColumnCount;
-            return this;
+        public List<Decoration.DecorationBuilder> decorations() {
+            return decorations;
         }
 
-        public HintMeshStyleBuilder subgridBorderThickness(Double subgridBorderThickness) {
-            this.subgridBorderThickness = subgridBorderThickness;
-            return this;
-        }
-
-        public HintMeshStyleBuilder subgridBorderLength(Double subgridBorderLength) {
-            this.subgridBorderLength = subgridBorderLength;
-            return this;
-        }
-
-        public HintMeshStyleBuilder subgridBorderHexColor(String subgridBorderHexColor) {
-            this.subgridBorderHexColor = subgridBorderHexColor;
-            return this;
-        }
-
-        public HintMeshStyleBuilder subgridBorderOpacity(Double subgridBorderOpacity) {
-            this.subgridBorderOpacity = subgridBorderOpacity;
-            return this;
-        }
-
-        public HintMeshStyleBuilder transitionAnimationEnabled(Boolean transitionAnimationEnabled) {
-            this.transitionAnimationEnabled = transitionAnimationEnabled;
-            return this;
-        }
-
-        public HintMeshStyleBuilder transitionAnimationDuration(Duration transitionAnimationDuration) {
-            this.transitionAnimationDuration = transitionAnimationDuration;
-            return this;
-        }
-
-        public HintMeshStyleBuilder fadeAnimationEnabled(Boolean fadeAnimationEnabled) {
-            this.fadeAnimationEnabled = fadeAnimationEnabled;
-            return this;
-        }
-
-        public HintMeshStyleBuilder fadeAnimationDuration(Duration fadeAnimationDuration) {
-            this.fadeAnimationDuration = fadeAnimationDuration;
-            return this;
-        }
-
-        public HintMeshStyleBuilder backgroundHexColor(String backgroundHexColor) {
-            this.backgroundHexColor = backgroundHexColor;
+        public HintMeshStyleBuilder backgroundColor(Color backgroundColor) {
+            this.backgroundColor = backgroundColor;
             return this;
         }
 
@@ -266,8 +401,38 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return this;
         }
 
+        public HintMeshStyleBuilder backgroundBorderThickness(Double backgroundBorderThickness) {
+            this.backgroundBorderThickness = backgroundBorderThickness;
+            return this;
+        }
+
+        public HintMeshStyleBuilder backgroundBorderColor(Color backgroundBorderColor) {
+            this.backgroundBorderColor = backgroundBorderColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder backgroundBorderOpacity(Double backgroundBorderOpacity) {
+            this.backgroundBorderOpacity = backgroundBorderOpacity;
+            return this;
+        }
+
+        public HintMeshStyleBuilder backgroundBorderRadius(Double backgroundBorderRadius) {
+            this.backgroundBorderRadius = backgroundBorderRadius;
+            return this;
+        }
+
+        public HintMeshStyleBuilder labelOverride(List<Key> labelOverride) {
+            this.labelOverride = labelOverride;
+            return this;
+        }
+
         public HintFontStyle.HintFontStyleBuilder fontStyle() {
             return fontStyle;
+        }
+
+        public HintMeshStyleBuilder fontStyle(HintFontStyle fontStyle) {
+            this.fontStyle = fontStyle.builder();
+            return this;
         }
 
         public Boolean prefixInBackground() {
@@ -278,8 +443,13 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return prefixFontStyle;
         }
 
-        public String boxHexColor() {
-            return boxHexColor;
+        public HintMeshStyleBuilder prefixFontStyle(HintFontStyle prefixFontStyle) {
+            this.prefixFontStyle = prefixFontStyle.builder();
+            return this;
+        }
+
+        public GradientColor boxColor() {
+            return boxColor;
         }
 
         public Double boxOpacity() {
@@ -294,8 +464,8 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return boxBorderLength;
         }
 
-        public String boxBorderHexColor() {
-            return boxBorderHexColor;
+        public Color boxBorderColor() {
+            return boxBorderColor;
         }
 
         public Double boxBorderOpacity() {
@@ -304,6 +474,10 @@ public record HintMeshStyle(HintFontStyle fontStyle,
 
         public Double boxBorderRadius() {
             return boxBorderRadius;
+        }
+
+        public Boolean boxFramed() {
+            return boxFramed;
         }
 
         public Shadow.ShadowBuilder boxShadow() {
@@ -322,12 +496,84 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return prefixBoxBorderLength;
         }
 
-        public String prefixBoxBorderHexColor() {
-            return prefixBoxBorderHexColor;
+        public Color prefixBoxBorderColor() {
+            return prefixBoxBorderColor;
         }
 
         public Double prefixBoxBorderOpacity() {
             return prefixBoxBorderOpacity;
+        }
+
+        public Boolean prefixBoxFramed() {
+            return prefixBoxFramed;
+        }
+
+        public GradientColor uiElementBoxColor() {
+            return uiElementBoxColor;
+        }
+
+        public Double uiElementBoxOpacity() {
+            return uiElementBoxOpacity;
+        }
+
+        public Double uiElementBoxBorderThickness() {
+            return uiElementBoxBorderThickness;
+        }
+
+        public Double uiElementBoxBorderLength() {
+            return uiElementBoxBorderLength;
+        }
+
+        public Color uiElementBoxBorderColor() {
+            return uiElementBoxBorderColor;
+        }
+
+        public Double uiElementBoxBorderOpacity() {
+            return uiElementBoxBorderOpacity;
+        }
+
+        public Double uiElementBoxBorderRadius() {
+            return uiElementBoxBorderRadius;
+        }
+
+        public Double uiElementBoxHorizontalPadding() {
+            return uiElementBoxHorizontalPadding;
+        }
+
+        public Double uiElementBoxVerticalPadding() {
+            return uiElementBoxVerticalPadding;
+        }
+
+        public GradientColor savedBoxColor() {
+            return savedBoxColor;
+        }
+
+        public Double savedBoxOpacity() {
+            return savedBoxOpacity;
+        }
+
+        public Color savedBoxBorderColor() {
+            return savedBoxBorderColor;
+        }
+
+        public Double savedBoxBorderOpacity() {
+            return savedBoxBorderOpacity;
+        }
+
+        public GradientColor savedUiElementBoxColor() {
+            return savedUiElementBoxColor;
+        }
+
+        public Double savedUiElementBoxOpacity() {
+            return savedUiElementBoxOpacity;
+        }
+
+        public Color savedUiElementBoxBorderColor() {
+            return savedUiElementBoxBorderColor;
+        }
+
+        public Double savedUiElementBoxBorderOpacity() {
+            return savedUiElementBoxBorderOpacity;
         }
 
         public Double boxWidthPercent() {
@@ -338,104 +584,115 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return boxHeightPercent;
         }
 
-        public Double cellHorizontalPadding() {
-            return cellHorizontalPadding;
+        public Double boxHorizontalPadding() {
+            return boxHorizontalPadding;
         }
 
-        public Double cellVerticalPadding() {
-            return cellVerticalPadding;
+        public Double boxVerticalPadding() {
+            return boxVerticalPadding;
         }
 
         public Double hintCenterOffsetX() {
             return hintCenterOffsetX;
         }
 
-        public Integer subgridRowCount() {
-            return subgridRowCount;
+        public Transition.TransitionBuilder transition() {
+            return transition;
         }
 
-        public Integer subgridColumnCount() {
-            return subgridColumnCount;
+        public Transition.TransitionBuilder fade() {
+            return fade;
         }
 
-        public Double subgridBorderThickness() {
-            return subgridBorderThickness;
-        }
-
-        public Double subgridBorderLength() {
-            return subgridBorderLength;
-        }
-
-        public String subgridBorderHexColor() {
-            return subgridBorderHexColor;
-        }
-
-        public Double subgridBorderOpacity() {
-            return subgridBorderOpacity;
-        }
-
-        public Boolean transitionAnimationEnabled() {
-            return transitionAnimationEnabled;
-        }
-
-        public Duration transitionAnimationDuration() {
-            return transitionAnimationDuration;
-        }
-
-        public Boolean fadeAnimationEnabled() {
-            return fadeAnimationEnabled;
-        }
-
-        public Duration fadeAnimationDuration() {
-            return fadeAnimationDuration;
-        }
-
-        public String backgroundHexColor() {
-            return backgroundHexColor;
+        public Color backgroundColor() {
+            return backgroundColor;
         }
 
         public Double backgroundOpacity() {
             return backgroundOpacity;
         }
 
+        public Double backgroundBorderThickness() {
+            return backgroundBorderThickness;
+        }
+
+        public Color backgroundBorderColor() {
+            return backgroundBorderColor;
+        }
+
+        public Double backgroundBorderOpacity() {
+            return backgroundBorderOpacity;
+        }
+
+        public Double backgroundBorderRadius() {
+            return backgroundBorderRadius;
+        }
+
+        public List<Key> labelOverride() {
+            return labelOverride;
+        }
+
         public HintMeshStyle build(HintMeshStyle defaultStyle) {
             if (defaultStyle != null) {
                 boxShadow.extend(new Shadow.ShadowBuilder(defaultStyle.boxShadow));
+                transition.extend(new Transition.TransitionBuilder(defaultStyle.transition));
+                fade.extend(new Transition.TransitionBuilder(defaultStyle.fade));
             }
+            List<Decoration> builtDecorations = new ArrayList<>();
+            for (int i = 0; i < decorations.size(); i++)
+                builtDecorations.add(decorations.get(i).build(
+                        defaultStyle == null ? null : defaultStyle.decorations.get(i)));
             return new HintMeshStyle(
                     fontStyle.build(),
                     prefixInBackground == null ? defaultStyle.prefixInBackground : prefixInBackground,
                     prefixFontStyle.build(),
-                    boxHexColor == null ? defaultStyle.boxHexColor : boxHexColor,
+                    boxColor == null ? defaultStyle.boxColor : boxColor,
                     boxOpacity == null ? defaultStyle.boxOpacity : boxOpacity,
                     boxBorderThickness == null ? defaultStyle.boxBorderThickness : boxBorderThickness,
                     boxBorderLength == null ? defaultStyle.boxBorderLength : boxBorderLength,
-                    boxBorderHexColor == null ? defaultStyle.boxBorderHexColor : boxBorderHexColor,
+                    boxBorderColor == null ? defaultStyle.boxBorderColor : boxBorderColor,
                     boxBorderOpacity == null ? defaultStyle.boxBorderOpacity : boxBorderOpacity,
                     boxBorderRadius == null ? defaultStyle.boxBorderRadius : boxBorderRadius,
+                    boxFramed == null ? defaultStyle.boxFramed : boxFramed,
                     boxShadow.build(),
                     prefixBoxEnabled == null ? defaultStyle.prefixBoxEnabled : prefixBoxEnabled,
                     prefixBoxBorderThickness == null ? defaultStyle.prefixBoxBorderThickness : prefixBoxBorderThickness,
                     prefixBoxBorderLength == null ? defaultStyle.prefixBoxBorderLength : prefixBoxBorderLength,
-                    prefixBoxBorderHexColor == null ? defaultStyle.prefixBoxBorderHexColor : prefixBoxBorderHexColor,
+                    prefixBoxBorderColor == null ? defaultStyle.prefixBoxBorderColor : prefixBoxBorderColor,
                     prefixBoxBorderOpacity == null ? defaultStyle.prefixBoxBorderOpacity : prefixBoxBorderOpacity,
+                    prefixBoxFramed == null ? defaultStyle.prefixBoxFramed : prefixBoxFramed,
+                    uiElementBoxColor == null ? defaultStyle.uiElementBoxColor : uiElementBoxColor,
+                    uiElementBoxOpacity == null ? defaultStyle.uiElementBoxOpacity : uiElementBoxOpacity,
+                    uiElementBoxBorderThickness == null ? defaultStyle.uiElementBoxBorderThickness : uiElementBoxBorderThickness,
+                    uiElementBoxBorderLength == null ? defaultStyle.uiElementBoxBorderLength : uiElementBoxBorderLength,
+                    uiElementBoxBorderColor == null ? defaultStyle.uiElementBoxBorderColor : uiElementBoxBorderColor,
+                    uiElementBoxBorderOpacity == null ? defaultStyle.uiElementBoxBorderOpacity : uiElementBoxBorderOpacity,
+                    uiElementBoxBorderRadius == null ? defaultStyle.uiElementBoxBorderRadius : uiElementBoxBorderRadius,
+                    uiElementBoxHorizontalPadding == null ? defaultStyle.uiElementBoxHorizontalPadding : uiElementBoxHorizontalPadding,
+                    uiElementBoxVerticalPadding == null ? defaultStyle.uiElementBoxVerticalPadding : uiElementBoxVerticalPadding,
+                    savedBoxColor == null && defaultStyle != null ? defaultStyle.savedBoxColor : savedBoxColor,
+                    savedBoxOpacity == null && defaultStyle != null ? defaultStyle.savedBoxOpacity : savedBoxOpacity,
+                    savedBoxBorderColor == null && defaultStyle != null ? defaultStyle.savedBoxBorderColor : savedBoxBorderColor,
+                    savedBoxBorderOpacity == null && defaultStyle != null ? defaultStyle.savedBoxBorderOpacity : savedBoxBorderOpacity,
+                    savedUiElementBoxColor == null && defaultStyle != null ? defaultStyle.savedUiElementBoxColor : savedUiElementBoxColor,
+                    savedUiElementBoxOpacity == null && defaultStyle != null ? defaultStyle.savedUiElementBoxOpacity : savedUiElementBoxOpacity,
+                    savedUiElementBoxBorderColor == null && defaultStyle != null ? defaultStyle.savedUiElementBoxBorderColor : savedUiElementBoxBorderColor,
+                    savedUiElementBoxBorderOpacity == null && defaultStyle != null ? defaultStyle.savedUiElementBoxBorderOpacity : savedUiElementBoxBorderOpacity,
                     boxWidthPercent == null ? defaultStyle.boxWidthPercent : boxWidthPercent,
                     boxHeightPercent == null ? defaultStyle.boxHeightPercent : boxHeightPercent,
-                    cellHorizontalPadding == null ? defaultStyle.cellHorizontalPadding : cellHorizontalPadding,
-                    cellVerticalPadding == null ? defaultStyle.cellVerticalPadding : cellVerticalPadding,
+                    boxHorizontalPadding == null ? defaultStyle.boxHorizontalPadding : boxHorizontalPadding,
+                    boxVerticalPadding == null ? defaultStyle.boxVerticalPadding : boxVerticalPadding,
                     hintCenterOffsetX == null ? defaultStyle.hintCenterOffsetX : hintCenterOffsetX,
-                    subgridRowCount == null ? defaultStyle.subgridRowCount : subgridRowCount,
-                    subgridColumnCount == null ? defaultStyle.subgridColumnCount : subgridColumnCount,
-                    subgridBorderThickness == null ? defaultStyle.subgridBorderThickness : subgridBorderThickness,
-                    subgridBorderLength == null ? defaultStyle.subgridBorderLength : subgridBorderLength,
-                    subgridBorderHexColor == null ? defaultStyle.subgridBorderHexColor : subgridBorderHexColor,
-                    subgridBorderOpacity == null ? defaultStyle.subgridBorderOpacity : subgridBorderOpacity,
-                    transitionAnimationEnabled == null ? defaultStyle.transitionAnimationEnabled : transitionAnimationEnabled,
-                    transitionAnimationDuration == null ? defaultStyle.transitionAnimationDuration : transitionAnimationDuration,
-                    fadeAnimationEnabled == null ? defaultStyle.fadeAnimationEnabled : fadeAnimationEnabled,
-                    fadeAnimationDuration == null ? defaultStyle.fadeAnimationDuration : fadeAnimationDuration,
-                    backgroundHexColor == null ? defaultStyle.backgroundHexColor : backgroundHexColor,
-                    backgroundOpacity == null ? defaultStyle.backgroundOpacity : backgroundOpacity
+                    builtDecorations,
+                    transition.build(),
+                    fade.build(),
+                    backgroundColor == null ? defaultStyle.backgroundColor : backgroundColor,
+                    backgroundOpacity == null ? defaultStyle.backgroundOpacity : backgroundOpacity,
+                    backgroundBorderThickness == null ? defaultStyle.backgroundBorderThickness : backgroundBorderThickness,
+                    backgroundBorderColor == null ? defaultStyle.backgroundBorderColor : backgroundBorderColor,
+                    backgroundBorderOpacity == null ? defaultStyle.backgroundBorderOpacity : backgroundBorderOpacity,
+                    backgroundBorderRadius == null ? defaultStyle.backgroundBorderRadius : backgroundBorderRadius,
+                    labelOverride == null ? defaultStyle.labelOverride : labelOverride
             );
         }
 

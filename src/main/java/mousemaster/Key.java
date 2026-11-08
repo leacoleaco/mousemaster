@@ -10,12 +10,12 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
     public static final Key enter = new Key("enter", "⏎", null);
     public static final Key leftshift = new Key("leftshift", "⇧", null);
     public static final Key leftctrl = new Key("leftctrl", "⌃", null);
-    public static final Key leftalt = new Key("leftalt", "⎇", null);
+    public static final Key leftalt = new Key("leftalt", Os.macos ? "⌥" : "⎇", null);
     public static final Key rightshift = new Key("rightshift", "⇧", null);
     public static final Key rightctrl = new Key("rightctrl", "⌃", null);
-    public static final Key rightalt = new Key("rightalt", "⎇", null);
-    public static final Key pause = new Key("pause", null, null);
-    public static final Key scrolllock = new Key("scrolllock", null, null);
+    public static final Key rightalt = new Key("rightalt", Os.macos ? "⌥" : "⎇", null);
+    public static final Key pause = new Key("pause", "⎉", null);
+    public static final Key scrolllock = new Key("scrolllock", "⇳", null);
     public static final Key capslock = new Key("capslock", "⇪", null);
     public static final Key esc = new Key("esc", "⎋", null);
     public static final Key space = new Key("space", "␣", null);
@@ -30,11 +30,11 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
     public static final Key printscreen = new Key("printscreen", "⎙", null);
     public static final Key insert = new Key("insert", "⎀", null);
     public static final Key del = new Key("del", "⌦", null);
-    public static final Key break_ = new Key("break", null, null);
+    public static final Key break_ = new Key("break", "⎊", null);
     public static final Key backspace = new Key("backspace", "⌫", null);
-    public static final Key leftwin = new Key("leftwin", "⊞", null);
-    public static final Key rightwin = new Key("rightwin", "⊞", null);
-    public static final Key menu = new Key("menu", null, null);
+    public static final Key leftwin = new Key("leftwin", Os.macos ? "⌘" : "⊞", null);
+    public static final Key rightwin = new Key("rightwin", Os.macos ? "⌘" : "⊞", null);
+    public static final Key menu = new Key("menu", "☰", null);
     public static final Key numpad0 = new Key("numpad0", "0", null);
     public static final Key numpad1 = new Key("numpad1", "1", null);
     public static final Key numpad2 = new Key("numpad2", "2", null);
@@ -50,7 +50,8 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
     public static final Key numpadsubtract = new Key("numpadsubtract", "-", null);
     public static final Key numpaddecimal = new Key("numpaddecimal", ".", null);
     public static final Key numpaddivide = new Key("numpaddivide", "/", null);
-    public static final Key numlock = new Key("numlock", null, null);
+    public static final Key numpadenter = new Key("numpadenter", "⌤", null);
+    public static final Key numlock = new Key("numlock", "⇭", null);
     public static final Key f1 = new Key("f1", null, null);
     public static final Key f2 = new Key("f2", null, null);
     public static final Key f3 = new Key("f3", null, null);
@@ -84,6 +85,10 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
     public static final Key minus = new Key("minus", null, "-");
     public static final Key hash = new Key("hash", null, "#");
     public static final Key backslash = new Key("backslash", null, "\\");
+    public static final Key questionmark = new Key("questionmark", null, "?");
+    public static final Key asterisk = new Key("asterisk", null, "*");
+    public static final Key lessthan = new Key("lessthan", null, "<");
+    public static final Key greaterthan = new Key("greaterthan", null, ">");
 
     public static final Set<Key> keyboardLayoutIndependentKeys = Set.of(
             // @formatter:off
@@ -131,6 +136,7 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
             numpadsubtract,
             numpaddecimal,
             numpaddivide,
+            numpadenter,
             numlock,
             f1,
             f2,
@@ -159,6 +165,16 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
             // @formatter:on
     );
 
+    private static final Set<Key> characterTypingNamedKeys = Set.of(
+            // @formatter:off
+            space, tab, enter,
+            numpad0, numpad1, numpad2, numpad3, numpad4,
+            numpad5, numpad6, numpad7, numpad8, numpad9,
+            numpadmultiply, numpadadd, numpadsubtract, numpaddecimal, numpaddivide,
+            numpadenter
+            // @formatter:on
+    );
+
     private static final Set<Key> keyboardLayoutDependentAliasedKeys = Set.of(
             // @formatter:off
             leftcurlybrace,
@@ -169,7 +185,11 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
             plus,
             minus,
             hash,
-            backslash
+            backslash,
+            questionmark,
+            asterisk,
+            lessthan,
+            greaterthan
             // @formatter:on
     );
 
@@ -198,7 +218,7 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
     public static Key ofName(String name) {
         Key key = tryOfName(name);
         if (key == null)
-            throw new IllegalArgumentException("Invalid key character: " + name);
+            throw new IllegalArgumentException("Invalid key name: " + name);
         return key;
     }
 
@@ -213,6 +233,10 @@ public record Key(String staticName, String staticSingleCharacterName, String ch
 
     public String name() {
         return staticName != null ? staticName : character;
+    }
+
+    public boolean typesCharacter() {
+        return character != null || characterTypingNamedKeys.contains(this);
     }
 
     public String hintLabel() {

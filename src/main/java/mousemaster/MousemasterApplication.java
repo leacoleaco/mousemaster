@@ -1,5 +1,6 @@
 package mousemaster;
 
+import ch.qos.logback.classic.AsyncAppender;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
@@ -7,28 +8,23 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.FileAppender;
-import com.sun.jna.Native;
-import com.sun.jna.platform.win32.Kernel32;
-import com.sun.jna.platform.win32.User32;
-import com.sun.jna.platform.win32.WinDef;
-import com.sun.jna.platform.win32.WinUser;
+import ch.qos.logback.core.OutputStreamAppender;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Properties;
+import java.io.UncheckedIOException;
+import java.util.Iterator;
 import java.util.Scanner;
-import java.util.function.Predicate;
 import java.util.logging.LogManager;
-import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
 
 public class MousemasterApplication {
 
     private static final Logger logger;
     public static String tempDirectory;
+    private static int modeColumnWidth;
 
     static {
         System.setProperty("slf4j.internal.verbosity", "WARN");
@@ -38,106 +34,11 @@ public class MousemasterApplication {
         SLF4JBridgeHandler.install();
     }
 
-    public static void main(String[] args) throws InterruptedException, IOException {
-        String tempDirectory = Stream.of(args)
-                                     .filter(arg -> arg.startsWith("--temp-directory="))
-                                     .map(arg -> arg.split("=")[1])
-                                     .findFirst().orElse(null);
-        setTempDirectory(tempDirectory);
-        Stream.of(args)
-              .filter(arg -> arg.startsWith("--log-level="))
-              .map(arg -> arg.split("=")[1])
-              .findFirst()
-              .ifPresent(MousemasterApplication::setLogLevel);
-        boolean logToFile = Stream.of(args)
-                                     .filter(arg -> arg.startsWith("--log-to-file="))
-                                     .map(arg -> arg.split("=")[1])
-                                     .findFirst()
-                                     .map(Boolean::parseBoolean)
-                                     .orElse(false);
-        if (logToFile)
-            enableLogToFile();
-        boolean pauseOnError = Stream.of(args)
-                                     .filter(arg -> arg.startsWith("--pause-on-error="))
-                                     .map(arg -> arg.split("=")[1])
-                                     .findFirst()
-                                     .map(Boolean::parseBoolean)
-                                     .orElse(true);
-        String version;
-        String commitId;
-        try (InputStream versionInputStream = MousemasterApplication.class.getClassLoader().getResourceAsStream("application.properties")) {
-            Properties versionProp = new Properties();
-            versionProp.load(versionInputStream);
-            version = versionProp.getProperty("version");
-            commitId = versionProp.getProperty("commitId");
-        }
-        if (Stream.of(args).anyMatch(Predicate.isEqual(("--version")))) {
-            System.out.println("mousemaster v" + version + " (" + commitId + ")");
-            return;
-        }
-        Path configurationPath = Stream.of(args)
-                                       .filter(arg -> arg.startsWith(
-                                               "--configuration-file="))
-                                       .map(arg -> arg.split("=")[1])
-                                       .findFirst()
-                                       .map(Paths::get)
-                                       .orElse(Paths.get("mousemaster.properties"));
-        if (Stream.of(args).anyMatch("--visual-settings"::equals)) {
-            logger.info("mousemaster v" + version + " (" + commitId + ")");
-            try {
-                QtManager.initialize();
-                VisualSettingsWindow dialog = new VisualSettingsWindow(configurationPath);
-                dialog.exec();
-            } catch (Throwable e) {
-                shutdownAfterException(e, null, false, pauseOnError);
-            } finally {
-                QtManager.stop();
-            }
-            return;
-        }
-        boolean multipleInstancesAllowed =
-                Stream.of(args)
-                      .filter(arg -> arg.startsWith("--multiple-instances-allowed="))
-                      .map(arg -> arg.split("=")[1])
-                      .findFirst()
-                      .map(Boolean::parseBoolean)
-                      .orElse(false);
-        boolean keyRegurgitationEnabled = // Feature flag.
-                Stream.of(args)
-                      .filter(arg -> arg.startsWith("--key-regurgitation-enabled="))
-                      .map(arg -> arg.split("=")[1])
-                      .findFirst()
-                      .map(Boolean::parseBoolean)
-                      .orElse(true); // Remove this feature flag if confirmed working
-        if (Stream.of(args).anyMatch(Predicate.isEqual(("--graalvm-agent-run")))) {
-            logger.info("--graalvm-agent-run flag found, exiting in 20s");
-            new Thread(() -> {
-                try {
-                    Thread.sleep(20000);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-                System.exit(0);
-            }).start();
-        }
-        WindowsPlatform platform = platform(multipleInstancesAllowed, keyRegurgitationEnabled, pauseOnError);
-        logger.info("mousemaster v" + version + " (" + commitId + ")");
-        if (platform == null)
-            return;
-        try {
-            Native.setCallbackExceptionHandler((c, e) -> shutdownAfterException(e, platform, true, pauseOnError));
-            new Mousemaster(configurationPath, platform).run();
-        } catch (Throwable e) {
-            shutdownAfterException(e, platform, false, pauseOnError);
-        }
-    }
-
-    private static void setTempDirectory(String tempDirectory) {
+    public static void setTempDirectory(String tempDirectory) {
         if (tempDirectory != null)
             MousemasterApplication.tempDirectory = tempDirectory;
         else {
-            String os = System.getProperty("os.name").toLowerCase();
-            if (os.contains("win")) {
+            if (Os.windows) {
                 boolean userNameIsAscii =
                         System.getProperty("user.name").matches("[\\x00-\\x7F]+");
                 if (!userNameIsAscii) {
@@ -147,44 +48,52 @@ public class MousemasterApplication {
             }
         }
         if (MousemasterApplication.tempDirectory == null)
-            MousemasterApplication.tempDirectory = System.getProperty("java.io.tmpdir") + "mousemaster-" + System.getProperty("user.name").hashCode();
+            MousemasterApplication.tempDirectory =
+                    System.getProperty("java.io.tmpdir") + "mousemaster-" +
+                    System.getProperty("user.name").hashCode();
         System.setProperty("jna.tmpdir", MousemasterApplication.tempDirectory + "/jna");
     }
 
-    private static WindowsPlatform platform(boolean multipleInstancesAllowed,
-                                            boolean keyRegurgitationEnabled,
-                                            boolean pauseOnError) {
+    /** The build gzips the large resources; an IDE build of the classes directory leaves them raw. */
+    public static InputStream resourceStream(String resourcePath) {
+        ClassLoader classLoader = MousemasterApplication.class.getClassLoader();
+        InputStream inputStream = classLoader.getResourceAsStream(resourcePath);
+        if (inputStream != null)
+            return inputStream;
         try {
-            return new WindowsPlatform(multipleInstancesAllowed, keyRegurgitationEnabled);
-        } catch (Exception e) {
-            shutdownAfterException(e, null, false, pauseOnError);
+            return new GZIPInputStream(classLoader.getResourceAsStream(resourcePath + ".gz"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
-        return null;
     }
 
-    private static void shutdownAfterException(Throwable e, Platform platform,
-                                               boolean jnaCallback,
-                                               boolean pauseOnError) {
+    public static void shutdownAfterException(Throwable e, Platform platform,
+                                              boolean jnaCallback,
+                                              boolean pauseOnError) {
         if (platform != null)
             platform.shutdown();
         logger.error(jnaCallback ? "Error in JNA callback" : "", e);
-        if (pauseOnError) {
+        // Without a terminal there is nobody to press Enter: the read blocks or throws,
+        // either of which skips the shutdown below. System.console() alone stopped
+        // meaning interactive in java 22, it is now non null on a redirected stream too.
+        if (pauseOnError && System.console() != null && System.console().isTerminal()) {
             logger.info(
                     "An error has occurred. The details of the error should be right above this message. Press Enter in this window to close mousemaster.");
             new Scanner(System.in).nextLine();
         }
-        System.exit(1);
+        if (platform == null)
+            System.exit(1); // Qt was never initialized: exiting cannot hang.
+        platform.killProcess(1);
     }
 
     public static void enableLogToFile() {
         LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
         Logger rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME);
-        if (rootLogger.getAppender("FILE") != null)
+        if (rootLogger.getAppender("ASYNC_FILE") != null)
             return;
         PatternLayoutEncoder encoder = new PatternLayoutEncoder();
         encoder.setContext(context);
-        encoder.setPattern("%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} [%thread] %-5level %logger{36} - %msg%n");
-        encoder.start();
+        startWithCurrentPattern(encoder);
         FileAppender<ILoggingEvent> fileAppender = new FileAppender<>();
         fileAppender.setName("FILE");
         fileAppender.setContext(context);
@@ -192,16 +101,23 @@ public class MousemasterApplication {
         fileAppender.setEncoder(encoder);
         fileAppender.setAppend(true);
         fileAppender.start();
-        rootLogger.addAppender(fileAppender);
+        AsyncAppender asyncAppender = new AsyncAppender();
+        asyncAppender.setName("ASYNC_FILE");
+        asyncAppender.setContext(context);
+        asyncAppender.setQueueSize(4096);
+        asyncAppender.setDiscardingThreshold(0);
+        asyncAppender.addAppender(fileAppender);
+        asyncAppender.start();
+        rootLogger.addAppender(asyncAppender);
     }
 
     public static void disableLogToFile() {
         LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
         Logger rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME);
-        Appender<ILoggingEvent> fileAppender = rootLogger.getAppender("FILE");
-        if (fileAppender != null) {
-            rootLogger.detachAppender(fileAppender);
-            fileAppender.stop();
+        Appender<ILoggingEvent> asyncAppender = rootLogger.getAppender("ASYNC_FILE");
+        if (asyncAppender != null) {
+            rootLogger.detachAppender(asyncAppender);
+            asyncAppender.stop();
         }
     }
 
@@ -210,15 +126,32 @@ public class MousemasterApplication {
         logger.setLevel(Level.valueOf(level));
     }
 
-    public static void showConsole() {
-        // This should be moved to a Console interface (with one implementation per OS).
-        WinDef.HWND hwnd = Kernel32.INSTANCE.GetConsoleWindow();
-        User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_SHOW);
+    /**
+     * The mode column is only as wide as the longest mode name of the loaded
+     * configuration.
+     */
+    public static void setModeColumnWidth(int width) {
+        modeColumnWidth = width;
+        LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+        Logger rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME);
+        for (Iterator<Appender<ILoggingEvent>> asyncAppenders =
+             rootLogger.iteratorForAppenders(); asyncAppenders.hasNext(); ) {
+            for (Iterator<Appender<ILoggingEvent>> appenders =
+                 ((AsyncAppender) asyncAppenders.next()).iteratorForAppenders();
+                 appenders.hasNext(); ) {
+                Appender<ILoggingEvent> appender = appenders.next();
+                if (appender instanceof OutputStreamAppender<ILoggingEvent> outputStreamAppender &&
+                    outputStreamAppender.getEncoder() instanceof PatternLayoutEncoder encoder)
+                    startWithCurrentPattern(encoder);
+            }
+        }
     }
 
-    public static void hideConsole() {
-        WinDef.HWND hwnd = Kernel32.INSTANCE.GetConsoleWindow();
-        User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_HIDE);
+    private static void startWithCurrentPattern(PatternLayoutEncoder encoder) {
+        encoder.stop();
+        encoder.setPattern("%d{HH:mm:ss.SSS} %-5level %-" + modeColumnWidth +
+                           "X{mode} %-16logger{0} %msg%n");
+        encoder.start();
     }
 
 }

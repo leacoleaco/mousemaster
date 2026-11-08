@@ -1,5 +1,6 @@
 package mousemaster;
 
+import java.util.Set;
 import java.util.logging.Logger;
 
 public class KeyResolver {
@@ -8,11 +9,25 @@ public class KeyResolver {
 
     private final KeyboardLayout activeKeyboardLayout;
     private final KeyboardLayout configurationKeyboardLayout;
+    private final Set<String> declaredVirtualKeyNames;
+    private final Set<String> animationKeyNames;
 
     public KeyResolver(KeyboardLayout activeKeyboardLayout,
-                       KeyboardLayout configurationKeyboardLayout) {
+                       KeyboardLayout configurationKeyboardLayout,
+                       Set<String> declaredVirtualKeyNames, Set<String> animationKeyNames) {
         this.activeKeyboardLayout = activeKeyboardLayout;
         this.configurationKeyboardLayout = configurationKeyboardLayout;
+        this.declaredVirtualKeyNames = declaredVirtualKeyNames;
+        this.animationKeyNames = animationKeyNames;
+    }
+
+    public boolean isVirtual(String keyName) {
+        return BuiltInVirtualKey.isBuiltIn(keyName) ||
+               declaredVirtualKeyNames.contains(keyName);
+    }
+
+    public boolean isAnimation(String keyName) {
+        return animationKeyNames.contains(keyName);
     }
 
     /**
@@ -22,9 +37,12 @@ public class KeyResolver {
      * then the resolved key will be é.
      */
     public Key resolve(String keyName) {
-        if (configurationKeyboardLayout.equals(activeKeyboardLayout))
-            return Key.ofName(keyName);
+        if (isVirtual(keyName))
+            return new Key(keyName, null, null);
         Key keyInConfigurationLayout = Key.ofName(keyName);
+        if (configurationKeyboardLayout.equals(activeKeyboardLayout) ||
+            !configurationKeyboardLayout.containsKey(keyInConfigurationLayout))
+            return keyInConfigurationLayout;
         int scanCode = configurationKeyboardLayout.scanCode(keyInConfigurationLayout);
         Key keyInActiveLayout = activeKeyboardLayout.keyFromScanCode(scanCode);
         if (keyInActiveLayout == null) {
@@ -34,6 +52,10 @@ public class KeyResolver {
             return keyInConfigurationLayout;
         }
         return keyInActiveLayout;
+    }
+
+    public ModifiedKeyPress modifiedKeyPressFromTypedKey(Key typedKey) {
+        return activeKeyboardLayout.modifiedKeyPressFromTypedKey(typedKey);
     }
 
 }

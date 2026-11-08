@@ -1,0 +1,181 @@
+name: build
+# Reusable build: compiles the native mousemaster.exe and uploads it as an
+# artifact. Called by release.yml (tag pushes) and nightly.yml (pushes to main).
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: mousemaster version extracted from the built jar
+        value: ${{ jobs.build.outputs.version }}
+permissions:
+  contents: read
+jobs:
+  build:
+    name: mousemaster on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+    steps:
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          # The release the profiles in windows/pgo were recorded with.
+          version: '25.4'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Build jar
+        run: mvnw clean package
+        shell: cmd
+      - name: Find JAR file
+        id: find_jar
+        run: |
+          $jarPath = Get-ChildItem -Recurse -Filter "mousemaster-*-jar-with-dependencies.jar" -Path .\target | Select-Object -First 1
+          "jar_path=$jarPath" >> $env:GITHUB_OUTPUT
+      - name: Extract version from JAR file
+        id: extract_version
+        run: |
+          $jarPath = "${{ steps.find_jar.outputs.jar_path }}"
+          $version = [regex]::match($jarPath, 'mousemaster-(.*?)-jar-with-dependencies\.jar').Groups[1].Value
+          "version=$version" >> $env:GITHUB_OUTPUT
+      # Skipped: the tests ran in the step above, and -Dagent would run them again under the
+      # tracing agent, which is minutes slower.
+      - name: Build GraalVM native executable
+        run: mvnw -Pnative -Dagent package -DskipTests
+        shell: cmd
+      - name: Rename GraalVM executable
+        run: ren target\mousemaster.exe mousemaster-without-vcruntime140.exe
+      # -nores keeps mousemaster's own version information: without it, the DLL's
+      # VERSIONINFO replaces it and Task Manager lists mousemaster as
+      # "Microsoft(R) C Runtime Library".
+      - name: Embed VCRUNTIME140.dll
+        run: windows\pefrmdllembed\pefrmdllembed.exe -impinj -nores target/mousemaster-without-vcruntime140.exe ./windows/pefrmdllembed/VCRUNTIME140.dll target/mousemaster.exe
+        shell: cmd
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: mousemaster-exe
+          path: target/mousemaster.exe
+          retention-days: 7
+
+  # Only the executable: native-image cannot cross compile, so the Intel half of the universal
+  # binary has to be built on an Intel runner and handed to build-macos.
+  build-macos-intel:
+    name: mousemaster on macos-15-intel
+    runs-on: macos-15-intel
+    steps:
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          # 25.0.1 is the last release built for macOS Intel, so this one stays behind the others.
+          java-version: '25.0.1'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Make the maven wrapper executable
+        run: chmod +x ./mvnw
+      - name: Build jar
+        run: ./mvnw clean package -DskipTests
+      - name: Build GraalVM native executable
+        run: ./mvnw -Pnative -Dagent package -DskipTests
+      - name: Upload the Intel executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: mousemaster-macos-x86_64
+          path: target/mousemaster
+          retention-days: 7
+
+  # A separate job rather than another matrix entry: every step above is Windows shaped
+  # (cmd, ren, pefrmdllembed). It cannot run the functional suite, which needs the Karabiner
+  # driver extension, root, Input Monitoring and a logged in console session.
+  build-macos-arm:
+    name: mousemaster on macos-latest
+    runs-on: macos-latest
+    steps:
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          # The release the Windows job builds with.
+          version: '25.4'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      - name: Checkout source
+        uses: actions/checkout@v4
+      # mvnw is committed without the executable bit, which only the Windows job can ignore.
+      - name: Make the maven wrapper executable
+        run: chmod +x ./mvnw
+      - name: Build jar and run the tests
+        run: ./mvnw clean package
+      # Skipped: the tests ran in the step above, and -Dagent would run them again under the
+      # tracing agent, which is minutes slower.
+      - name: Build GraalVM native executable
+        run: ./mvnw -Pnative -Dagent package -DskipTests
+      # The native image links against the Qt frameworks, which the .app carries: on its own it
+      # cannot even start.
+      - name: Install Qt
+        run: |
+          python3 -m pip install --break-system-packages aqtinstall
+          python3 -m aqt install-qt mac desktop 6.8.2 -O "$HOME/Qt"
+      - name: Assemble the app bundle
+        run: QT=$HOME/Qt/6.8.2/macos ./macos/build-app.sh
+      # ditto rather than zip: a framework is symlinks, an executable bit and a signature, none
+      # of which survive being uploaded as a directory.
+      - name: Zip the app bundle
+        run: ditto -c -k --keepParent target/mousemaster.app target/mousemaster-macos-arm64.zip
+      - name: Upload the Apple Silicon app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mousemaster-macos-arm64
+          path: target/mousemaster-macos-arm64.zip
+          retention-days: 7
+
+  # A third job so both native image builds run at the same time: a lipo at the end of
+  # build-macos-arm would have to wait for the whole Intel job first.
+  build-macos:
+    name: mousemaster universal app bundle
+    runs-on: macos-latest
+    needs: [build-macos-intel, build-macos-arm]
+    steps:
+      - name: Download the Apple Silicon app bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: mousemaster-macos-arm64
+          path: target
+      - name: Download the Intel executable
+        uses: actions/download-artifact@v4
+        with:
+          name: mousemaster-macos-x86_64
+          path: target/x86_64
+      # One bundle for both architectures, so nobody has to know which Mac they are on. The Qt
+      # frameworks and the Karabiner shim are already universal.
+      - name: Make the bundled executable universal
+        run: |
+          cd target
+          ditto -x -k mousemaster-macos-arm64.zip .
+          lipo -create -output mousemaster.universal \
+              mousemaster.app/Contents/MacOS/mousemaster x86_64/mousemaster
+          mv mousemaster.universal mousemaster.app/Contents/MacOS/mousemaster
+          chmod +x mousemaster.app/Contents/MacOS/mousemaster
+          lipo -archs mousemaster.app/Contents/MacOS/mousemaster
+      # Replacing the executable invalidates the signature build-app.sh made, which Apple Silicon
+      # requires. The nested frameworks keep theirs.
+      - name: Re-sign the app bundle
+        run: |
+          codesign --force --sign - target/mousemaster.app
+          codesign --verify --strict target/mousemaster.app
+          codesign -dvv target/mousemaster.app 2>&1 | grep -E "Identifier=|Signature=|CDHash="
+      - name: Zip the app bundle
+        run: ditto -c -k --keepParent target/mousemaster.app target/mousemaster-macos.zip
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mousemaster-macos
+          path: target/mousemaster-macos.zip
+          retention-days: 7

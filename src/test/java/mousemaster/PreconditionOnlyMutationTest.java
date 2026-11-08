@@ -1,0 +1,262 @@
+package mousemaster;
+
+import mousemaster.platform.ActiveAppFinder;
+import mousemaster.platform.MouseController;
+import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Proxy;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * A precondition-only mutation is applied and reverted as its key toggles, and the ticks in
+ * between must leave neither the mutation nor the mutated mode stale.
+ */
+class PreconditionOnlyMutationTest {
+
+    private final List<Mode> notifiedModes = new ArrayList<>();
+    private ComboWatcher comboWatcher;
+
+    private void load(String... lines) {
+        Configuration configuration = ConfigurationParser.parse(List.of(lines),
+                KeyboardLayout.keyboardLayout("00000409", null));
+        ModeMap modeMap = configuration.modeMap();
+        ActiveAppFinder noApp = () -> new App("test.exe");
+        Clock clock = Instant::now;
+        // A precondition key is only recorded as pressed if it is one of these, as in Mousemaster.
+        Set<Key> unpressedPreconditionKeys = new HashSet<>();
+        Set<Key> pressedPreconditionKeys = new HashSet<>();
+        for (Mode mode : modeMap.modes()) {
+            for (Combo combo : mode.comboMap().commandsByCombo().keySet()) {
+                unpressedPreconditionKeys.addAll(
+                        combo.precondition().keyPrecondition().unpressedKeySet());
+                pressedPreconditionKeys.addAll(combo.precondition()
+                                                    .keyPrecondition()
+                                                    .pressedKeyPrecondition()
+                                                    .allKeys());
+            }
+        }
+        HintManager hintManager =
+                new HintManager(Map.of(), null, null, null, null, noApp,
+                        new KeyRedactor(KeyRedaction.NONE), null);
+        comboWatcher = new ComboWatcher(null, hintManager, noApp, null, clock,
+                unpressedPreconditionKeys, pressedPreconditionKeys,
+                new KeyRedactor(KeyRedaction.NONE), modeMap, configuration.initiallySetVariables(),
+                configuration.virtualKeys(), configuration.initiallyPressedVirtualKeys(),
+                configuration.activeKeyboardLayout());
+        comboWatcher.setModeListeners(List.of(new ModeListener() {
+            @Override
+            public void modeChanged(Mode newMode) {
+                notifiedModes.add(newMode);
+            }
+
+            @Override
+            public void modeTimedOut() {
+            }
+        }));
+        comboWatcher.modeChanged(modeMap.get(Mode.IDLE_MODE_NAME));
+    }
+
+    private void tick() {
+        comboWatcher.update(0.01);
+    }
+
+    private void setIdling(boolean idling) {
+        comboWatcher.setVirtualKeyPressed(BuiltInVirtualKey.IS_IDLING, idling);
+        tick();
+    }
+
+    private boolean renderAsCursor() {
+        return comboWatcher.getMutatedMode().indicator().renderAsCursor();
+    }
+
+    /** Sets the mouse and keyboard keys the way ModeController does, for a left click. */
+    private void leftClick() {
+        setMouseAndKeyboardKeys(new MouseState(null) {
+            @Override
+            public boolean moving() {
+                return false;
+            }
+
+            @Override
+            public boolean wheeling() {
+                return false;
+            }
+
+            @Override
+            public boolean leftPressing() {
+                return true;
+            }
+
+            @Override
+            public boolean middlePressing() {
+                return false;
+            }
+
+            @Override
+            public boolean rightPressing() {
+                return false;
+            }
+        });
+    }
+
+    private void setMouseAndKeyboardKeys(MouseState mouseState) {
+        comboWatcher.updateBuiltInVirtualKeys(mouseState, new KeyboardState(null) {
+            @Override
+            public boolean pressingUnhandledKeyInCurrentMode() {
+                return false;
+            }
+        }, new AnimationPlayer(Map.of()));
+    }
+
+    private MouseManager mouseManager() {
+        Screen screen = new Screen(new Rectangle(0, 0, 1920, 1080), 96, 1);
+        return new MouseManager(new ScreenManager(() -> Set.of(screen)),
+                (MouseController) Proxy.newProxyInstance(
+                        MouseController.class.getClassLoader(),
+                        new Class<?>[] {MouseController.class},
+                        (proxy, method, args) -> null));
+    }
+
+    private Color color() {
+        return comboWatcher.getMutatedMode().indicator().layerByName().get("indicator").fillColor();
+    }
+
+    private double size() {
+        return comboWatcher.getMutatedMode().indicator().layerByName().get("indicator").size();
+    }
+
+    private double opacity() {
+        return comboWatcher.getMutatedMode().indicator().layerByName().get("indicator").fillOpacity();
+    }
+
+    @Test
+    void aMutatedAreaIsCenteredByItsNewArea() {
+        load("idle-mode.overlay.area=active-screen | _{isidling} -> active-window");
+        assertEquals(AreaCenter.ACTIVE_SCREEN_CENTER,
+                comboWatcher.getMutatedMode().hintMesh().type().area().centerOrDefault());
+        setIdling(true);
+        assertEquals(AreaCenter.ACTIVE_WINDOW_CENTER,
+                comboWatcher.getMutatedMode().hintMesh().type().area().centerOrDefault());
+    }
+
+    @Test
+    void aLayerMutatedToTheTargetFollowsTheTargetInsteadOfTheMouse() {
+        load("idle-mode.indicator.position=mouse | _{isidling} -> target");
+        assertTrue(comboWatcher.getMutatedMode().indicator().layerByName().get("indicator")
+                               .followMouse());
+        setIdling(true);
+        assertFalse(comboWatcher.getMutatedMode().indicator().layerByName().get("indicator")
+                                .followMouse());
+    }
+
+    @Test
+    void aMutationReachesAnIndicatorProperty() {
+        load("idle-mode.indicator.fill-color=#FF0000 | _{isidling} -> #00FF00");
+        tick();
+        assertEquals(Color.parse("#FF0000"), color());
+
+        setIdling(true);
+        assertEquals(Color.parse("#00FF00"), color());
+    }
+
+    @Test
+    void mutationFollowsItsVariableAcrossTicks() {
+        load("idle-mode.indicator.render-as-cursor=false | _{isidling} -> true");
+        tick();
+        assertFalse(renderAsCursor());
+
+        setIdling(true);
+        assertTrue(renderAsCursor());
+        for (int i = 0; i < 5; i++)
+            tick();
+        assertTrue(renderAsCursor(), "a tick must not revert an applied mutation");
+
+        setIdling(false);
+        assertFalse(renderAsCursor());
+        for (int i = 0; i < 5; i++)
+            tick();
+        assertFalse(renderAsCursor(), "a tick must not re-apply a reverted mutation");
+    }
+
+    /** ismousepressing and isleftmousepressing are set one after the other, so mutating on
+     *  both must reach the listeners once, with everything the click changed. */
+    @Test
+    void aClickNotifiesOnceWithEveryMutationApplied() {
+        load("idle-mode.indicator.size=26 | +ismousepressing -> 50",
+                "idle-mode.indicator.fill-color=#FF0000 | +isleftmousepressing -> #00FF00");
+        notifiedModes.clear();
+
+        leftClick();
+        assertEquals(1, notifiedModes.size(), "notified " + notifiedModes.size() + " times");
+        assertEquals(50, notifiedModes.getFirst().indicator().layerByName().get("indicator").size());
+        assertEquals(Color.parse("#00FF00"), notifiedModes.getFirst().indicator().layerByName().get("indicator").fillColor());
+    }
+
+    /** A hint mode's click presses and releases within one iteration, and the mouse state is
+     *  read once an iteration, so the press has to outlive its release to be seen at all. */
+    @Test
+    void aClickReleasedWithinOneIterationIsStillPressing() {
+        load("idle-mode.indicator.size=26 | _{ismousepressing} -> 50",
+                "idle-mode.indicator.fill-color=#FF0000 | _{isleftmousepressing} -> #00FF00",
+                "idle-mode.indicator.fill-opacity=1 | _{isidling} -> 0.5");
+        MouseManager mouseManager = mouseManager();
+        MouseState mouseState = new MouseState(mouseManager);
+        setMouseAndKeyboardKeys(mouseState);
+        assertEquals(0.5, opacity());
+
+        mouseManager.pressLeft();
+        mouseManager.releaseLeft();
+        setMouseAndKeyboardKeys(mouseState);
+        assertEquals(50, size());
+        assertEquals(Color.parse("#00FF00"), color());
+        assertEquals(1, opacity(), "a click is not idling");
+
+        mouseManager.update(0.01);
+        setMouseAndKeyboardKeys(mouseState);
+        assertEquals(26, size());
+        assertEquals(Color.parse("#FF0000"), color());
+        assertEquals(0.5, opacity());
+    }
+
+    @Test
+    void ticksWithoutAChangeDoNotNotifyListeners() {
+        load("idle-mode.indicator.render-as-cursor=false | _{isidling} -> true");
+        tick();
+        notifiedModes.clear();
+        for (int i = 0; i < 5; i++)
+            tick();
+        assertEquals(List.of(), notifiedModes);
+
+        setIdling(true);
+        assertEquals(1, notifiedModes.size());
+        assertTrue(notifiedModes.getFirst().indicator().renderAsCursor());
+    }
+
+    /** A key precondition is refreshed declaratively too, so the key events that neither
+     *  press nor release it leave the mutation alone. */
+    @Test
+    void aKeyPreconditionMutationFollowsThatKeyOnly() {
+        load("idle-mode.indicator.render-as-cursor=false | _{leftshift} -> true");
+        Instant now = Instant.now();
+        assertFalse(renderAsCursor());
+
+        comboWatcher.keyEvent(new KeyEvent.PressKeyEvent(now, Key.leftshift));
+        assertTrue(renderAsCursor());
+
+        notifiedModes.clear();
+        comboWatcher.keyEvent(new KeyEvent.PressKeyEvent(now, Key.ofName("a")));
+        comboWatcher.keyEvent(new KeyEvent.ReleaseKeyEvent(now, Key.ofName("a")));
+        assertTrue(renderAsCursor());
+        assertEquals(List.of(), notifiedModes, "an unrelated key must not rebuild the mode");
+
+        comboWatcher.keyEvent(new KeyEvent.ReleaseKeyEvent(now, Key.leftshift));
+        assertFalse(renderAsCursor());
+    }
+}

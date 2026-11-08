@@ -10,6 +10,25 @@ public record Macro(String name, MacroSequence output,
                     Map<String, List<Key>> outputAliasAllKeys) {
 
     /**
+     * The moves before the first move that is not a virtual key move. Their state is applied in
+     * the command batch, before the combo's other commands.
+     */
+    public List<KeyMacroMove> leadingVirtualKeyMoves(Set<Key> virtualKeys) {
+        if (virtualKeys.isEmpty())
+            return List.of();
+        List<KeyMacroMove> moves = new ArrayList<>();
+        for (MacroMove move : output.parallels().getFirst().moves()) {
+            if (!(move instanceof KeyMacroMove keyMove) ||
+                keyMove.destination() != MacroMoveDestination.COMBO_WATCHER ||
+                keyMove.keyOrAlias().isAlias() ||
+                !virtualKeys.contains(keyMove.keyOrAlias().key()))
+                break;
+            moves.add(keyMove);
+        }
+        return moves;
+    }
+
+    /**
      * - +key = press key, send to OS
      * - -key = release key, send to OS
      * - #key = press key, send to ComboWatcher
@@ -121,8 +140,23 @@ public record Macro(String name, MacroSequence output,
         KeyOrAlias keyOrAlias;
         if (alias != null)
             keyOrAlias = KeyOrAlias.ofAlias(alias);
-        else
+        else {
+            if (keyResolver.isVirtual(keyOrAliasName))
+                // A virtual key has no OS side, so +/- and #/~ mean the same thing.
+                destination = MacroMoveDestination.COMBO_WATCHER;
             keyOrAlias = KeyOrAlias.ofKey(keyResolver.resolve(keyOrAliasName));
+        }
+        // A screen alias is a key alias of built-in keys, so an alias is checked key by key.
+        for (Key key : keyOrAlias.possibleKeys()) {
+            if (BuiltInVirtualKey.isBuiltIn(key.name()))
+                throw new IllegalArgumentException(
+                        "Virtual key " + key.name() +
+                        " is built-in and cannot be pressed or released by a macro");
+            if (keyResolver.isAnimation(key.name()))
+                throw new IllegalArgumentException(
+                        "Virtual key " + key.name() +
+                        " is an animation and cannot be pressed or released by a macro");
+        }
         return new KeyMacroMove(keyOrAlias, negated, press, destination);
     }
 

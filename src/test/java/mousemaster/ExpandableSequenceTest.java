@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExpandableSequenceTest {
@@ -350,8 +351,9 @@ class ExpandableSequenceTest {
     // --- #{}/+{} inside braces (ignored keys in KeyMoveSet) ---
 
     static final KeyResolver identityKeyResolver = new KeyResolver(
-            new KeyboardLayout("test", "test", "test", "test", List.of()),
-            new KeyboardLayout("test", "test", "test", "test", List.of()));
+            new KeyboardLayout("test", "test", "test", "test", null, List.of()),
+            new KeyboardLayout("test", "test", "test", "test", null, List.of()), Set.of(),
+            Set.of());
 
     private static KeyMoveSet parseMoveSetWithIgnoredKeys(String input) {
         ExpandableSequence seq =

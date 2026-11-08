@@ -2,6 +2,7 @@ package mousemaster;
 
 import mousemaster.KeyEvent.PressKeyEvent;
 import mousemaster.KeyEvent.ReleaseKeyEvent;
+import mousemaster.platform.KeyboardController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,11 +15,15 @@ public class MacroPlayer {
 
     private static final Logger logger = LoggerFactory.getLogger(MacroPlayer.class);
 
-    private final PlatformClock clock;
+    private final Clock clock;
     private final ComboWatcher comboWatcher;
     private final KeyboardManager keyboardManager;
+    private final KeyboardController keyboard;
+    private final KeyRedactor keyRedactor;
+    private final KeyboardLayout activeKeyboardLayout;
     private final List<ResolvedMacro> macrosToExecute = new ArrayList<>();
     private MacroInProgress macroInProgress;
+    private final List<MacroInProgress> virtualKeyMacrosInProgress = new ArrayList<>();
     private final Set<Key> keysPressedByMacro = new HashSet<>();
     /**
      * Used to prevent keyReleasedNotEaten from removing a key that was just pressed
@@ -50,17 +55,22 @@ public class MacroPlayer {
      */
     private final Set<Key> deferredUserReleases = new HashSet<>();
 
-    public MacroPlayer(PlatformClock clock, ComboWatcher comboWatcher,
-                       KeyboardManager keyboardManager) {
+    public MacroPlayer(Clock clock, ComboWatcher comboWatcher,
+                       KeyboardManager keyboardManager, KeyboardController keyboard,
+                       KeyRedactor keyRedactor, KeyboardLayout activeKeyboardLayout) {
         this.clock = clock;
         this.comboWatcher = comboWatcher;
         this.keyboardManager = keyboardManager;
+        this.keyboard = keyboard;
+        this.keyRedactor = keyRedactor;
+        this.activeKeyboardLayout = activeKeyboardLayout;
     }
 
     private static class MacroInProgress {
         private final ResolvedMacro macro;
         private int currentIndex = -1;
         private double remainingWait;
+        private boolean advanced;
 
         private MacroInProgress(ResolvedMacro macro) {
             this.macro = macro;
@@ -72,11 +82,30 @@ public class MacroPlayer {
     }
 
     public void submit(ResolvedMacro macro) {
+        // A macro that only presses and releases virtual keys sends nothing to the OS, so it
+        // waits on its own clock instead of taking a turn: the others are not held back by it,
+        // and pressing the same one again starts it over.
+        if (allVirtualKeyMoves(macro)) {
+            virtualKeyMacrosInProgress.removeIf(
+                    inProgress -> inProgress.macro.name().equals(macro.name()));
+            virtualKeyMacrosInProgress.add(new MacroInProgress(macro));
+            return;
+        }
         macrosToExecute.add(macro);
         // Execute the first parallel immediately (without waiting for the next update tick)
         // if it contains only OS-destination key moves. ComboWatcher-destination moves are
         // deferred because the combo watcher state may not be fully settled yet.
         tryExecuteFirstParallelImmediately();
+    }
+
+    private static boolean allVirtualKeyMoves(ResolvedMacro macro) {
+        return macro.output()
+                    .parallels()
+                    .stream()
+                    .flatMap(parallel -> parallel.moves().stream())
+                    .allMatch(move -> move instanceof ResolvedKeyMacroMove keyMove &&
+                                      keyMove.destination() ==
+                                      MacroMoveDestination.COMBO_WATCHER);
     }
 
     private void tryExecuteFirstParallelImmediately() {
@@ -113,12 +142,18 @@ public class MacroPlayer {
             List<ResolvedMacroMove> releases = new ArrayList<>();
             for (Key key : keysPressedByMacro)
                 releases.add(new ResolvedKeyMacroMove(key, false, MacroMoveDestination.OS));
-            WindowsKeyboard.sendInputMoves(releases, false);
+            keyboard.sendInputMoves(releases, false);
         }
         reset();
     }
 
     public void reset() {
+        // What is left of a virtual key macro is its releases: play them, or the keys it
+        // pressed stay pressed for good.
+        for (MacroInProgress inProgress : List.copyOf(virtualKeyMacrosInProgress))
+            while (advance(inProgress, inProgress.remainingWait, true))
+                ;
+        virtualKeyMacrosInProgress.clear();
         macrosToExecute.clear();
         macroInProgress = null;
         keysPressedByMacro.clear();
@@ -130,7 +165,7 @@ public class MacroPlayer {
 
     public void keyPressedNotEaten(Key key) {
         macroReleasedKeys.remove(key);
-        WindowsKeyboard.keyPressedNotEaten(key);
+        keyboard.keyPressedNotEaten(key);
     }
 
     public void keyReleasedNotEaten(Key key) {
@@ -139,7 +174,7 @@ public class MacroPlayer {
         macroReleasedKeys.remove(key);
         // Scenario where user-press-eaten, then macro-press (uneats the key), then user-release (not eaten as per rule 1).
         // The macro-press is a repeating SendInput that should be stopped when user releases the key.
-        WindowsKeyboard.keyReleasedNotEaten(key);
+        keyboard.keyReleasedNotEaten(key);
     }
 
     public void newKeyEvent() {
@@ -183,13 +218,14 @@ public class MacroPlayer {
         }
         deferredUserReleases.clear();
         if (!releases.isEmpty()) {
-            logger.debug("Processing deferred user releases: " + releases);
-            WindowsKeyboard.sendInputMoves(releases, false);
+            logger.debug("Processing deferred user releases: " +
+                         keyRedactor.moves(releases));
+            keyboard.sendInputMoves(releases, false);
         }
     }
 
     public void recordEarlyRelease(Key key) {
-        WindowsKeyboard.recordEarlyReleaseForQueuedPress(key);
+        keyboard.recordEarlyReleaseForQueuedPress(key);
         if (macroInProgress == null)
             return;
         for (int i = macroInProgress.currentIndex + 1;
@@ -214,10 +250,16 @@ public class MacroPlayer {
      */
     public void clearEarlyRelease(Key key) {
         earlyReleasedKeys.remove(key);
-        WindowsKeyboard.clearEarlyReleaseForQueuedPress(key);
+        keyboard.clearEarlyReleaseForQueuedPress(key);
     }
 
     public void update(double delta) {
+        // A played move can complete a combo, which can submit a macro.
+        comboWatcher.suspendMutatedModeNotification();
+        for (MacroInProgress inProgress : List.copyOf(virtualKeyMacrosInProgress))
+            if (!advance(inProgress, delta, true))
+                virtualKeyMacrosInProgress.remove(inProgress);
+        comboWatcher.resumeMutatedModeNotification();
         if (macroInProgress == null && !macrosToExecute.isEmpty()) {
             macroInProgress = new MacroInProgress(macrosToExecute.removeFirst());
             ResolvedMacroParallel firstParallel = macroInProgress.macro.output().parallels().getFirst();
@@ -226,28 +268,78 @@ public class MacroPlayer {
         }
         if (macroInProgress == null)
             return;
-        macroInProgress.remainingWait -= delta;
-        if (macroInProgress.remainingWait <= 0) {
-            if (macroInProgress.currentIndex ==
-                macroInProgress.macro.output().parallels().size() - 1) {
-                macroInProgress = null;
-                processDeferredReleases();
-                return;
-            }
-            macroInProgress.currentIndex++;
-            macroInProgress.remainingWait =
-                    macroInProgress.currentParallel().duration().toNanos() / 1e9;
-            ResolvedMacroParallel parallel = macroInProgress.currentParallel();
+        if (!advance(macroInProgress, delta, false)) {
+            macroInProgress = null;
+            processDeferredReleases();
+        }
+    }
+
+    /** Plays the parallel the wait was for, and returns false once there is none left. */
+    private boolean advance(MacroInProgress inProgress, double delta,
+                            boolean playElapsedParallels) {
+        // The delta of the update that plays a macro's first parallel elapsed before the
+        // macro was submitted, so the wait that parallel starts does not pay for it.
+        if (inProgress.advanced)
+            inProgress.remainingWait -= delta;
+        else
+            inProgress.advanced = true;
+        do {
+            if (inProgress.remainingWait > 0)
+                return true;
+            if (inProgress.currentIndex ==
+                inProgress.macro.output().parallels().size() - 1)
+                return false;
+            inProgress.currentIndex++;
+            ResolvedMacroParallel parallel = inProgress.currentParallel();
+            double wait = parallel.duration().toNanos() / 1e9;
+            inProgress.remainingWait =
+                    playElapsedParallels ? inProgress.remainingWait + wait : wait;
             logger.debug("Executing macro parallel: " + parallel);
             if (!parallel.moves().isEmpty())
                 executeParallel(parallel);
+        } while (playElapsedParallels);
+        return true;
+    }
+
+    /**
+     * The move of a key typed with a modifier key becomes the moves of the modifier key and
+     * of the modified key: +questionmark is +leftshift +/ on us-qwerty.
+     */
+    private List<ResolvedMacroMove> expandTypedKeyMoves(List<ResolvedMacroMove> moves) {
+        List<ResolvedMacroMove> expandedMoves = new ArrayList<>();
+        for (ResolvedMacroMove move : moves) {
+            if (!(move instanceof ResolvedKeyMacroMove keyMove) ||
+                keyMove.destination() != MacroMoveDestination.OS) {
+                expandedMoves.add(move);
+                continue;
+            }
+            ModifiedKeyPress modifiedKeyPress =
+                    activeKeyboardLayout.modifiedKeyPressFromTypedKey(keyMove.key());
+            if (modifiedKeyPress == null) {
+                expandedMoves.add(move);
+                continue;
+            }
+            ResolvedKeyMacroMove modifierKeyMove = new ResolvedKeyMacroMove(
+                    modifiedKeyPress.modifierKeys().contains(Key.leftshift) ? Key.leftshift :
+                            Key.rightalt, keyMove.press(), MacroMoveDestination.OS);
+            ResolvedKeyMacroMove modifiedKeyMove = new ResolvedKeyMacroMove(
+                    modifiedKeyPress.modifiedKey(), keyMove.press(), MacroMoveDestination.OS);
+            if (keyMove.press()) {
+                expandedMoves.add(modifierKeyMove);
+                expandedMoves.add(modifiedKeyMove);
+            }
+            else {
+                expandedMoves.add(modifiedKeyMove);
+                expandedMoves.add(modifierKeyMove);
+            }
         }
+        return expandedMoves;
     }
 
     private void executeParallel(ResolvedMacroParallel parallel) {
         // Batch OS moves (key moves and string moves).
         List<ResolvedMacroMove> osMoves = new ArrayList<>();
-        for (ResolvedMacroMove move : parallel.moves()) {
+        for (ResolvedMacroMove move : expandTypedKeyMoves(parallel.moves())) {
             switch (move) {
                 case StringMacroMove stringMove -> {
                     osMoves.add(stringMove);
@@ -315,7 +407,7 @@ public class MacroPlayer {
                     else {
                         // Flush any pending OS moves before sending to ComboWatcher.
                         if (!osMoves.isEmpty()) {
-                            WindowsKeyboard.sendInputMoves(osMoves, true);
+                            keyboard.sendInputMoves(osMoves, true);
                             osMoves.clear();
                         }
                         KeyEvent event = keyMove.press()
@@ -328,7 +420,7 @@ public class MacroPlayer {
         }
         // Flush remaining OS moves.
         if (!osMoves.isEmpty()) {
-            WindowsKeyboard.sendInputMoves(osMoves, true);
+            keyboard.sendInputMoves(osMoves, true);
         }
     }
 

@@ -12,6 +12,12 @@
   "name":"[Lcom.sun.jna.platform.win32.WinUser$INPUT;"
 },
 {
+  "name":"[Lio.qt.core.QObject;"
+},
+{
+  "name":"[[I"
+},
+{
   "name":"boolean"
 },
 {
@@ -40,6 +46,10 @@
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
+  "name":"ch.qos.logback.classic.pattern.MDCConverter",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
   "name":"ch.qos.logback.classic.pattern.MessageConverter",
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
@@ -50,6 +60,15 @@
 {
   "name":"ch.qos.logback.classic.util.DefaultJoranConfigurator",
   "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"ch.qos.logback.classic.AsyncAppender",
+  "queryAllPublicMethods":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"ch.qos.logback.core.AsyncAppenderBase",
+  "methods":[{"name":"setDiscardingThreshold","parameterTypes":["int"] }, {"name":"setQueueSize","parameterTypes":["int"] }]
 },
 {
   "name":"ch.qos.logback.core.ConsoleAppender",
@@ -84,6 +103,11 @@
 {
   "name":"com.sun.jna.CallbackProxy",
   "methods":[{"name":"callback","parameterTypes":["java.lang.Object[]"] }]
+},
+{
+  "name":"com.sun.jna.CallbackReference$AttachOptions",
+  "allDeclaredFields":true,
+  "allDeclaredConstructors":true
 },
 {
   "name":"com.sun.jna.NativeLong",
@@ -388,6 +412,13 @@
   "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
+  "name":"com.sun.jna.platform.win32.WinUser$SIZE",
+  "allDeclaredFields":true,
+  "queryAllPublicConstructors":true,
+  "fields":[{"name":"OPTIONS"}, {"name":"STRING_ENCODING"}, {"name":"STRUCTURE_ALIGNMENT"}, {"name":"TYPE_MAPPER"}],
+  "methods":[{"name":"<init>","parameterTypes":["com.sun.jna.Pointer"] }]
+},
+{
   "name":"com.sun.jna.platform.win32.WinUser$WNDCLASSEX",
   "allDeclaredFields":true,
   "fields":[{"name":"OPTIONS"}, {"name":"STRING_ENCODING"}, {"name":"STRUCTURE_ALIGNMENT"}, {"name":"TYPE_MAPPER"}]
@@ -437,11 +468,11 @@
 },
 {
   "name":"io.qt.QtObject",
-  "methods":[{"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }]
+  "methods":[{"name":"clearCrop","parameterTypes":[] }, {"name":"clipAll","parameterTypes":["io.qt.core.QRect"] }, {"name":"coverVirtualDesktop","parameterTypes":["mousemaster.Rectangle"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setBoxPaint","parameterTypes":["mousemaster.renderer.HintMeshRenderer$BoxPaint"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutgoing","parameterTypes":["java.util.List"] }, {"name":"setOutgoingCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }]
 },
 {
   "name":"io.qt.Utility$Object",
-  "methods":[{"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }]
+  "methods":[{"name":"clearCrop","parameterTypes":[] }, {"name":"clipAll","parameterTypes":["io.qt.core.QRect"] }, {"name":"coverVirtualDesktop","parameterTypes":["mousemaster.Rectangle"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setBoxPaint","parameterTypes":["mousemaster.renderer.HintMeshRenderer$BoxPaint"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutgoing","parameterTypes":["java.util.List"] }, {"name":"setOutgoingCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }]
 },
 {
   "name":"io.qt.core.QAbstractAnimation",
@@ -459,7 +490,7 @@
   "name":"io.qt.core.QObject",
   "queryAllDeclaredMethods":true,
   "fields":[{"name":"destroyed"}, {"name":"objectNameChanged"}],
-  "methods":[{"name":"childEvent","parameterTypes":["io.qt.core.QChildEvent"] }, {"name":"connectNotify","parameterTypes":["io.qt.core.QMetaMethod"] }, {"name":"customEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"disconnectNotify","parameterTypes":["io.qt.core.QMetaMethod"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"event","parameterTypes":["io.qt.core.QEvent"] }, {"name":"eventFilter","parameterTypes":["io.qt.core.QObject","io.qt.core.QEvent"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }, {"name":"timerEvent","parameterTypes":["io.qt.core.QTimerEvent"] }]
+  "methods":[{"name":"childEvent","parameterTypes":["io.qt.core.QChildEvent"] }, {"name":"clearCrop","parameterTypes":[] }, {"name":"clipAll","parameterTypes":["io.qt.core.QRect"] }, {"name":"connectNotify","parameterTypes":["io.qt.core.QMetaMethod"] }, {"name":"coverVirtualDesktop","parameterTypes":["mousemaster.Rectangle"] }, {"name":"customEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"disconnectNotify","parameterTypes":["io.qt.core.QMetaMethod"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"event","parameterTypes":["io.qt.core.QEvent"] }, {"name":"eventFilter","parameterTypes":["io.qt.core.QObject","io.qt.core.QEvent"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setBoxPaint","parameterTypes":["mousemaster.renderer.HintMeshRenderer$BoxPaint"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutgoing","parameterTypes":["java.util.List"] }, {"name":"setOutgoingCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }, {"name":"timerEvent","parameterTypes":["io.qt.core.QTimerEvent"] }]
 },
 {
   "name":"io.qt.core.QThread",
@@ -505,7 +536,7 @@
 },
 {
   "name":"io.qt.internal.NativeUtility$Object",
-  "methods":[{"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }]
+  "methods":[{"name":"clearCrop","parameterTypes":[] }, {"name":"clipAll","parameterTypes":["io.qt.core.QRect"] }, {"name":"coverVirtualDesktop","parameterTypes":["mousemaster.Rectangle"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setBoxPaint","parameterTypes":["mousemaster.renderer.HintMeshRenderer$BoxPaint"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutgoing","parameterTypes":["java.util.List"] }, {"name":"setOutgoingCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }]
 },
 {
   "name":"io.qt.internal.NativeUtility$QueuedCleaner",
@@ -530,7 +561,7 @@
 {
   "name":"io.qt.widgets.QFrame",
   "queryAllDeclaredMethods":true,
-  "methods":[{"name":"initStyleOption","parameterTypes":["io.qt.widgets.QStyleOptionFrame"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }]
+  "methods":[{"name":"clearCrop","parameterTypes":[] }, {"name":"initStyleOption","parameterTypes":["io.qt.widgets.QStyleOptionFrame"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }]
 },
 {
   "name":"io.qt.widgets.QGraphicsDropShadowEffect",
@@ -552,13 +583,13 @@
   "name":"io.qt.widgets.QLabel",
   "queryAllDeclaredMethods":true,
   "fields":[{"name":"linkActivated"}, {"name":"linkHovered"}],
-  "methods":[{"name":"changeEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"contextMenuEvent","parameterTypes":["io.qt.gui.QContextMenuEvent"] }, {"name":"event","parameterTypes":["io.qt.core.QEvent"] }, {"name":"focusInEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"focusNextPrevChild","parameterTypes":["boolean"] }, {"name":"focusOutEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"heightForWidth","parameterTypes":["int"] }, {"name":"keyPressEvent","parameterTypes":["io.qt.gui.QKeyEvent"] }, {"name":"minimumSizeHint","parameterTypes":[] }, {"name":"mouseMoveEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mousePressEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mouseReleaseEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"sizeHint","parameterTypes":[] }]
+  "methods":[{"name":"changeEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"clearCrop","parameterTypes":[] }, {"name":"contextMenuEvent","parameterTypes":["io.qt.gui.QContextMenuEvent"] }, {"name":"event","parameterTypes":["io.qt.core.QEvent"] }, {"name":"focusInEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"focusNextPrevChild","parameterTypes":["boolean"] }, {"name":"focusOutEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"heightForWidth","parameterTypes":["int"] }, {"name":"keyPressEvent","parameterTypes":["io.qt.gui.QKeyEvent"] }, {"name":"minimumSizeHint","parameterTypes":[] }, {"name":"mouseMoveEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mousePressEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mouseReleaseEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"sizeHint","parameterTypes":[] }]
 },
 {
   "name":"io.qt.widgets.QWidget",
   "queryAllDeclaredMethods":true,
   "fields":[{"name":"customContextMenuRequested"}, {"name":"windowIconChanged"}, {"name":"windowIconTextChanged"}, {"name":"windowTitleChanged"}],
-  "methods":[{"name":"actionEvent","parameterTypes":["io.qt.gui.QActionEvent"] }, {"name":"changeEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"clearWindow","parameterTypes":[] }, {"name":"closeEvent","parameterTypes":["io.qt.gui.QCloseEvent"] }, {"name":"contextMenuEvent","parameterTypes":["io.qt.gui.QContextMenuEvent"] }, {"name":"dragEnterEvent","parameterTypes":["io.qt.gui.QDragEnterEvent"] }, {"name":"dragLeaveEvent","parameterTypes":["io.qt.gui.QDragLeaveEvent"] }, {"name":"dragMoveEvent","parameterTypes":["io.qt.gui.QDragMoveEvent"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"dropEvent","parameterTypes":["io.qt.gui.QDropEvent"] }, {"name":"enterEvent","parameterTypes":["io.qt.gui.QEnterEvent"] }, {"name":"event","parameterTypes":["io.qt.core.QEvent"] }, {"name":"focusInEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"focusNextPrevChild","parameterTypes":["boolean"] }, {"name":"focusOutEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"hasHeightForWidth","parameterTypes":[] }, {"name":"heightForWidth","parameterTypes":["int"] }, {"name":"hideChildren","parameterTypes":[] }, {"name":"hideEvent","parameterTypes":["io.qt.gui.QHideEvent"] }, {"name":"initPainter","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"inputMethodEvent","parameterTypes":["io.qt.gui.QInputMethodEvent"] }, {"name":"inputMethodQuery","parameterTypes":["io.qt.core.Qt$InputMethodQuery"] }, {"name":"keyPressEvent","parameterTypes":["io.qt.gui.QKeyEvent"] }, {"name":"keyReleaseEvent","parameterTypes":["io.qt.gui.QKeyEvent"] }, {"name":"leaveEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"metric","parameterTypes":["io.qt.gui.QPaintDevice$PaintDeviceMetric"] }, {"name":"minimumSizeHint","parameterTypes":[] }, {"name":"mouseDoubleClickEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mouseMoveEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mousePressEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mouseReleaseEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"moveEvent","parameterTypes":["io.qt.gui.QMoveEvent"] }, {"name":"paintEngine","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }, {"name":"redirected","parameterTypes":["io.qt.core.QPoint"] }, {"name":"resizeEvent","parameterTypes":["io.qt.gui.QResizeEvent"] }, {"name":"setBackground","parameterTypes":["io.qt.gui.QColor","io.qt.core.QRect"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setVisible","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }, {"name":"sharedPainter","parameterTypes":[] }, {"name":"showEvent","parameterTypes":["io.qt.gui.QShowEvent"] }, {"name":"sizeHint","parameterTypes":[] }, {"name":"tabletEvent","parameterTypes":["io.qt.gui.QTabletEvent"] }, {"name":"wheelEvent","parameterTypes":["io.qt.gui.QWheelEvent"] }]
+  "methods":[{"name":"actionEvent","parameterTypes":["io.qt.gui.QActionEvent"] }, {"name":"changeEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"clearCrop","parameterTypes":[] }, {"name":"clearWindow","parameterTypes":[] }, {"name":"clipAll","parameterTypes":["io.qt.core.QRect"] }, {"name":"closeEvent","parameterTypes":["io.qt.gui.QCloseEvent"] }, {"name":"contextMenuEvent","parameterTypes":["io.qt.gui.QContextMenuEvent"] }, {"name":"coverVirtualDesktop","parameterTypes":["mousemaster.Rectangle"] }, {"name":"dragEnterEvent","parameterTypes":["io.qt.gui.QDragEnterEvent"] }, {"name":"dragLeaveEvent","parameterTypes":["io.qt.gui.QDragLeaveEvent"] }, {"name":"dragMoveEvent","parameterTypes":["io.qt.gui.QDragMoveEvent"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"dropEvent","parameterTypes":["io.qt.gui.QDropEvent"] }, {"name":"enterEvent","parameterTypes":["io.qt.gui.QEnterEvent"] }, {"name":"event","parameterTypes":["io.qt.core.QEvent"] }, {"name":"focusInEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"focusNextPrevChild","parameterTypes":["boolean"] }, {"name":"focusOutEvent","parameterTypes":["io.qt.gui.QFocusEvent"] }, {"name":"hasHeightForWidth","parameterTypes":[] }, {"name":"heightForWidth","parameterTypes":["int"] }, {"name":"hideChildren","parameterTypes":[] }, {"name":"hideEvent","parameterTypes":["io.qt.gui.QHideEvent"] }, {"name":"initPainter","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"inputMethodEvent","parameterTypes":["io.qt.gui.QInputMethodEvent"] }, {"name":"inputMethodQuery","parameterTypes":["io.qt.core.Qt$InputMethodQuery"] }, {"name":"keyPressEvent","parameterTypes":["io.qt.gui.QKeyEvent"] }, {"name":"keyReleaseEvent","parameterTypes":["io.qt.gui.QKeyEvent"] }, {"name":"leaveEvent","parameterTypes":["io.qt.core.QEvent"] }, {"name":"metric","parameterTypes":["io.qt.gui.QPaintDevice$PaintDeviceMetric"] }, {"name":"minimumSizeHint","parameterTypes":[] }, {"name":"mouseDoubleClickEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mouseMoveEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mousePressEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"mouseReleaseEvent","parameterTypes":["io.qt.gui.QMouseEvent"] }, {"name":"moveEvent","parameterTypes":["io.qt.gui.QMoveEvent"] }, {"name":"paintEngine","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }, {"name":"redirected","parameterTypes":["io.qt.core.QPoint"] }, {"name":"resizeEvent","parameterTypes":["io.qt.gui.QResizeEvent"] }, {"name":"setBackground","parameterTypes":["io.qt.gui.QColor","io.qt.core.QRect"] }, {"name":"setBoxPaint","parameterTypes":["mousemaster.renderer.HintMeshRenderer$BoxPaint"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutgoing","parameterTypes":["java.util.List"] }, {"name":"setOutgoingCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setVisible","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }, {"name":"sharedPainter","parameterTypes":[] }, {"name":"showEvent","parameterTypes":["io.qt.gui.QShowEvent"] }, {"name":"sizeHint","parameterTypes":[] }, {"name":"tabletEvent","parameterTypes":["io.qt.gui.QTabletEvent"] }, {"name":"wheelEvent","parameterTypes":["io.qt.gui.QWheelEvent"] }]
 },
 {
   "name":"io.qt.widgets.QtJambi_LibraryUtilities",
@@ -580,7 +611,7 @@
   "allDeclaredClasses":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"equals","parameterTypes":["java.lang.Object"] }, {"name":"hashCode","parameterTypes":[] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }, {"name":"toString","parameterTypes":[] }]
+  "methods":[{"name":"clearCrop","parameterTypes":[] }, {"name":"clipAll","parameterTypes":["io.qt.core.QRect"] }, {"name":"coverVirtualDesktop","parameterTypes":["mousemaster.Rectangle"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"drawContent","parameterTypes":["io.qt.gui.QPainter","io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor","boolean"] }, {"name":"equals","parameterTypes":["java.lang.Object"] }, {"name":"hashCode","parameterTypes":[] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setBoxPaint","parameterTypes":["mousemaster.renderer.HintMeshRenderer$BoxPaint"] }, {"name":"setClearColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"setCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setEdgeCount","parameterTypes":["int"] }, {"name":"setFillColor","parameterTypes":["io.qt.gui.QColor"] }, {"name":"setIndicatorOutlinePadding","parameterTypes":["int"] }, {"name":"setLabel","parameterTypes":["java.lang.String","io.qt.gui.QFont","double","io.qt.gui.QColor","int","io.qt.gui.QColor","int"] }, {"name":"setLabelFontScale","parameterTypes":["double"] }, {"name":"setOutgoing","parameterTypes":["java.util.List"] }, {"name":"setOutgoingCrop","parameterTypes":["io.qt.core.QRect"] }, {"name":"setOutlineScale","parameterTypes":["double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","io.qt.gui.QColor","double"] }, {"name":"setOutlines","parameterTypes":["double","io.qt.gui.QColor","double","double","mousemaster.FillDirection","double","io.qt.gui.QColor","double","double","mousemaster.FillDirection"] }, {"name":"setScreenshot","parameterTypes":["io.qt.gui.QPixmap","mousemaster.Rectangle"] }, {"name":"setShadowPixmap","parameterTypes":["io.qt.gui.QPixmap","int","int"] }, {"name":"setStackCount","parameterTypes":["int"] }, {"name":"setStackedOpacity","parameterTypes":["double"] }, {"name":"setTransparencyOnly","parameterTypes":["boolean"] }, {"name":"setZoom","parameterTypes":["mousemaster.Zoom"] }, {"name":"toString","parameterTypes":[] }]
 },
 {
   "name":"java.lang.Object$1"
@@ -594,6 +625,9 @@
 {
   "name":"java.lang.Record",
   "allDeclaredFields":true
+},
+{
+  "name":"java.lang.Runnable"
 },
 {
   "name":"java.lang.RuntimePermission"
@@ -691,7 +725,19 @@
   "name":"java.sql.Date"
 },
 {
+  "name":"java.time.QtJambi_LibraryUtilities"
+},
+{
+  "name":"java.time.temporal.QtJambi_LibraryUtilities"
+},
+{
+  "name":"java.util.List"
+},
+{
   "name":"java.util.PropertyPermission"
+},
+{
+  "name":"java.util.QtJambi_LibraryUtilities"
 },
 {
   "name":"java.util.concurrent.ForkJoinTask",
@@ -712,72 +758,14 @@
   "name":"jdk.internal.misc.Unsafe"
 },
 {
-  "name":"mousemaster.ExtendedGDI32",
-  "allPublicFields":true
-},
-{
-  "name":"mousemaster.ExtendedGDI32$EnumFontFamExProc",
-  "queryAllDeclaredMethods":true,
-  "queryAllPublicMethods":true,
-  "methods":[{"name":"callback","parameterTypes":["mousemaster.ExtendedGDI32$LOGFONT","mousemaster.ExtendedGDI32$TEXTMETRIC","com.sun.jna.platform.win32.WinDef$DWORD","com.sun.jna.platform.win32.WinDef$LPARAM"] }]
-},
-{
-  "name":"mousemaster.ExtendedGDI32$LOGFONT",
-  "allDeclaredFields":true,
-  "queryAllPublicConstructors":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.ExtendedGDI32$TEXTMETRIC",
-  "allDeclaredFields":true,
-  "queryAllPublicConstructors":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.ExtendedUser32$CURSORINFO",
-  "allDeclaredFields":true
-},
-{
-  "name":"mousemaster.ExtendedUser32$PAINTSTRUCT",
-  "allDeclaredFields":true
-},
-{
-  "name":"mousemaster.ExtendedUser32$WinEventProc",
-  "queryAllDeclaredMethods":true,
-  "queryAllPublicMethods":true,
-  "methods":[{"name":"callback","parameterTypes":["com.sun.jna.Pointer","int","com.sun.jna.platform.win32.WinDef$HWND","int","int","int","int"] }]
+  "name":"mousemaster.Decoration",
+  "allRecordComponents":true,
+  "methods":[{"name":"<init>","parameterTypes":["int","int","java.util.List","java.util.List","mousemaster.GradientColor","double","double","double","mousemaster.Color","double","double","boolean","double","double","mousemaster.HintFontStyle"] }, {"name":"boxBorderColor","parameterTypes":[] }, {"name":"boxBorderLength","parameterTypes":[] }, {"name":"boxBorderOpacity","parameterTypes":[] }, {"name":"boxBorderRadius","parameterTypes":[] }, {"name":"boxBorderThickness","parameterTypes":[] }, {"name":"boxFramed","parameterTypes":[] }, {"name":"boxHorizontalPadding","parameterTypes":[] }, {"name":"boxVerticalPadding","parameterTypes":[] }, {"name":"boxColor","parameterTypes":[] }, {"name":"boxOpacity","parameterTypes":[] }, {"name":"fontStyle","parameterTypes":[] }, {"name":"labelKeys","parameterTypes":[] }, {"name":"labelOverride","parameterTypes":[] }, {"name":"maxColumnCount","parameterTypes":[] }, {"name":"maxRowCount","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.FontStyle",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["java.lang.String","mousemaster.FontWeight","double","java.lang.String","double","double","java.lang.String","double","mousemaster.Shadow"] }, {"name":"hexColor","parameterTypes":[] }, {"name":"name","parameterTypes":[] }, {"name":"opacity","parameterTypes":[] }, {"name":"outlineHexColor","parameterTypes":[] }, {"name":"outlineOpacity","parameterTypes":[] }, {"name":"outlineThickness","parameterTypes":[] }, {"name":"shadow","parameterTypes":[] }, {"name":"size","parameterTypes":[] }, {"name":"weight","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.Gdiplus$CharacterRange",
-  "allDeclaredFields":true
-},
-{
-  "name":"mousemaster.Gdiplus$GdiplusRectF",
-  "allDeclaredFields":true
-},
-{
-  "name":"mousemaster.Gdiplus$GdiplusStartupInput",
-  "allDeclaredFields":true
-},
-{
-  "name":"mousemaster.GridArea$ActiveScreenGridArea",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["double","double","int","int","int","int"] }, {"name":"bottomInset","parameterTypes":[] }, {"name":"heightPercent","parameterTypes":[] }, {"name":"leftInset","parameterTypes":[] }, {"name":"rightInset","parameterTypes":[] }, {"name":"topInset","parameterTypes":[] }, {"name":"widthPercent","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.GridArea$ActiveWindowGridArea",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["double","double","int","int","int","int"] }, {"name":"bottomInset","parameterTypes":[] }, {"name":"heightPercent","parameterTypes":[] }, {"name":"leftInset","parameterTypes":[] }, {"name":"rightInset","parameterTypes":[] }, {"name":"topInset","parameterTypes":[] }, {"name":"widthPercent","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.GridConfiguration",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["mousemaster.GridArea","mousemaster.Synchronization","int","int","boolean","java.lang.String","double"] }, {"name":"area","parameterTypes":[] }, {"name":"columnCount","parameterTypes":[] }, {"name":"lineHexColor","parameterTypes":[] }, {"name":"lineThickness","parameterTypes":[] }, {"name":"lineVisible","parameterTypes":[] }, {"name":"rowCount","parameterTypes":[] }, {"name":"synchronization","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["java.lang.String","mousemaster.FontWeight","double","mousemaster.Color","double","double","mousemaster.Color","double","mousemaster.Shadow","mousemaster.FontVerticalAlignment"] }, {"name":"color","parameterTypes":[] }, {"name":"name","parameterTypes":[] }, {"name":"opacity","parameterTypes":[] }, {"name":"outlineColor","parameterTypes":[] }, {"name":"outlineOpacity","parameterTypes":[] }, {"name":"outlineThickness","parameterTypes":[] }, {"name":"shadow","parameterTypes":[] }, {"name":"size","parameterTypes":[] }, {"name":"verticalAlignment","parameterTypes":[] }, {"name":"weight","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.HideCursor",
@@ -785,34 +773,34 @@
   "methods":[{"name":"<init>","parameterTypes":["boolean","java.time.Duration"] }, {"name":"enabled","parameterTypes":[] }, {"name":"idleDuration","parameterTypes":[] }]
 },
 {
+  "name":"mousemaster.HintCellSizing",
+  "allRecordComponents":true,
+  "methods":[{"name":"<init>","parameterTypes":["mousemaster.HintCellSizing$HintCellSizingType","double","double"] }, {"name":"cellHeight","parameterTypes":[] }, {"name":"cellWidth","parameterTypes":[] }, {"name":"type","parameterTypes":[] }]
+},
+{
   "name":"mousemaster.HintFontStyle",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["mousemaster.FontStyle","double","mousemaster.FontStyle","mousemaster.FontStyle"] }, {"name":"defaultFontStyle","parameterTypes":[] }, {"name":"focusedFontStyle","parameterTypes":[] }, {"name":"selectedFontStyle","parameterTypes":[] }, {"name":"spacingPercent","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["mousemaster.FontStyle","double","mousemaster.FontStyle","mousemaster.FontStyle","mousemaster.FontStyle"] }, {"name":"defaultFontStyle","parameterTypes":[] }, {"name":"focusedFontStyle","parameterTypes":[] }, {"name":"selectedFontStyle","parameterTypes":[] }, {"name":"spacingPercent","parameterTypes":[] }, {"name":"savedFontStyle","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.HintGridArea$ActiveScreenHintGridArea",
+  "name":"mousemaster.Area",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["mousemaster.ActiveScreenHintGridAreaCenter"] }, {"name":"center","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["mousemaster.AreaSize","mousemaster.AreaCenter"] }, {"name":"center","parameterTypes":[] }, {"name":"size","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.HintGridArea$ActiveWindowHintGridArea",
+  "name":"mousemaster.AreaSize",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.HintGridArea$AllScreensHintGridArea",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["mousemaster.AreaSizeSource","double","double","double","double","double","double"] }, {"name":"bottomInset","parameterTypes":[] }, {"name":"heightPercent","parameterTypes":[] }, {"name":"leftInset","parameterTypes":[] }, {"name":"rightInset","parameterTypes":[] }, {"name":"source","parameterTypes":[] }, {"name":"topInset","parameterTypes":[] }, {"name":"widthPercent","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.HintGridLayout",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["int","int","double","double","int","int","boolean"] }, {"name":"cellHeight","parameterTypes":[] }, {"name":"cellWidth","parameterTypes":[] }, {"name":"layoutColumnCount","parameterTypes":[] }, {"name":"layoutRowCount","parameterTypes":[] }, {"name":"layoutRowOriented","parameterTypes":[] }, {"name":"maxColumnCount","parameterTypes":[] }, {"name":"maxRowCount","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["int","int","double","double","int","int","boolean"] }, {"name":"<init>","parameterTypes":["int","int","mousemaster.HintCellSizing","int","int","boolean"] }, {"name":"cellHeight","parameterTypes":[] }, {"name":"cellSizing","parameterTypes":[] }, {"name":"cellWidth","parameterTypes":[] }, {"name":"layoutColumnCount","parameterTypes":[] }, {"name":"layoutRowCount","parameterTypes":[] }, {"name":"layoutRowOriented","parameterTypes":[] }, {"name":"maxColumnCount","parameterTypes":[] }, {"name":"maxRowCount","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.HintMeshConfiguration",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["boolean","boolean","mousemaster.HintMouseMovement","mousemaster.HintMeshType","mousemaster.ViewportFilterMap","mousemaster.ViewportFilterMap","java.lang.String","boolean","java.util.List","java.util.List"] }, {"name":"eatUnusedSelectionKeys","parameterTypes":[] }, {"name":"enabled","parameterTypes":[] }, {"name":"keysByFilter","parameterTypes":[] }, {"name":"modeAfterSelection","parameterTypes":[] }, {"name":"mouseMovement","parameterTypes":[] }, {"name":"selectCombos","parameterTypes":[] }, {"name":"styleByFilter","parameterTypes":[] }, {"name":"type","parameterTypes":[] }, {"name":"unselectCombos","parameterTypes":[] }, {"name":"visible","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["boolean","boolean","boolean","boolean","boolean","mousemaster.HintMeshType","mousemaster.ScreenFilterMap","mousemaster.ScreenFilterMap","java.lang.String","java.lang.String","boolean","int"] }, {"name":"eatUnusedSelectionKeys","parameterTypes":[] }, {"name":"enabled","parameterTypes":[] }, {"name":"excludeFromCapture","parameterTypes":[] }, {"name":"keysByFilter","parameterTypes":[] }, {"name":"modeAfterSelection","parameterTypes":[] }, {"name":"mouseFollowsTarget","parameterTypes":[] }, {"name":"targetFollowsOverlayCenter","parameterTypes":[] }, {"name":"styleByFilter","parameterTypes":[] }, {"name":"type","parameterTypes":[] }, {"name":"visible","parameterTypes":[] }, {"name":"savedPositionHistory","parameterTypes":[] }, {"name":"z","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.HintMeshKeys",
@@ -822,37 +810,27 @@
 {
   "name":"mousemaster.HintMeshStyle",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["mousemaster.HintFontStyle","boolean","mousemaster.HintFontStyle","java.lang.String","double","double","double","java.lang.String","double","double","mousemaster.Shadow","boolean","double","double","java.lang.String","double","double","double","double","double","int","int","double","double","java.lang.String","double","boolean","java.time.Duration","boolean","java.time.Duration","java.lang.String","double"] }, {"name":"backgroundHexColor","parameterTypes":[] }, {"name":"backgroundOpacity","parameterTypes":[] }, {"name":"boxBorderHexColor","parameterTypes":[] }, {"name":"boxBorderLength","parameterTypes":[] }, {"name":"boxBorderOpacity","parameterTypes":[] }, {"name":"boxBorderRadius","parameterTypes":[] }, {"name":"boxBorderThickness","parameterTypes":[] }, {"name":"boxHeightPercent","parameterTypes":[] }, {"name":"boxHexColor","parameterTypes":[] }, {"name":"boxOpacity","parameterTypes":[] }, {"name":"boxShadow","parameterTypes":[] }, {"name":"boxWidthPercent","parameterTypes":[] }, {"name":"cellHorizontalPadding","parameterTypes":[] }, {"name":"cellVerticalPadding","parameterTypes":[] }, {"name":"fadeAnimationDuration","parameterTypes":[] }, {"name":"fadeAnimationEnabled","parameterTypes":[] }, {"name":"fontStyle","parameterTypes":[] }, {"name":"prefixBoxBorderHexColor","parameterTypes":[] }, {"name":"prefixBoxBorderLength","parameterTypes":[] }, {"name":"prefixBoxBorderOpacity","parameterTypes":[] }, {"name":"prefixBoxBorderThickness","parameterTypes":[] }, {"name":"prefixBoxEnabled","parameterTypes":[] }, {"name":"prefixFontStyle","parameterTypes":[] }, {"name":"prefixInBackground","parameterTypes":[] }, {"name":"subgridBorderHexColor","parameterTypes":[] }, {"name":"subgridBorderLength","parameterTypes":[] }, {"name":"subgridBorderOpacity","parameterTypes":[] }, {"name":"subgridBorderThickness","parameterTypes":[] }, {"name":"subgridColumnCount","parameterTypes":[] }, {"name":"subgridRowCount","parameterTypes":[] }, {"name":"transitionAnimationDuration","parameterTypes":[] }, {"name":"transitionAnimationEnabled","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["mousemaster.HintFontStyle","boolean","mousemaster.HintFontStyle","mousemaster.GradientColor","double","double","double","mousemaster.Color","double","double","boolean","mousemaster.Shadow","boolean","double","double","mousemaster.Color","double","boolean","mousemaster.GradientColor","double","double","double","mousemaster.Color","double","double","double","double","mousemaster.GradientColor","java.lang.Double","mousemaster.Color","java.lang.Double","mousemaster.GradientColor","java.lang.Double","mousemaster.Color","java.lang.Double","double","double","double","double","java.util.List","mousemaster.Transition","mousemaster.Transition","mousemaster.Color","double","double","mousemaster.Color","double","double","java.util.List"] }, {"name":"backgroundColor","parameterTypes":[] }, {"name":"backgroundOpacity","parameterTypes":[] }, {"name":"backgroundBorderRadius","parameterTypes":[] }, {"name":"backgroundBorderThickness","parameterTypes":[] }, {"name":"backgroundBorderColor","parameterTypes":[] }, {"name":"backgroundBorderOpacity","parameterTypes":[] }, {"name":"boxBorderColor","parameterTypes":[] }, {"name":"boxBorderLength","parameterTypes":[] }, {"name":"boxBorderOpacity","parameterTypes":[] }, {"name":"boxBorderRadius","parameterTypes":[] }, {"name":"boxBorderThickness","parameterTypes":[] }, {"name":"boxFramed","parameterTypes":[] }, {"name":"boxHeightPercent","parameterTypes":[] }, {"name":"boxColor","parameterTypes":[] }, {"name":"boxOpacity","parameterTypes":[] }, {"name":"boxShadow","parameterTypes":[] }, {"name":"boxWidthPercent","parameterTypes":[] }, {"name":"boxHorizontalPadding","parameterTypes":[] }, {"name":"boxVerticalPadding","parameterTypes":[] }, {"name":"decorations","parameterTypes":[] }, {"name":"fontStyle","parameterTypes":[] }, {"name":"labelOverride","parameterTypes":[] }, {"name":"prefixBoxBorderColor","parameterTypes":[] }, {"name":"prefixBoxBorderLength","parameterTypes":[] }, {"name":"prefixBoxBorderOpacity","parameterTypes":[] }, {"name":"prefixBoxBorderThickness","parameterTypes":[] }, {"name":"prefixBoxEnabled","parameterTypes":[] }, {"name":"prefixBoxFramed","parameterTypes":[] }, {"name":"prefixFontStyle","parameterTypes":[] }, {"name":"prefixInBackground","parameterTypes":[] }, {"name":"transition","parameterTypes":[] }, {"name":"fade","parameterTypes":[] }, {"name":"uiElementBoxBorderColor","parameterTypes":[] }, {"name":"uiElementBoxBorderLength","parameterTypes":[] }, {"name":"uiElementBoxBorderOpacity","parameterTypes":[] }, {"name":"uiElementBoxBorderRadius","parameterTypes":[] }, {"name":"uiElementBoxBorderThickness","parameterTypes":[] }, {"name":"uiElementBoxColor","parameterTypes":[] }, {"name":"uiElementBoxHorizontalPadding","parameterTypes":[] }, {"name":"uiElementBoxOpacity","parameterTypes":[] }, {"name":"uiElementBoxVerticalPadding","parameterTypes":[] }, {"name":"savedBoxColor","parameterTypes":[] }, {"name":"savedBoxOpacity","parameterTypes":[] }, {"name":"savedBoxBorderColor","parameterTypes":[] }, {"name":"savedBoxBorderOpacity","parameterTypes":[] }, {"name":"savedUiElementBoxColor","parameterTypes":[] }, {"name":"savedUiElementBoxOpacity","parameterTypes":[] }, {"name":"savedUiElementBoxBorderColor","parameterTypes":[] }, {"name":"savedUiElementBoxBorderOpacity","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.HintMeshType$HintGrid",
+  "name":"mousemaster.HintMeshType",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["mousemaster.HintGridArea","mousemaster.ViewportFilterMap"] }, {"name":"area","parameterTypes":[] }, {"name":"gridLayoutByFilter","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.HintMeshType$HintPositionHistory",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.HintMeshType$UiHintMesh",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.Indicator",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["int","int","java.lang.String","double","mousemaster.IndicatorOutline","mousemaster.IndicatorOutline","mousemaster.Shadow","boolean","java.lang.String","mousemaster.FontStyle","mousemaster.IndicatorPosition"] }, {"name":"edgeCount","parameterTypes":[] }, {"name":"hexColor","parameterTypes":[] }, {"name":"innerOutline","parameterTypes":[] }, {"name":"labelEnabled","parameterTypes":[] }, {"name":"labelFontStyle","parameterTypes":[] }, {"name":"labelText","parameterTypes":[] }, {"name":"opacity","parameterTypes":[] }, {"name":"outerOutline","parameterTypes":[] }, {"name":"position","parameterTypes":[] }, {"name":"shadow","parameterTypes":[] }, {"name":"size","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["mousemaster.HintMeshType$HintMeshTypeType","mousemaster.Area","mousemaster.ScreenFilterMap","mousemaster.UiHintOrder","int","double","java.lang.String"] }, {"name":"area","parameterTypes":[] }, {"name":"density","parameterTypes":[] }, {"name":"gridLayoutByFilter","parameterTypes":[] }, {"name":"minSize","parameterTypes":[] }, {"name":"order","parameterTypes":[] }, {"name":"positionHistoryName","parameterTypes":[] }, {"name":"type","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.IndicatorConfiguration",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["boolean","boolean","java.time.Duration","mousemaster.Indicator","mousemaster.Indicator","mousemaster.Indicator","mousemaster.Indicator","mousemaster.Indicator","mousemaster.Indicator","mousemaster.Indicator","mousemaster.Indicator"] }, {"name":"enabled","parameterTypes":[] }, {"name":"fadeAnimationDuration","parameterTypes":[] }, {"name":"fadeAnimationEnabled","parameterTypes":[] }, {"name":"idleIndicator","parameterTypes":[] }, {"name":"leftMousePressIndicator","parameterTypes":[] }, {"name":"middleMousePressIndicator","parameterTypes":[] }, {"name":"mousePressIndicator","parameterTypes":[] }, {"name":"moveIndicator","parameterTypes":[] }, {"name":"rightMousePressIndicator","parameterTypes":[] }, {"name":"unhandledKeyPressIndicator","parameterTypes":[] }, {"name":"wheelIndicator","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["boolean","boolean","java.util.Map"] }, {"name":"excludeFromCapture","parameterTypes":[] }, {"name":"layerByName","parameterTypes":[] }, {"name":"renderAsCursor","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.IndicatorOutline",
+  "name":"mousemaster.IndicatorLayerConfiguration",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["double","java.lang.String","double","double","double","mousemaster.FillDirection"] }, {"name":"fillDirection","parameterTypes":[] }, {"name":"fillPercent","parameterTypes":[] }, {"name":"fillStartAngle","parameterTypes":[] }, {"name":"hexColor","parameterTypes":[] }, {"name":"opacity","parameterTypes":[] }, {"name":"thickness","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["boolean","int","mousemaster.IndicatorShape","double","double","double","java.util.List","double","double","double","double","double","mousemaster.Color","double","mousemaster.IndicatorStroke","mousemaster.Shadow","java.lang.String","java.lang.String","double","mousemaster.FontWeight","java.lang.String","java.util.List","mousemaster.Area","boolean"] }, {"name":"angle","parameterTypes":[] }, {"name":"aspectRatio","parameterTypes":[] }, {"name":"borderRadius","parameterTypes":[] }, {"name":"distance","parameterTypes":[] }, {"name":"enabled","parameterTypes":[] }, {"name":"fillColor","parameterTypes":[] }, {"name":"fillOpacity","parameterTypes":[] }, {"name":"follow","parameterTypes":[] }, {"name":"fontName","parameterTypes":[] }, {"name":"fontSize","parameterTypes":[] }, {"name":"fontWeight","parameterTypes":[] }, {"name":"points","parameterTypes":[] }, {"name":"positions","parameterTypes":[] }, {"name":"shadow","parameterTypes":[] }, {"name":"shape","parameterTypes":[] }, {"name":"text","parameterTypes":[] }, {"name":"textStyleSheet","parameterTypes":[] }, {"name":"rotation","parameterTypes":[] }, {"name":"size","parameterTypes":[] }, {"name":"stroke","parameterTypes":[] }, {"name":"x","parameterTypes":[] }, {"name":"y","parameterTypes":[] }, {"name":"z","parameterTypes":[] }, {"name":"area","parameterTypes":[] }]
+},
+{
+  "name":"mousemaster.IndicatorStroke",
+  "allRecordComponents":true,
+  "methods":[{"name":"<init>","parameterTypes":["double","mousemaster.Color","double","double","double","mousemaster.StrokeAnchor","double","double","double","mousemaster.StrokeCap"] }, {"name":"anchor","parameterTypes":[] }, {"name":"cap","parameterTypes":[] }, {"name":"color","parameterTypes":[] }, {"name":"dashGap","parameterTypes":[] }, {"name":"dashLength","parameterTypes":[] }, {"name":"dashOffset","parameterTypes":[] }, {"name":"lengthPercent","parameterTypes":[] }, {"name":"opacity","parameterTypes":[] }, {"name":"startAngle","parameterTypes":[] }, {"name":"thickness","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.KeyboardLayout",
@@ -863,22 +841,12 @@
 {
   "name":"mousemaster.KeyboardLayout$KeyboardLayoutKey",
   "allDeclaredFields":true,
-  "methods":[{"name":"<init>","parameterTypes":["int","mousemaster.WindowsVirtualKey","mousemaster.Key","java.lang.String","java.lang.String"] }, {"name":"key","parameterTypes":[] }, {"name":"name","parameterTypes":[] }, {"name":"scanCode","parameterTypes":[] }, {"name":"text","parameterTypes":[] }, {"name":"virtualKey","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.Magnification$MAGTRANSFORM",
-  "allDeclaredFields":true,
-  "methods":[{"name":"<init>","parameterTypes":["float"] }]
-},
-{
-  "name":"mousemaster.Magnification$MAGTRANSFORM$ByReference",
-  "allDeclaredFields":true,
-  "methods":[{"name":"<init>","parameterTypes":["float"] }]
+  "methods":[{"name":"<init>","parameterTypes":["int","mousemaster.platform.windows.WindowsVirtualKey","mousemaster.Key","java.lang.String","java.lang.String","java.lang.String","java.lang.String"] }, {"name":"altgrText","parameterTypes":[] }, {"name":"key","parameterTypes":[] }, {"name":"name","parameterTypes":[] }, {"name":"scanCode","parameterTypes":[] }, {"name":"shiftText","parameterTypes":[] }, {"name":"text","parameterTypes":[] }, {"name":"virtualKey","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.Mode",
   "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["java.lang.String","boolean","boolean","java.lang.String","mousemaster.ComboMap","mousemaster.Mouse","mousemaster.Wheel","mousemaster.GridConfiguration","mousemaster.HintMeshConfiguration","mousemaster.ModeTimeout","mousemaster.IndicatorConfiguration","mousemaster.HideCursor","mousemaster.ZoomConfiguration"] }, {"name":"comboMap","parameterTypes":[] }, {"name":"grid","parameterTypes":[] }, {"name":"hideCursor","parameterTypes":[] }, {"name":"hintMesh","parameterTypes":[] }, {"name":"indicator","parameterTypes":[] }, {"name":"modeAfterUnhandledKeyPress","parameterTypes":[] }, {"name":"mouse","parameterTypes":[] }, {"name":"name","parameterTypes":[] }, {"name":"pushModeToHistoryStack","parameterTypes":[] }, {"name":"stopCommandsFromPreviousMode","parameterTypes":[] }, {"name":"timeout","parameterTypes":[] }, {"name":"wheel","parameterTypes":[] }, {"name":"zoom","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":["java.lang.String","boolean","boolean","java.lang.String","mousemaster.ComboMap","mousemaster.MovementConfiguration","mousemaster.VelocityConfiguration","mousemaster.Wheel","mousemaster.HintMeshConfiguration","mousemaster.ModeTimeout","mousemaster.IndicatorConfiguration","mousemaster.HideCursor","mousemaster.ZoomConfiguration","java.util.Map"] }, {"name":"<init>","parameterTypes":["java.lang.String","boolean","boolean","java.lang.String","mousemaster.ComboMap","mousemaster.MovementConfiguration","mousemaster.Wheel","mousemaster.HintMeshConfiguration","mousemaster.ModeTimeout","mousemaster.IndicatorConfiguration","mousemaster.HideCursor","mousemaster.ZoomConfiguration","double"] }, {"name":"comboMap","parameterTypes":[] }, {"name":"cursorScale","parameterTypes":[] }, {"name":"hideCursor","parameterTypes":[] }, {"name":"hintMesh","parameterTypes":[] }, {"name":"indicator","parameterTypes":[] }, {"name":"modeAfterUnhandledKeyPress","parameterTypes":[] }, {"name":"mouse","parameterTypes":[] }, {"name":"name","parameterTypes":[] }, {"name":"pushModeToHistoryStack","parameterTypes":[] }, {"name":"stopCommandsFromPreviousMode","parameterTypes":[] }, {"name":"target","parameterTypes":[] }, {"name":"timelineByPropertyPath","parameterTypes":[] }, {"name":"timeout","parameterTypes":[] }, {"name":"wheel","parameterTypes":[] }, {"name":"zoom","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.ModeTimeout",
@@ -886,7 +854,7 @@
   "methods":[{"name":"<init>","parameterTypes":["boolean","java.time.Duration","java.lang.String","boolean"] }, {"name":"duration","parameterTypes":[] }, {"name":"enabled","parameterTypes":[] }, {"name":"modeName","parameterTypes":[] }, {"name":"onlyIfIdle","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.Mouse",
+  "name":"mousemaster.MovementConfiguration",
   "allRecordComponents":true,
   "methods":[{"name":"<init>","parameterTypes":["mousemaster.VelocityConfiguration","boolean","double"] }, {"name":"smoothJumpEnabled","parameterTypes":[] }, {"name":"smoothJumpVelocity","parameterTypes":[] }, {"name":"velocity","parameterTypes":[] }]
 },
@@ -894,13 +862,17 @@
   "name":"mousemaster.QtJambi_LibraryUtilities"
 },
 {
-  "name":"mousemaster.Shadow",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["double","java.lang.String","double","double","double","int"] }, {"name":"blurRadius","parameterTypes":[] }, {"name":"hexColor","parameterTypes":[] }, {"name":"horizontalOffset","parameterTypes":[] }, {"name":"opacity","parameterTypes":[] }, {"name":"stackCount","parameterTypes":[] }, {"name":"verticalOffset","parameterTypes":[] }]
+  "name":"mousemaster.Rectangle"
 },
 {
-  "name":"mousemaster.Shcore$MONITOR_DPI_TYPE",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
+  "name":"mousemaster.Shadow",
+  "allRecordComponents":true,
+  "methods":[{"name":"<init>","parameterTypes":["double","mousemaster.Color","double","double","double","int"] }, {"name":"blurRadius","parameterTypes":[] }, {"name":"color","parameterTypes":[] }, {"name":"horizontalOffset","parameterTypes":[] }, {"name":"opacity","parameterTypes":[] }, {"name":"stackCount","parameterTypes":[] }, {"name":"verticalOffset","parameterTypes":[] }]
+},
+{
+  "name":"mousemaster.Transition",
+  "allRecordComponents":true,
+  "methods":[{"name":"<init>","parameterTypes":["boolean","java.time.Duration","mousemaster.Easing"] }, {"name":"duration","parameterTypes":[] }, {"name":"easing","parameterTypes":[] }, {"name":"enabled","parameterTypes":[] }]
 },
 {
   "name":"mousemaster.VelocityConfiguration",
@@ -913,119 +885,133 @@
   "methods":[{"name":"<init>","parameterTypes":["mousemaster.VelocityConfiguration"] }, {"name":"velocity","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.WindowsOverlay$ClearBackgroundQLabel",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
+  "name":"mousemaster.ZoomAreaSize",
+  "allRecordComponents":true,
+  "methods":[{"name":"<init>","parameterTypes":["mousemaster.ZoomAreaSizeSource","double","double"] }, {"name":"heightPercent","parameterTypes":[] }, {"name":"source","parameterTypes":[] }, {"name":"widthPercent","parameterTypes":[] }]
+},
+{
+  "name":"mousemaster.ZoomConfiguration",
+  "allRecordComponents":true,
+  "methods":[{"name":"<init>","parameterTypes":["double","mousemaster.ZoomAreaSize","mousemaster.AreaCenter","mousemaster.Transition"] }, {"name":"<init>","parameterTypes":["double","mousemaster.AreaCenter","boolean","mousemaster.Easing","double"] }, {"name":"transition","parameterTypes":[] }, {"name":"areaSize","parameterTypes":[] }, {"name":"center","parameterTypes":[] }, {"name":"percent","parameterTypes":[] }]
+},
+{
+  "name":"mousemaster.platform.windows.ExtendedGDI32",
+  "allPublicFields":true
+},
+{
+  "name":"mousemaster.platform.windows.ExtendedGDI32$EnumFontFamExProc",
   "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"clearColor","parameterTypes":[] }, {"name":"getClearColor","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
+  "queryAllPublicMethods":true,
+  "methods":[{"name":"callback","parameterTypes":["mousemaster.platform.windows.ExtendedGDI32$LOGFONT","mousemaster.platform.windows.ExtendedGDI32$TEXTMETRIC","com.sun.jna.platform.win32.WinDef$DWORD","com.sun.jna.platform.win32.WinDef$LPARAM"] }]
 },
 {
-  "name":"mousemaster.WindowsOverlay$ClearBackgroundQLabel$1"
+  "name":"mousemaster.platform.windows.ExtendedGDI32$LOGFONT",
+  "allDeclaredFields":true,
+  "queryAllPublicConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.WindowsOverlay$ClearBackgroundQLabel$WhenMappings"
+  "name":"mousemaster.platform.windows.ExtendedGDI32$TEXTMETRIC",
+  "allDeclaredFields":true,
+  "queryAllPublicConstructors":true,
+  "methods":[{"name":"<init>","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.WindowsOverlay$FadeAnimationFinished",
+  "name":"mousemaster.platform.windows.ExtendedKernel32$PhandlerRoutine",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "methods":[{"name":"callback","parameterTypes":["int"] }]
+},
+{
+  "name":"mousemaster.platform.windows.ExtendedUser32$CURSORINFO",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.ExtendedUser32$PAINTSTRUCT",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.ExtendedUser32$UPDATELAYEREDWINDOWINFO",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.ExtendedUser32$WinEventProc",
+  "queryAllDeclaredMethods":true,
+  "queryAllPublicMethods":true,
+  "methods":[{"name":"callback","parameterTypes":["com.sun.jna.Pointer","int","com.sun.jna.platform.win32.WinDef$HWND","int","int","int","int"] }]
+},
+{
+  "name":"mousemaster.platform.windows.Gdiplus$CharacterRange",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.Gdiplus$GdiplusRectF",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.Gdiplus$GdiplusStartupInput",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.QtJambi_LibraryUtilities"
+},
+{
+  "name":"mousemaster.platform.windows.Shcore$MONITOR_DPI_TYPE",
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"mousemaster.platform.windows.WindowsDesktopDuplication$OutduplDesc",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsDesktopDuplication$OutputDesc",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsDesktopDuplication$Texture2DDesc",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsDesktopFrameCapture$MappedSubresource",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsZoomRenderer$BufferDesc",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsZoomRenderer$SamplerDesc",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsZoomRenderer$SwapChainDesc1",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsZoomRenderer$Viewport",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.platform.windows.WindowsScreen$1",
+  "fields":[{"name":"OPTIONS"}, {"name":"STRING_ENCODING"}, {"name":"STRUCTURE_ALIGNMENT"}, {"name":"TYPE_MAPPER"}]
+},
+{
+  "name":"mousemaster.platform.windows.WindowsVirtualKey",
+  "allDeclaredFields":true
+},
+{
+  "name":"mousemaster.qt.FadeAnimator$Finished",
   "fields":[{"name":"arg$1"}]
 },
 {
-  "name":"mousemaster.WindowsOverlay$FadeAnimationValueChanged",
+  "name":"mousemaster.qt.FadeAnimator$ValueChanged",
   "fields":[{"name":"arg$1"}]
 },
 {
-  "name":"mousemaster.WindowsOverlay$HintBox",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true
+  "name":"mousemaster.qt.QtJambi_LibraryUtilities"
 },
 {
-  "name":"mousemaster.WindowsOverlay$HintBox$1"
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintBox$WhenMappings"
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintContainerAnimationChanged",
-  "fields":[{"name":"arg$1"}]
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintContainerAnimationFinished",
-  "fields":[{"name":"arg$1"}]
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintLabel",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintLabel$1"
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintLabel$WhenMappings"
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintPaintLayer",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintPaintLayer$1"
-},
-{
-  "name":"mousemaster.WindowsOverlay$HintPaintLayer$WhenMappings"
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorLabelWidget",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"getIndicatorOutlinePadding","parameterTypes":[] }, {"name":"getLabelFontScale","parameterTypes":[] }, {"name":"indicatorOutlinePadding","parameterTypes":[] }, {"name":"labelFontScale","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorLabelWidget$1"
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorLabelWidget$WhenMappings"
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorShadowEffect",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"draw","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"fillColor","parameterTypes":[] }, {"name":"getFillColor","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorShadowEffect$1"
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorShadowEffect$WhenMappings"
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorWidget",
-  "allDeclaredFields":true,
-  "allDeclaredClasses":true,
-  "queryAllDeclaredMethods":true,
-  "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"color","parameterTypes":[] }, {"name":"edgeCount","parameterTypes":[] }, {"name":"getColor","parameterTypes":[] }, {"name":"getEdgeCount","parameterTypes":[] }, {"name":"getOutlineScale","parameterTypes":[] }, {"name":"outlineScale","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorWidget$1"
-},
-{
-  "name":"mousemaster.WindowsOverlay$IndicatorWidget$WhenMappings"
-},
-{
-  "name":"mousemaster.WindowsOverlay$ScreenshotWidget",
+  "name":"mousemaster.qt.ScreenshotWidget",
   "allDeclaredFields":true,
   "allDeclaredClasses":true,
   "queryAllDeclaredMethods":true,
@@ -1033,40 +1019,24 @@
   "methods":[{"name":"getZoom","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }, {"name":"zoom","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.WindowsOverlay$ScreenshotWidget$1"
+  "name":"mousemaster.qt.ScreenshotWidget$1"
 },
 {
-  "name":"mousemaster.WindowsOverlay$ScreenshotWidget$WhenMappings"
+  "name":"mousemaster.qt.ScreenshotWidget$WhenMappings"
 },
 {
-  "name":"mousemaster.WindowsOverlay$StackedShadowEffect",
+  "name":"mousemaster.qt.StackedShadowEffect",
   "allDeclaredFields":true,
   "allDeclaredClasses":true,
   "queryAllDeclaredMethods":true,
   "queryAllDeclaredConstructors":true,
-  "methods":[{"name":"draw","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"getStackCount","parameterTypes":[] }, {"name":"getStackedOpacity","parameterTypes":[] }, {"name":"getTransparencyOnly","parameterTypes":[] }, {"name":"hasTransparencyOnly","parameterTypes":[] }, {"name":"isTransparencyOnly","parameterTypes":[] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"stackCount","parameterTypes":[] }, {"name":"stackedOpacity","parameterTypes":[] }, {"name":"transparencyOnly","parameterTypes":[] }]
+  "methods":[{"name":"draw","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"getStackCount","parameterTypes":[] }, {"name":"getTransparencyOnly","parameterTypes":[] }, {"name":"hasTransparencyOnly","parameterTypes":[] }, {"name":"isTransparencyOnly","parameterTypes":[] }, {"name":"redrawSourceOverShadow","parameterTypes":["io.qt.gui.QPainter"] }, {"name":"setColors","parameterTypes":["io.qt.gui.QColor","io.qt.gui.QColor","io.qt.gui.QColor"] }, {"name":"stackCount","parameterTypes":[] }, {"name":"transparencyOnly","parameterTypes":[] }]
 },
 {
-  "name":"mousemaster.WindowsOverlay$StackedShadowEffect$1"
+  "name":"mousemaster.qt.StackedShadowEffect$1"
 },
 {
-  "name":"mousemaster.WindowsOverlay$StackedShadowEffect$WhenMappings"
-},
-{
-  "name":"mousemaster.WindowsScreen$1",
-  "fields":[{"name":"OPTIONS"}, {"name":"STRING_ENCODING"}, {"name":"STRUCTURE_ALIGNMENT"}, {"name":"TYPE_MAPPER"}]
-},
-{
-  "name":"mousemaster.WindowsVirtualKey",
-  "allDeclaredFields":true
-},
-{
-  "name":"mousemaster.ZoomConfiguration",
-  "allRecordComponents":true,
-  "methods":[{"name":"<init>","parameterTypes":["double","mousemaster.ZoomCenter","boolean","mousemaster.Easing","double"] }, {"name":"animationDurationMillis","parameterTypes":[] }, {"name":"animationEasing","parameterTypes":[] }, {"name":"animationEnabled","parameterTypes":[] }, {"name":"center","parameterTypes":[] }, {"name":"percent","parameterTypes":[] }]
-},
-{
-  "name":"mousemaster.qt.QtJambi_LibraryUtilities"
+  "name":"mousemaster.qt.StackedShadowEffect$WhenMappings"
 },
 {
   "name":"mousemaster.qt.TransparentWindow",
@@ -1081,6 +1051,117 @@
 },
 {
   "name":"mousemaster.qt.TransparentWindow$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer",
+  "methods":[{"name":"lambda$followContentCrop$d48fc74f$1","parameterTypes":["java.lang.Runnable","java.lang.Object"] }, {"name":"lambda$morphBorders$4e270ae3$1","parameterTypes":["int","java.util.List","java.util.List","java.util.List","mousemaster.renderer.HintMeshRenderer$HintPaintLayer","mousemaster.Rectangle","java.lang.Object"] }, {"name":"lambda$morphBorders$efcd5d23$1","parameterTypes":["int","java.util.List","java.util.List","java.util.List","mousemaster.renderer.HintMeshRenderer$HintPaintLayer","int","int","int","int","java.lang.Object"] }, {"name":"lambda$morphLines$48997885$1","parameterTypes":["int","int[][]","int[][]","java.util.List","mousemaster.renderer.HintMeshRenderer$HintPaintLayer","int","int","int","int","java.lang.Object"] }]
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$ClearBackgroundQLabel",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"clearColor","parameterTypes":[] }, {"name":"crop","parameterTypes":[] }, {"name":"getClearColor","parameterTypes":[] }, {"name":"getCrop","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$ClearBackgroundQLabel$1"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$ClearBackgroundQLabel$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintBox",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintBox$1"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintBox$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintContainerAnimationChanged",
+  "fields":[{"name":"arg$1"}]
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintContainerAnimationFinished",
+  "fields":[{"name":"arg$1"}]
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintLabel",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintLabel$1"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintLabel$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintPaintLayer",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"boxPaint","parameterTypes":[] }, {"name":"crop","parameterTypes":[] }, {"name":"getBoxPaint","parameterTypes":[] }, {"name":"getCrop","parameterTypes":[] }, {"name":"getOutgoing","parameterTypes":[] }, {"name":"getOutgoingCrop","parameterTypes":[] }, {"name":"outgoing","parameterTypes":[] }, {"name":"outgoingCrop","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintPaintLayer$1"
+},
+{
+  "name":"mousemaster.renderer.HintMeshRenderer$HintPaintLayer$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorLabelWidget",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"getIndicatorOutlinePadding","parameterTypes":[] }, {"name":"getLabelFontScale","parameterTypes":[] }, {"name":"indicatorOutlinePadding","parameterTypes":[] }, {"name":"labelFontScale","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorLabelWidget$1"
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorLabelWidget$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"draw","parameterTypes":["io.qt.gui.QPainter"] }]
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect$1"
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorLayerWidget",
+  "allDeclaredFields":true,
+  "allDeclaredClasses":true,
+  "queryAllDeclaredMethods":true,
+  "queryAllDeclaredConstructors":true,
+  "methods":[{"name":"color","parameterTypes":[] }, {"name":"edgeCount","parameterTypes":[] }, {"name":"getColor","parameterTypes":[] }, {"name":"getEdgeCount","parameterTypes":[] }, {"name":"getOutlineScale","parameterTypes":[] }, {"name":"outlineScale","parameterTypes":[] }, {"name":"paintEvent","parameterTypes":["io.qt.gui.QPaintEvent"] }]
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorLayerWidget$1"
+},
+{
+  "name":"mousemaster.renderer.IndicatorRenderer$IndicatorLayerWidget$WhenMappings"
+},
+{
+  "name":"mousemaster.renderer.QtJambi_LibraryUtilities"
 },
 {
   "name":"sun.misc.Unsafe",
@@ -1098,5 +1179,8 @@
 {
   "name":"sun.security.provider.SHA2$SHA256",
   "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"void"
 }
 ]

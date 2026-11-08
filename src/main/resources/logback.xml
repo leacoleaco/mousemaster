@@ -1,12 +1,20 @@
 <configuration>
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <!-- Until the configuration is loaded, no mode is set. The width of the
+            mode column is then set by MousemasterApplication.setModeColumnWidth. -->
+            <pattern>%d{HH:mm:ss.SSS} %-5level %X{mode} %-16logger{0} %msg%n</pattern>
         </encoder>
     </appender>
 
-    <root level="INFO">
+    <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>4096</queueSize>
+        <discardingThreshold>0</discardingThreshold>
         <appender-ref ref="CONSOLE"/>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="ASYNC_CONSOLE"/>
     </root>
 
     <logger name="mousemaster" level="DEBUG"/>

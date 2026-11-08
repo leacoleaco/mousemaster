@@ -1,0 +1,983 @@
+package mousemaster.platform.windows;
+
+import mousemaster.*;
+
+import com.sun.jna.Native;
+import com.sun.jna.Pointer;
+import com.sun.jna.platform.win32.*;
+import mousemaster.platform.ActiveAppFinder;
+import mousemaster.platform.Console;
+import mousemaster.KeyRegurgitator;
+
+import mousemaster.platform.KeyboardController;
+import mousemaster.platform.Overlay;
+import mousemaster.Vision;
+import mousemaster.platform.UiAutomation;
+import mousemaster.KeyEvent.PressKeyEvent;
+import mousemaster.KeyEvent.ReleaseKeyEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.*;
+
+public class WindowsPlatform implements Platform {
+
+    private static final Logger logger = LoggerFactory.getLogger(WindowsPlatform.class);
+
+    private static final long SLOW_HOOK_CALLBACK_MILLIS = 200;
+    private static final long LATE_HOOK_EVENT_MILLIS = 100;
+
+    private final boolean keyRegurgitationEnabled;
+    private final boolean ignoreInjectedEvents;
+    private final WindowsKeyboardController keyboard = new WindowsKeyboardController();
+    private final WindowsMouseController mouse = new WindowsMouseController(this::mousePositionSet);
+    private final WindowsOverlay overlay = new WindowsOverlay(mouse);
+    private final UiAutomation uiAutomation = new WindowsUiAutomation();
+    private final Vision vision = new Vision(overlay);
+    private final ActiveAppFinder activeAppFinder = new WindowsActiveAppFinder();
+    private final Console console = new WindowsConsole();
+    private final WindowsClock clock = new WindowsClock();
+
+    private MouseManager mouseManager;
+    private KeyboardManager keyboardManager;
+    private KeyRegurgitator keyRegurgitator;
+    private MacroPlayer macroPlayer;
+    private KeyRedactor keyRedactor;
+    private boolean logLastKeyEventsOnExit;
+    private List<MousePositionListener> mousePositionListeners;
+    private ModeMap modeMap;
+    private ZoomManager zoomManager;
+    private IndicatorManager indicatorManager;
+    private HintManager hintManager;
+    private final Set<Key> currentlyPressedNotEatenKeys = new HashSet<>();
+    private WinUser.HHOOK keyboardHook;
+    private WinUser.HHOOK mouseHook;
+    private final BlockingQueue<WinDef.POINT> mousePositionQueue = new LinkedBlockingDeque<>();
+    private WinDef.POINT lastMousePosition;
+    private KeyEvent lastNotEatenKeyEvent;
+    /**
+     * Keep a reference of the Windows callback.
+     * Without these references, they seem to be garbage collected and are not called
+     * anymore after about 30 minutes.
+     */
+    private WinUser.LowLevelMouseProc mouseHookCallback;
+    private WinUser.LowLevelKeyboardProc keyboardHookCallback;
+    private WinNT.HANDLE singleInstanceMutex;
+    private final WinUser.MSG msg = new WinUser.MSG();
+    private double enforceWindowsTopmostTimer;
+    private boolean mustEatNextReleaseOfRightalt;
+    private boolean altgrLeftctrlPressEaten;
+    private boolean altgrRightaltPressEaten;
+    private boolean inKeyboardHookCallback = false;
+
+    private record ReentrantKeyEvent(KeyEvent keyEvent, int infoFlags,
+                                     boolean altgrLeftctrl, boolean eaten) {
+    }
+    private final List<ReentrantKeyEvent> reentrantKeyEvents = new ArrayList<>();
+    private Set<Key> extendedKeys = new HashSet<>();
+    private final Set<Key> keysPressedInHook = new HashSet<>();
+    private Mode currentMode;
+    private double stuckKeyCheckTimer;
+    private double lockedCheckTimer;
+    private boolean locked;
+    private ExtendedKernel32.PhandlerRoutine consoleCtrlHandler;
+    private volatile boolean killProcessRequested;
+    private boolean restartProcessRequested;
+    private final boolean startedWithAConsole =
+            Kernel32.INSTANCE.GetConsoleWindow() != null;
+    private double consoleCheckTimer;
+    /** When true, physical Caps Lock is swallowed and the OS toggle is cleared. */
+    private boolean suppressCapsLockOsPassthrough;
+
+    public WindowsPlatform(boolean multipleInstancesAllowed, boolean keyRegurgitationEnabled,
+                           boolean ignoreInjectedEvents) {
+        this.keyRegurgitationEnabled = keyRegurgitationEnabled;
+        this.ignoreInjectedEvents = ignoreInjectedEvents;
+        WindowsUiAccess.checkAndTryToGetUiAccess(); // Done before acquiring the single instance mutex.
+        if (!multipleInstancesAllowed && !acquireSingleInstanceMutex())
+            throw new IllegalStateException("Another instance is already running");
+        setDpiAwareness();
+        // Set timer resolution to 1ms so Thread.sleep(1) actually sleeps ~1ms
+        // instead of the default ~15.6ms. The JVM does this internally, but
+        // GraalVM native image does not.
+        Winmm.INSTANCE.timeBeginPeriod(1);
+        // A run killed from outside (Task Manager) leaves its cursor installed system-wide.
+        mouse.reloadSystemCursors();
+    }
+
+    @Override
+    public void update(double delta) {
+        if (restartProcessRequested)
+            restartProcess();
+        if (killProcessRequested)
+            killProcess(0);
+        killProcessIfConsoleIsGone(delta);
+        overlay.setWaitForZoomBeforeRepainting(false);
+        keyboard.update(delta);
+        if (suppressCapsLockOsPassthrough)
+            WindowsKeyboardController.clearCapsLockToggleStateIfOn();
+        sanityCheckCurrentlyPressedKeys(delta);
+        resetIfLockedChanged(delta);
+        enforceWindowsTopmostTimer -= delta;
+        // Every 200ms, but not during an animation: SetWindowPos would cost it a frame.
+        if (enforceWindowsTopmostTimer < 0 && !overlay.hintTransitionAnimating() &&
+            !zoomManager.animating()) {
+            enforceWindowsTopmostTimer = 0.2;
+            overlay.setTopmost();
+        }
+        overlay.update(delta);
+    }
+
+    @Override
+    public void pumpEvents() {
+        while (User32.INSTANCE.PeekMessage(msg, null, 0, 0, 1)) {
+            User32.INSTANCE.TranslateMessage(msg);
+            User32.INSTANCE.DispatchMessage(msg);
+        }
+    }
+
+
+    @Override
+    public void sleep() throws InterruptedException {
+        pumpEvents();
+        WinDef.POINT mousePosition = null;
+        for (WinDef.POINT p; (p = mousePositionQueue.poll()) != null;)
+            mousePosition = p;
+        if (mousePosition == null)
+            mousePosition = mouse.tryFindMousePosition();
+        else
+            mousePosition = clippedToScreen(mousePosition);
+        if (mousePosition != null &&
+            (lastMousePosition == null || mousePosition.x != lastMousePosition.x ||
+             mousePosition.y != lastMousePosition.y)) {
+            lastMousePosition = mousePosition;
+            overlay.mouseMoved(mousePosition);
+            for (MousePositionListener listener : mousePositionListeners) {
+                listener.mouseMoved(mousePosition.x, mousePosition.y);
+            }
+        }
+        else if (lastMousePosition != null) {
+            // Mouse position hasn't changed, but the cursor shape may have changed
+            // (e.g., arrow to hand after keyboard-driven movement stopped).
+            // Reposition the indicator with the updated cursor visual center.
+            overlay.mouseMoved(lastMousePosition);
+        }
+        pumpEvents();
+        // A frame is painted on the first iteration after its frame interval, so this sleep
+        // sets how late a frame can be.
+        long sleepMillis =
+                overlay.hintTransitionAnimating() || zoomManager.animating() ||
+                indicatorManager.animating() || hintManager.waitingForUiElements() ||
+                overlay.hintMeshBuildPending() ? 1 : 10;
+        long beforeTime = System.nanoTime();
+        while (true) {
+            long currentTime = System.nanoTime();
+            if ((currentTime - beforeTime) / 1e6 >= sleepMillis ||
+                overlay.hintMeshBuildPending())
+                break;
+            Thread.sleep(1);
+            pumpEvents();
+        }
+    }
+
+    @Override
+    public void reset(MouseManager mouseManager, KeyboardManager keyboardManager,
+                      KeyRegurgitator keyRegurgitator, MacroPlayer macroPlayer,
+                      KeyRedactor keyRedactor,
+                      boolean logLastKeyEventsOnExit,
+                      ModeMap newModeMap,
+                      ZoomManager zoomManager,
+               IndicatorManager indicatorManager,
+                      HintManager hintManager,
+                      List<MousePositionListener> mousePositionListeners,
+                      KeyboardLayout activeKeyboardLayout,
+                      boolean suppressCapsLockOsPassthrough) {
+        this.suppressCapsLockOsPassthrough = suppressCapsLockOsPassthrough;
+        ModeMap oldModeMap = this.modeMap;
+        Set<HintMeshConfiguration> oldHintMeshConfigurations = new HashSet<>();
+        if (oldModeMap != null) {
+            oldModeMap.modes()
+                      .stream()
+                      .map(Mode::hintMesh)
+                      .forEach(oldHintMeshConfigurations::add);
+        }
+        this.mouseManager = mouseManager;
+        this.keyboardManager = keyboardManager;
+        this.keyRegurgitator = keyRegurgitator;
+        this.macroPlayer = macroPlayer;
+        this.keyRedactor = keyRedactor;
+        this.logLastKeyEventsOnExit = logLastKeyEventsOnExit;
+        this.zoomManager = zoomManager;
+        this.indicatorManager = indicatorManager;
+        this.hintManager = hintManager;
+        this.mousePositionListeners = mousePositionListeners;
+        if (keyboard.activeKeyboardLayout != null &&
+            !keyboard.activeKeyboardLayout.equals(activeKeyboardLayout)) {
+            keyboardManager.reset();
+            keyboard.reset();
+        }
+        keyboard.activeKeyboardLayout = activeKeyboardLayout;
+        keyboard.keyRedactor = keyRedactor;
+        Set<HintMeshConfiguration> newHintMeshConfigurations = new HashSet<>();
+        for (Mode mode : newModeMap.modes()) {
+            newHintMeshConfigurations.add(mode.hintMesh());
+        }
+        if (!newHintMeshConfigurations.equals(oldHintMeshConfigurations)) {
+            if (oldModeMap != null) {
+                logger.debug(
+                        "Flushing overlay cache because the hint mesh configurations have changed");
+                overlay.flushCache();
+            }
+            overlay.preWarmFontsAndWindows(newHintMeshConfigurations);
+        }
+        this.modeMap = newModeMap;
+        WinDef.POINT mousePosition = mouse.findMousePosition();
+        mousePositionListeners.forEach(
+                mousePositionListener -> mousePositionListener.mouseMoved(mousePosition.x,
+                        mousePosition.y));
+        overlay.setMessagePump(this::pumpEvents);
+        if (keyboardHookCallback == null)
+            installHooks();
+        if (suppressCapsLockOsPassthrough)
+            WindowsKeyboardController.clearCapsLockToggleStateIfOn();
+    }
+
+    /**
+     * When running as a graalvm native image, we need to set the DPI awareness
+     * (otherwise mouse coordinates are wrong on scaled displays).
+     * It is recommended to do it with a manifest file instead but I am unsure
+     * how to include it in the native image.
+     * When running as a java app (non-native image), the DPI awareness seems to
+     * already be set, and SetProcessDpiAwarenessContext() returns error code 5.
+     */
+    private void setDpiAwareness() {
+        boolean setProcessDpiAwarenessContextResult =
+                ExtendedUser32.INSTANCE.SetProcessDpiAwarenessContext(new WinNT.HANDLE(
+                        Pointer.createConstant(
+                                ExtendedUser32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)));
+        int dpiAwarenessErrorCode = Kernel32.INSTANCE.GetLastError();
+        if (!setProcessDpiAwarenessContextResult)
+            logger.info("Unable to SetProcessDpiAwarenessContext: error code = " +
+                        dpiAwarenessErrorCode);
+    }
+
+    private void installHooks() {
+        WinDef.HMODULE hMod = Kernel32.INSTANCE.GetModuleHandle(null);
+        keyboardHookCallback = WindowsPlatform.this::keyboardHookCallback;
+        keyboardHook = User32.INSTANCE.SetWindowsHookEx(WinUser.WH_KEYBOARD_LL,
+                keyboardHookCallback, hMod, 0);
+        if (keyboardHook == null)
+            throw new IllegalStateException(
+                    "Unable to install keyboard hook " + Native.getLastError());
+        logger.trace("Installed keyboard hook successfully");
+        // Run mouse hook in a separate thread to avoid lags:
+        // https://www.linkedin.com/pulse/windows-mouse-hook-lagging-simone-galleni
+        // https://stackoverflow.com/a/52201983
+        Thread mouseHookThread = new Thread(this::mouseHook);
+        mouseHookThread.setName("mouse-hook");
+        mouseHookThread.start();
+        addConsoleCtrlHandler();
+        addJvmShutdownHook();
+    }
+
+    private void mouseHook() {
+        WinDef.HMODULE hMod = Kernel32.INSTANCE.GetModuleHandle(null);
+        mouseHookCallback = WindowsPlatform.this::mouseHookCallback;
+        mouseHook = User32.INSTANCE.SetWindowsHookEx(WinUser.WH_MOUSE_LL,
+                mouseHookCallback, hMod, 0);
+        if (mouseHook == null)
+            throw new IllegalStateException(
+                    "Unable to install mouse hook " + Native.getLastError());
+        logger.trace("Installed mouse hook successfully");
+        WinUser.MSG msg = new WinUser.MSG();
+        while (User32.INSTANCE.GetMessage(msg, null, 0, 0) > 0) {
+            User32.INSTANCE.TranslateMessage(msg);
+            User32.INSTANCE.DispatchMessage(msg);
+        }
+    }
+
+    private void addJvmShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+    }
+
+    /**
+     * Closing the console window (alt+f4), Ctrl+C, and a logoff all terminate the process
+     * through Qt's and the CRT's teardown, which runs on the thread that received the event.
+     * Qt then destroys its objects off the main thread ("QObject::killTimer: Timers cannot be
+     * stopped from another thread") and can wait on a lock the terminated main thread held,
+     * until Windows kills the process seconds later. So we shut down (SetSystemCursor also
+     * outlives the process) and kill the process ourselves, before that teardown starts.
+     */
+    private void addConsoleCtrlHandler() {
+        consoleCtrlHandler = this::consoleCtrlEvent;
+        boolean registered =
+                ExtendedKernel32.INSTANCE.SetConsoleCtrlHandler(consoleCtrlHandler, true);
+        if (registered)
+            logger.trace("Registered console control handler");
+        else
+            logger.warn("Unable to register the console control handler (error " +
+                        Native.getLastError() + ")");
+    }
+
+    private boolean consoleCtrlEvent(int dwCtrlType) {
+        logger.debug("Received console control event " + dwCtrlType);
+        // The main thread does the killing: SPI_SETCURSORS (cursor restore) from this
+        // OS-created thread is unreliable. The process normally dies during the wait below.
+        killProcessRequested = true;
+        long deadlineNanos = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+        while (System.nanoTime() < deadlineNanos) {
+            try {
+                Thread.sleep(5);
+            }
+            catch (InterruptedException e) {
+                break;
+            }
+        }
+        logger.warn("Main thread is not responding, killing the process from the console control handler");
+        killProcess(0);
+        return false; // Only reached if TerminateProcess failed: let the default handler proceed.
+    }
+
+    private void killProcessIfConsoleIsGone(double delta) {
+        if (!startedWithAConsole)
+            return;
+        consoleCheckTimer -= delta;
+        if (consoleCheckTimer > 0)
+            return;
+        consoleCheckTimer = 1;
+        if (Kernel32.INSTANCE.GetConsoleWindow() != null)
+            return;
+        logger.info("Killing the process because its console is gone");
+        killProcess(0);
+    }
+
+    private static boolean shutdown = false;
+
+    @Override
+    public void killProcess(int exitCode) {
+        shutdown();
+        Kernel32.INSTANCE.TerminateProcess(Kernel32.INSTANCE.GetCurrentProcess(), exitCode);
+    }
+
+    private void restartProcess() {
+        shutdown();
+        String commandLine = ExtendedKernel32.INSTANCE.GetCommandLineA()
+                                                      .replace(" " + WindowsUiAccess.respawnFlag, "");
+        if (!Kernel32.INSTANCE.CreateProcess(null, commandLine, null, null, false,
+                new WinDef.DWORD(0), null, null, new WinBase.STARTUPINFO(),
+                new WinBase.PROCESS_INFORMATION()))
+            logger.error("Unable to restart the process (error " + Native.getLastError() + ")");
+        killProcess(0);
+    }
+
+    @Override
+    public void requestKillProcess() {
+        killProcessRequested = true;
+    }
+
+    @Override
+    public void requestRestartProcess() {
+        restartProcessRequested = true;
+    }
+
+    @Override
+    public void shutdown() {
+        if (shutdown)
+            return;
+        shutdown = true;
+        // Null when the configuration failed to load.
+        if (macroPlayer != null) {
+            macroPlayer.breakMacro();
+            mouseManager.releaseAll();
+        }
+        mouse.showCursor(); // Just in case we are shutting down while cursor is hidden.
+        boolean keyboardHookUnhooked =
+                User32.INSTANCE.UnhookWindowsHookEx(keyboardHook);
+        boolean mouseHookUnhooked = User32.INSTANCE.UnhookWindowsHookEx(mouseHook);
+        logger.info(
+                "Uninstalled Keyboard and mouse hooks " +
+                (keyboardHookUnhooked && mouseHookUnhooked ? "successfully" : "unsuccessfully"));
+        releaseSingleInstanceMutex();
+        logger.trace("Released single instance mutex");
+        if (logLastKeyEventsOnExit && keyboardManager != null)
+            logger.info("Last key events: " +
+                        keyRedactor.keyEventAndEatens(keyboardManager.lastKeyEvents()));
+    }
+
+    @Override
+    public Clock clock() {
+        return clock;
+    }
+
+    @Override
+    public KeyboardLayout activeKeyboardLayout() {
+        return WindowsVirtualKey.activeKeyboardLayout();
+    }
+
+    @Override
+    public KeyboardController keyboard() {
+        return keyboard;
+    }
+
+    @Override
+    public mousemaster.platform.MouseController mouse() {
+        return mouse;
+    }
+
+    @Override
+    public Set<Screen> screens() {
+        return WindowsScreen.findScreens();
+    }
+
+    @Override
+    public Overlay overlay() {
+        return overlay;
+    }
+
+    @Override
+    public UiAutomation uiAutomation() {
+        return uiAutomation;
+    }
+
+    @Override
+    public Vision vision() {
+        return vision;
+    }
+
+    @Override
+    public ActiveAppFinder activeAppFinder() {
+        return activeAppFinder;
+    }
+
+    @Override
+    public Console console() {
+        return console;
+    }
+
+    /**
+     * A release is sometimes never received. Eating a press keeps it out of the key
+     * state GetAsyncKeyState reads, so an eaten key always looks released and only not
+     * eaten keys can be checked this way.
+     */
+    private void sanityCheckCurrentlyPressedKeys(double delta) {
+        stuckKeyCheckTimer += delta;
+        if (stuckKeyCheckTimer < 1)
+            return;
+        stuckKeyCheckTimer = 0;
+        Set<Key> keysThatDoNotSeemToBePressedAnymore = new HashSet<>();
+        for (Key key : currentlyPressedNotEatenKeys) {
+            WindowsVirtualKey windowsVirtualKey =
+                    WindowsVirtualKey.windowsVirtualKeyFromKey(key,
+                            keyboard.activeKeyboardLayout);
+            if (windowsVirtualKey == null) {
+                // Can be null if key was added to currentlyPressedNotEatenKeys
+                // then the layout changed. The following crash has happened:
+                // java.lang.IllegalStateException: Unable to map key 0 to a Windows virtual key
+                //	at mousemaster.WindowsVirtualKey.windowsVirtualKeyFromKey(WindowsVirtualKey.java:487)
+                //	at mousemaster.WindowsPlatform.sanityCheckCurrentlyPressedKeys(WindowsPlatform.java:255)
+                keysThatDoNotSeemToBePressedAnymore.add(key);
+            }
+            else {
+                short getAsyncKeyStateResult = User32.INSTANCE.GetAsyncKeyState(
+                        windowsVirtualKey.virtualKeyCode);
+                if ((getAsyncKeyStateResult & 0x8000) == 0)
+                    keysThatDoNotSeemToBePressedAnymore.add(key);
+            }
+        }
+        if (!keysThatDoNotSeemToBePressedAnymore.isEmpty()) {
+            logger.info(
+                    "Releasing the following currentlyPressedKeys because they are not pressed anymore according to GetAsyncKeyState: " +
+                    keyRedactor.keys(keysThatDoNotSeemToBePressedAnymore) +
+                    ", last key events: " +
+                    keyRedactor.keyEventAndEatens(keyboardManager.lastKeyEvents()));
+            for (Key key : keysThatDoNotSeemToBePressedAnymore)
+                keyEvent(new ReleaseKeyEvent(clock.now(), key), 0);
+        }
+        KeyboardLayout layout = keyboard.activeKeyboardLayout;
+        for (WindowsVirtualKey virtualKey : WindowsVirtualKey.values()) {
+            short state  = User32.INSTANCE.GetAsyncKeyState(virtualKey.virtualKeyCode);
+            boolean pressedAccordingToOs = (state & 0x8000) != 0;
+            if (!pressedAccordingToOs)
+                continue;
+            Key key = layout.keyFromVirtualKey(virtualKey);
+            if (key != null && keysPressedInHook.contains(key) &&
+                !currentlyPressedNotEatenKeys.contains(key)) {
+                if (key.equals(Key.leftctrl) &&
+                    currentlyPressedNotEatenKeys.contains(Key.rightalt)) {
+                    logger.debug("Skipping stuck leftctrl injection " +
+                                 "while rightalt is held (AltGr active)");
+                    continue;
+                }
+                logger.warn("Stuck key detected: " + keyRedactor.key(key) +
+                            " is pressed according to GetAsyncKeyState" +
+                            " but not in currentlyPressedNotEatenKeys" +
+                            ", injecting release" +
+                            ", last key events: " +
+                            keyRedactor.keyEventAndEatens(keyboardManager.lastKeyEvents()));
+                keyboard.sendInputKeyRelease(
+                        virtualKey.virtualKeyCode,
+                        extendedKeys.contains(key));
+            }
+        }
+    }
+
+    private void resetIfLockedChanged(double delta) {
+        lockedCheckTimer -= delta;
+        if (lockedCheckTimer > 0)
+            return;
+        lockedCheckTimer = 0.2;
+        boolean locked = !inputDesktopIsOurs();
+        if (locked == this.locked)
+            return;
+        this.locked = locked;
+        logger.info("Resetting KeyboardManager and MouseController because the screen was " +
+                    (locked ? "locked" : "unlocked") + ", last key events: " +
+                    keyRedactor.keyEventAndEatens(keyboardManager.lastKeyEvents()));
+        currentlyPressedNotEatenKeys.clear();
+        keyboardManager.reset(false);
+        mouseManager.reset();
+    }
+
+    /** False when the lock screen or another desktop has the input: hooks receive nothing. */
+    private boolean inputDesktopIsOurs() {
+        WinNT.HANDLE inputDesktop = ExtendedUser32.INSTANCE.OpenInputDesktop(0, false,
+                ExtendedUser32.DESKTOP_SWITCHDESKTOP);
+        if (inputDesktop == null)
+            return false;
+        ExtendedUser32.INSTANCE.CloseDesktop(inputDesktop);
+        return true;
+    }
+
+    private boolean acquireSingleInstanceMutex() {
+        singleInstanceMutex = Kernel32.INSTANCE.CreateMutex(null, true,
+                "e133df8f8434f57e65f4276f6fc761ab356687b3");
+        int lastError = Kernel32.INSTANCE.GetLastError();
+        return lastError != 183; // ERROR_ALREADY_EXISTS
+    }
+
+    private void releaseSingleInstanceMutex() {
+        Kernel32.INSTANCE.CloseHandle(singleInstanceMutex);
+    }
+
+    private WinDef.LRESULT keyboardHookCallback(int nCode, WinDef.WPARAM wParam,
+                                                WinUser.KBDLLHOOKSTRUCT info) {
+        long tickCount = ExtendedKernel32.INSTANCE.GetTickCount64();
+        // info.time is the low 32 bits of the tick count, as a signed int: masking the
+        // difference keeps both its sign bit and its wraparound out of the result.
+        long hookEventLagMillis = (tickCount - info.time) & 0xFFFFFFFFL;
+        clock.setLastKeyboardHookEventRelativeTimeMillis(tickCount - hookEventLagMillis);
+        try {
+            if (nCode >= 0) {
+                if (inKeyboardHookCallback) {
+                    // Reentrant call: typically injected keys from regurgitation
+                    // (SendInput triggers the hook synchronously).
+                    // Pass through to OS, but still run WindowsKeyboard callback
+                    // so injected-key acknowledgment works and userPressedKeys stays in sync.
+                    boolean altgrLeftctrl = info.vkCode ==
+                                            WindowsVirtualKey.VK_LCONTROL.virtualKeyCode &&
+                                            info.scanCode == 0x21d;
+                    KeyEvent keyEvent = buildKeyEvent(info, wParam, altgrLeftctrl);
+                    boolean injected = (info.flags & ExtendedUser32.LLKHF_INJECTED) ==
+                                       ExtendedUser32.LLKHF_INJECTED;
+                    if (logger.isTraceEnabled())
+                        logger.trace(
+                                "Reentrant keyboard hook callback, skipping KeyboardManager: " +
+                                keyEventString(info, wParamString(wParam), keyEvent,
+                                        injected, altgrLeftctrl));
+                    keyboard.keyboardHookCallback(info, wParam, null,
+                            keyEvent, injected, altgrLeftctrl);
+                    if (injected && keyEvent != null) {
+                        if (keyboard.shouldSuppressExternalLeftalt(keyEvent, true)) {
+                            logger.trace("Suppressing external +leftalt (reentrant)");
+                            return new WinDef.LRESULT(1);
+                        }
+                        if (suppressCapsLockOsPassthrough &&
+                            keyEvent.key().equals(Key.capslock) &&
+                            info.dwExtraInfo.longValue() ==
+                                    WindowsKeyboardController.CAPS_LOCK_CLEAR_EXTRA_INFO &&
+                            keyEvent.isRelease()) {
+                            WindowsKeyboardController.onCapsLockClearTapReleaseAcknowledged();
+                        }
+                        trackNotEatenKey(keyEvent);
+                    }
+                    // Queue for deferred KeyboardManager state tracking, applying the
+                    // same filters as the normal path: skip injected events (already
+                    // acknowledged above), skip duplicate alt, skip unmapped keys.
+                    if (!injected &&
+                        !(info.vkCode == WindowsVirtualKey.VK_LMENU.virtualKeyCode &&
+                          (info.flags & 0b10000) == 0b10000) &&
+                        keyEvent != null) {
+                        // If this is a repeat press for a key that was originally eaten,
+                        // eat it here too. Otherwise CallNextHookEx would let it leak
+                        // to the app (the reentrant handler cannot call processKeyEvent
+                        // to decide, so we check the eaten state directly).
+                        boolean eaten = keyEvent.isPress() &&
+                            keysPressedInHook.contains(keyEvent.key()) &&
+                            !currentlyPressedNotEatenKeys.contains(keyEvent.key());
+                        reentrantKeyEvents.add(
+                                new ReentrantKeyEvent(keyEvent, info.flags, altgrLeftctrl, eaten));
+                        if (eaten) {
+                            return new WinDef.LRESULT(1);
+                        }
+                    }
+                    return ExtendedUser32.INSTANCE.CallNextHookEx(keyboardHook, nCode, wParam, info);
+                }
+                inKeyboardHookCallback = true;
+                long hookCallbackBeginNanos = System.nanoTime();
+                KeyEvent hookCallbackKeyEvent = null;
+                try {
+                    boolean eaten = false;
+                    switch (wParam.intValue()) {
+                        case WinUser.WM_KEYUP:
+                        case WinUser.WM_KEYDOWN:
+                        case WinUser.WM_SYSKEYUP:
+                        case WinUser.WM_SYSKEYDOWN:
+                            String wParamString = wParamString(wParam);
+                            // Pressing altgr corresponds to the following sequence
+                            // vkCode = 0xa2 (VK_LCONTROL), scanCode = 0x21d, flags = 0x20, wParam = WM_SYSKEYDOWN
+                            // vkCode = 0xa5 (VK_RMENU), scanCode = 0x38, flags = 0x21, wParam = WM_SYSKEYDOWN
+                            // vkCode = 0xa2 (VK_LCONTROL), scanCode = 0x21d, flags = 0x80, wParam = WM_KEYUP
+                            // vkCode = 0xa5 (VK_RMENU), scanCode = 0x38, flags = 0x81, wParam = WM_KEYUP
+                            // Pressing leftctrl corresponds to:
+                            // vkCode = 0xa2 (VK_LCONTROL), scanCode = 0x1d, flags = 0x0, wParam = WM_KEYDOWN
+                            // vkCode = 0xa2 (VK_LCONTROL), scanCode = 0x1d, flags = 0x80, wParam = WM_KEYUP
+                            // We ignore that leftctrl in altgr.
+                            boolean altgrLeftctrl = info.vkCode ==
+                                                    WindowsVirtualKey.VK_LCONTROL.virtualKeyCode &&
+                                                    info.scanCode == 0x21d;
+                            KeyEvent keyEvent = buildKeyEvent(info, wParam, altgrLeftctrl);
+                            hookCallbackKeyEvent = keyEvent;
+                            boolean injected = (info.flags & ExtendedUser32.LLKHF_INJECTED) == ExtendedUser32.LLKHF_INJECTED;
+                            // mousemaster's own injected events (macros, regurgitation,
+                            // key repeat) are tagged with a dwExtraInfo signature. They
+                            // must never be fed back into combo/macro processing,
+                            // regardless of --ignore-injected-events: doing so would let
+                            // a macro's output re-trigger combos and corrupt MacroPlayer's
+                            // press/release bookkeeping.
+                            boolean mousemasterInjected = injected &&
+                                    info.dwExtraInfo != null &&
+                                    info.dwExtraInfo.longValue() ==
+                                    WindowsKeyboardController.MOUSEMASTER_INJECTED_EVENT_SIGNATURE;
+                            logKeyEvent(info, wParamString, keyEvent, injected, altgrLeftctrl);
+                            keyboard.keyboardHookCallback(info, wParam, wParamString,
+                                    keyEvent, injected, altgrLeftctrl);
+                            if (injected && (ignoreInjectedEvents || mousemasterInjected)) {
+                                if (keyEvent != null) {
+                                    if (keyboard.shouldSuppressExternalLeftalt(keyEvent, true)) {
+                                        logger.trace("Suppressing external +leftalt");
+                                        eaten = true;
+                                    }
+                                    else if (suppressCapsLockOsPassthrough &&
+                                             keyEvent.key().equals(Key.capslock) &&
+                                             info.dwExtraInfo.longValue() !=
+                                                     WindowsKeyboardController.CAPS_LOCK_CLEAR_EXTRA_INFO) {
+                                        logger.trace("Suppressing externally injected capslock");
+                                        eaten = true;
+                                        WindowsKeyboardController.clearCapsLockToggleStateIfOn();
+                                    }
+                                    else {
+                                        if (suppressCapsLockOsPassthrough &&
+                                            keyEvent.key().equals(Key.capslock) &&
+                                            info.dwExtraInfo.longValue() ==
+                                                    WindowsKeyboardController.CAPS_LOCK_CLEAR_EXTRA_INFO &&
+                                            keyEvent.isRelease()) {
+                                            WindowsKeyboardController.onCapsLockClearTapReleaseAcknowledged();
+                                        }
+                                        trackNotEatenKey(keyEvent);
+                                    }
+                                }
+                            }
+                            else if (info.vkCode == WindowsVirtualKey.VK_LMENU.virtualKeyCode &&
+                                (info.flags & 0b10000) == 0b10000) {
+                                // 0b10000 means alt is pressed. This avoids getting two consecutive duplicate alt press,release events.
+                            }
+                            else {
+                                if (keyEvent != null) {
+                                    if (processKeyEvent(keyEvent, info.flags, altgrLeftctrl)) {
+                                        // Track if the real VK_RMENU press was eaten by the hook.
+                                        // If it wasn't (hook timeout from slow rendering),
+                                        // we must not eat the VK_RMENU release later.
+                                        if (!altgrLeftctrl && keyEvent.isPress() &&
+                                            keyEvent.key().equals(Key.rightalt))
+                                            altgrRightaltPressEaten = true;
+                                        eaten = true;
+                                    }
+                                }
+                                // Eat by virtual key as well: some layouts can fail scan-code mapping
+                                // while the OS still toggles caps lock for VK_CAPITAL (0x14).
+                                if (suppressCapsLockOsPassthrough &&
+                                    info.vkCode == WindowsVirtualKey.VK_CAPITAL.virtualKeyCode) {
+                                    eaten = true;
+                                    if (keyEvent == null) {
+                                        WindowsKeyboardController.clearCapsLockToggleStateIfOn();
+                                    }
+                                }
+                            }
+                            break;
+                        default:
+                            logger.debug("Received unexpected key event wParam: " + wParam.intValue());
+                    }
+                    // Process queued reentrant events for KeyboardManager state tracking.
+                    // inKeyboardHookCallback is still true, so any hook callback
+                    // triggered during replay will be queued and picked up by this loop.
+                    while (!reentrantKeyEvents.isEmpty()) {
+                        ReentrantKeyEvent reentrantKeyEvent = reentrantKeyEvents.remove(0);
+                        if (processKeyEvent(reentrantKeyEvent.keyEvent, reentrantKeyEvent.infoFlags, reentrantKeyEvent.altgrLeftctrl)
+                            && !reentrantKeyEvent.eaten)
+                            logger.warn("Reentrant event would have been eaten but already passed through: " +
+                                        keyRedactor.event(reentrantKeyEvent.keyEvent));
+                    }
+                    if (eaten)
+                        return new WinDef.LRESULT(1);
+                    WinDef.LRESULT result =
+                            ExtendedUser32.INSTANCE.CallNextHookEx(
+                                    keyboardHook, nCode, wParam, info);
+                    // Process reentrant events that arrived during CallNextHookEx.
+                    while (!reentrantKeyEvents.isEmpty()) {
+                        ReentrantKeyEvent reentrantKeyEvent = reentrantKeyEvents.remove(0);
+                        if (processKeyEvent(reentrantKeyEvent.keyEvent, reentrantKeyEvent.infoFlags, reentrantKeyEvent.altgrLeftctrl)
+                            && !reentrantKeyEvent.eaten)
+                            logger.warn("Reentrant event would have been eaten but already passed through: " +
+                                        keyRedactor.event(reentrantKeyEvent.keyEvent));
+                    }
+                    return result;
+                }
+                finally {
+                    inKeyboardHookCallback = false;
+                    long hookCallbackMillis =
+                            (System.nanoTime() - hookCallbackBeginNanos) / 1_000_000;
+                    if (hookCallbackMillis >= SLOW_HOOK_CALLBACK_MILLIS ||
+                        hookEventLagMillis >= LATE_HOOK_EVENT_MILLIS)
+                        logger.warn("Keyboard hook callback for " +
+                                    keyRedactor.event(hookCallbackKeyEvent) +
+                                    " ran " + hookEventLagMillis + "ms after the event" +
+                                    " and took " + hookCallbackMillis + "ms" +
+                                    ", events Windows received meanwhile may have been" +
+                                    " dropped, last key events: " +
+                                    keyRedactor.keyEventAndEatens(
+                                            keyboardManager.lastKeyEvents()));
+                }
+            }
+            return ExtendedUser32.INSTANCE.CallNextHookEx(keyboardHook, nCode, wParam, info);
+        }
+        finally {
+            clock.keyboardHookEventHandled();
+        }
+    }
+
+    private static String wParamString(WinDef.WPARAM wParam) {
+        return switch (wParam.intValue()) {
+            case WinUser.WM_KEYUP -> "WM_KEYUP";
+            case WinUser.WM_KEYDOWN -> "WM_KEYDOWN";
+            case WinUser.WM_SYSKEYUP -> "WM_SYSKEYUP";
+            case WinUser.WM_SYSKEYDOWN -> "WM_SYSKEYDOWN";
+            default -> "0x" + Integer.toHexString(wParam.intValue());
+        };
+    }
+
+    private void trackNotEatenKey(KeyEvent keyEvent) {
+        if (keyEvent.isPress())
+            currentlyPressedNotEatenKeys.add(keyEvent.key());
+        else
+            currentlyPressedNotEatenKeys.remove(keyEvent.key());
+    }
+
+    private KeyEvent buildKeyEvent(WinUser.KBDLLHOOKSTRUCT info, WinDef.WPARAM wParam,
+                                   boolean altgrLeftctrl) {
+        boolean release = wParam.intValue() == WinUser.WM_KEYUP ||
+                          wParam.intValue() == WinUser.WM_SYSKEYUP;
+        Key key;
+        if (altgrLeftctrl)
+            // Consider altgr's leftctrl and altgr's rightalt as the same key: Key.rightalt.
+            key = Key.rightalt;
+        else
+            key = WindowsVirtualKey.keyFromWindowsEvent(
+                    WindowsVirtualKey.values.get(info.vkCode), info.scanCode, info.flags,
+                    keyboard.activeKeyboardLayout);
+        if (key == null)
+            return null;
+        Instant time = clock.now();
+        return release ? new ReleaseKeyEvent(time, key) : new PressKeyEvent(time, key);
+    }
+
+    private boolean keyEvent(KeyEvent keyEvent, int infoFlags) {
+        if (!keyEvent.isPress())
+            currentlyPressedNotEatenKeys.remove(keyEvent.key());
+        KeyboardManager.EatAndRegurgitates eatAndRegurgitates = keyboardManager.keyEvent(keyEvent);
+        if (keyEvent.isPress() && !eatAndRegurgitates.mustBeEaten()) {
+            currentlyPressedNotEatenKeys.add(keyEvent.key());
+        }
+        boolean keyEventIsExtendedKey = (infoFlags & 1) == 1;
+        if (keyEventIsExtendedKey)
+            // The Windows callback tells us if a key is an extended key.
+            // This is a simple way to keep that knowledge, which we might need later (regurgitation).
+            // Another way could be to hardcode the virtual codes corresponding to extended keys.
+            extendedKeys.add(keyEvent.key());
+        boolean eventKeyReleasedByRegurgitation = false;
+        if (keyRegurgitationEnabled && !eatAndRegurgitates.regurgitates().isEmpty()) {
+            for (KeyboardManager.Regurgitate regurgitate : eatAndRegurgitates.regurgitates()) {
+                if (regurgitate.alsoRelease() &&
+                    regurgitate.key().equals(keyEvent.key()) && keyEvent.isRelease()) {
+                    eventKeyReleasedByRegurgitation = true;
+                }
+                // If the following combo is defined: +leftwin-0 +e,
+                // Then, when pressing leftwin + v,
+                // And if non-eaten key (v) is pressed then regurgitation should not start repeating.
+                boolean startRepeat = !regurgitate.alsoRelease() &&
+                                      !keyEvent.isRelease() &&
+                                      currentlyPressedNotEatenKeys.isEmpty();
+                keyRegurgitator.regurgitate(regurgitate, startRepeat);
+                if (!regurgitate.alsoRelease()) {
+                    // Press-only regurgitation: the key is now visible to the OS,
+                    // so track it as not-eaten for stuck-key diagnostics.
+                    currentlyPressedNotEatenKeys.add(regurgitate.key());
+                }
+            }
+        }
+        // Eat the user key release if regurgitation is going to later generate a release.
+        return eatAndRegurgitates.mustBeEaten() || eventKeyReleasedByRegurgitation;
+    }
+
+    /**
+     * @return true if the event should be eaten.
+     */
+    private boolean processKeyEvent(KeyEvent keyEvent, int infoFlags, boolean altgrLeftctrl) {
+        Key key = keyEvent.key();
+        boolean release = keyEvent.isRelease();
+        if (!release) {
+            keysPressedInHook.add(key);
+            if (altgrLeftctrl)
+                keysPressedInHook.add(Key.leftctrl);
+        }
+        if (lastNotEatenKeyEvent != null && lastNotEatenKeyEvent.equals(keyEvent)) {
+            logger.debug("Key event ignored because it is equal to the last not eaten event: " +
+                         keyRedactor.event(keyEvent));
+            lastNotEatenKeyEvent = keyEvent;
+            return false;
+        }
+        boolean eventMustBeEaten = keyEvent(keyEvent, infoFlags);
+        if (!release && altgrLeftctrl) {
+            altgrLeftctrlPressEaten = eventMustBeEaten;
+        }
+        else if (release && altgrLeftctrl) {
+            if (eventMustBeEaten && !altgrLeftctrlPressEaten) {
+                // The phantom VK_LCONTROL press was not eaten, either because
+                // it was not received by the hook or because it was passed
+                // through (e.g. reentrant callback). Either way the OS may have
+                // VK_LCONTROL pressed, so pass the release through to avoid
+                // stuck ctrl.
+                logger.warn("Phantom VK_LCONTROL release would be eaten but " +
+                            "the press was not eaten, passing through");
+                eventMustBeEaten = false;
+            }
+            if (eventMustBeEaten)
+                mustEatNextReleaseOfRightalt = true;
+            altgrLeftctrlPressEaten = false;
+        }
+        else if (release && key.equals(Key.rightalt) &&
+                 mustEatNextReleaseOfRightalt) {
+            if (altgrRightaltPressEaten) {
+                eventMustBeEaten = true;
+            }
+            else {
+                logger.warn("VK_RMENU release would be eaten but the real " +
+                            "VK_RMENU press was not eaten, passing through");
+            }
+            mustEatNextReleaseOfRightalt = false;
+            altgrRightaltPressEaten = false;
+        }
+        if (suppressCapsLockOsPassthrough && key.equals(Key.capslock)) {
+            currentlyPressedNotEatenKeys.remove(Key.capslock);
+            eventMustBeEaten = true;
+            WindowsKeyboardController.clearCapsLockToggleStateIfOn();
+        }
+        if (!eventMustBeEaten)
+            lastNotEatenKeyEvent = keyEvent;
+        return eventMustBeEaten;
+    }
+
+    private String keyEventString(WinUser.KBDLLHOOKSTRUCT info,
+                                  String wParamString, KeyEvent keyEvent,
+                                  boolean injected, boolean altgrLeftctrl) {
+        return keyRedactor.event(keyEvent) +
+               ", altgrLeftctrl = " + altgrLeftctrl +
+               ", injected = " + injected +
+               ", dwExtraInfo = 0x" +
+               (info.dwExtraInfo == null ? "0" :
+                       Long.toHexString(info.dwExtraInfo.longValue())) +
+               ", vkCode = " + (keyRedactor.redactKeys() ? "<redacted>" :
+                       "0x" + Integer.toHexString(info.vkCode) +
+                       " (" + WindowsVirtualKey.values.get(info.vkCode) + ")") +
+               ", scanCode = " + (keyRedactor.redactKeys() ? "<redacted>" :
+                       "0x" + Integer.toHexString(info.scanCode)) +
+               ", flags = 0x" + Integer.toHexString(info.flags) + ", wParam = " +
+               wParamString;
+    }
+
+    private void logKeyEvent(WinUser.KBDLLHOOKSTRUCT info,
+                             String wParamString, KeyEvent keyEvent,
+                             boolean injected, boolean altgrLeftctrl) {
+        if (logger.isTraceEnabled())
+            logger.trace(
+                    "Received key event: " +
+                    keyEventString(info, wParamString, keyEvent, injected, altgrLeftctrl));
+    }
+
+    /**
+     * Note: this method is called from the mouse-hook thread.
+     */
+    private WinDef.LRESULT mouseHookCallback(int nCode, WinDef.WPARAM wParam,
+                                             WinUser.MSLLHOOKSTRUCT info) {
+        if (nCode >= 0) {
+            WinDef.POINT mousePosition = info.pt;
+            mousePositionQueue.add(mousePosition);
+            if ((info.flags & ExtendedUser32.LLMHF_INJECTED) ==
+                ExtendedUser32.LLMHF_INJECTED) {
+                // SendInput from another app (or from mousemaster).
+            }
+            else {
+                int WM_MOUSEMOVE = 0x0200;
+                if (wParam.intValue() != WM_MOUSEMOVE) {
+                    // This is racy, but regurgitating from the event loop (where
+                    // mousePositionQueue is consumed) is too late and a shift click
+                    // cannot be done if shift is the key being eaten.
+                    if (keyboardManager.pressingKeys()) {
+                        logger.info(
+                                "Regurgitating pressed keys because physical mouse buttons are being used");
+                        keyboardManager.regurgitatePressedKeys();
+                    }
+                }
+            }
+        }
+        return ExtendedUser32.INSTANCE.CallNextHookEx(mouseHook, nCode, wParam, info);
+    }
+
+    public void mousePositionSet(WinDef.POINT mousePosition) {
+        mousePositionQueue.add(mousePosition);
+    }
+
+    /** The mouse hook reports a move past the screen edge before Windows clips the cursor. */
+    private static WinDef.POINT clippedToScreen(WinDef.POINT mousePosition) {
+        Rectangle screen = WindowsScreen.findActiveScreen(mousePosition).rectangle();
+        return new WinDef.POINT(
+                Math.clamp(mousePosition.x, screen.x(), screen.x() + screen.width() - 1),
+                Math.clamp(mousePosition.y, screen.y(), screen.y() + screen.height() - 1));
+    }
+
+    @Override
+    public void modeChanged(Mode newMode) {
+        // If zoom is going to change, WindowsOverlay.setZoom() will repaint the hint mesh
+        // after the zoom window is initialized.
+        overlay.setWaitForZoomBeforeRepainting(
+                currentMode != null && !currentMode.zoom().equals(newMode.zoom()));
+        currentMode = newMode;
+    }
+
+    @Override
+    public void modeTimedOut() {
+        // No op.
+    }
+}

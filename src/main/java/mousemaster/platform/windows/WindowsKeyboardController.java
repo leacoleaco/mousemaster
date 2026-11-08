@@ -1,0 +1,500 @@
+package mousemaster.platform.windows;
+
+import mousemaster.*;
+
+import com.sun.jna.platform.win32.BaseTSD;
+import com.sun.jna.platform.win32.User32;
+import com.sun.jna.platform.win32.WinDef;
+import com.sun.jna.platform.win32.WinUser;
+import mousemaster.platform.KeyboardController;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+
+public class WindowsKeyboardController implements KeyboardController {
+
+    private static final Logger logger = LoggerFactory.getLogger(WindowsKeyboardController.class);
+
+    /**
+     * Written into dwExtraInfo of every keyboard event mousemaster injects via
+     * SendInput. The low-level keyboard hook uses it to recognize mousemaster's
+     * own injected events.
+     * "MMKB" = mousemaster keyboard
+     */
+    public static final long MOUSEMASTER_INJECTED_EVENT_SIGNATURE = 0x4D4D4B42L;
+
+    /**
+     * https://learn.microsoft.com/en-us/windows/win32/inputdev/about-keyboard-input
+     */
+    public static Set<Key> extendedKeys = Set.of(
+            Key.rightalt,
+            Key.rightctrl,
+            Key.insert,
+            Key.del,
+            Key.home,
+            Key.end,
+            Key.pageup,
+            Key.pagedown,
+            Key.leftarrow,
+            Key.uparrow,
+            Key.rightarrow,
+            Key.downarrow,
+            Key.numlock,
+            Key.break_,
+            Key.printscreen,
+            Key.numpaddivide,
+            Key.numpadenter,
+            Key.leftwin,
+            Key.rightwin,
+            Key.menu
+    );
+
+    public KeyboardLayout activeKeyboardLayout;
+    public KeyRedactor keyRedactor;
+
+    @Override
+    public void reset() {
+        sendInputQueue.clear();
+        earlyReleasedQueuedKeys.clear();
+        moveWaitingForKeyboardHookCallbackAcknowledgment = null;
+        ticksWaitingForAcknowledgment = 0;
+        pressedKeyToRepeat = null;
+        durationUntilNextKeyPressRepeat = 0;
+        repeatStartedDuringCurrentTick = false;
+        suppressExternalLeftalt = false;
+        capsLockClearTapInFlight = false;
+        capsLockClearTapInFlightTicks = 0;
+    }
+
+    /**
+     * When sending -leftalt +uparrow, leftalt is interleaved with uparrow,
+     * and that prevent leftalt from being properly released:
+     * 2026-02-21T23:30:38.338 [main] DEBUG mousemaster.MacroPlayer - Executing macro parallel: -leftalt +uparrow PT0S
+     * 2026-02-21T23:30:38.338 [main] TRACE mousemaster.WindowsPlatform - Received key event: vkCode = 0xa4 (VK_LMENU), scanCode = 0x0, flags = 0x90, wParam = WM_KEYUP
+     * 2026-02-21T23:30:38.339 [main] TRACE mousemaster.WindowsPlatform - Received key event: vkCode = 0x26 (VK_UP), scanCode = 0x0, flags = 0x11, wParam = WM_KEYDOWN
+     * 2026-02-21T23:30:38.341 [main] TRACE mousemaster.WindowsPlatform - Received key event: vkCode = 0xa4 (VK_LMENU), scanCode = 0x38, flags = 0x30, wParam = WM_SYSKEYDOWN
+     */
+    private record SendInputMove(ResolvedMacroMove move, boolean startRepeat) {}
+    private final List<SendInputMove> sendInputQueue = new LinkedList<>();
+    /**
+     * Keys where the user physically released the key while a pending +key
+     * was sitting in the sendInputQueue. When the deferred +key is sent,
+     * a -key is appended to the batch (tap instead of hold) to prevent
+     * stuck repeat. This handles the case where leftalt batching splits
+     * a single parallel's sends (e.g. [+leftalt, +i, -leftalt] becomes
+     * [+leftalt] then deferred [+i, -leftalt]).
+     */
+    private final Set<Key> earlyReleasedQueuedKeys = new HashSet<>();
+    private ResolvedKeyMacroMove moveWaitingForKeyboardHookCallbackAcknowledgment;
+    private int ticksWaitingForAcknowledgment;
+
+    @Override
+    public void sendInputMoves(List<ResolvedMacroMove> moves, boolean startRepeat) {
+        boolean sendInputQueueWasEmpty = sendInputQueue.isEmpty();
+        for (ResolvedMacroMove move : moves)
+            sendInputQueue.add(new SendInputMove(move, startRepeat));
+        if (moveWaitingForKeyboardHookCallbackAcknowledgment == null &&
+            sendInputQueueWasEmpty)
+            processOneSendInputMove();
+    }
+
+    private Key pressedKeyToRepeat;
+    private double durationUntilNextKeyPressRepeat;
+    /**
+     * Used to prevent keyPressedNotEaten from killing a repeat that was just
+     * started by a macro during the same event processing (e.g. combo triggers
+     * macro +a which starts repeating, then keyPressedNotEaten is called for
+     * the triggering key: we must not stop the repeat).
+     */
+    private boolean repeatStartedDuringCurrentTick;
+
+    @Override
+    public void keyPressedNotEaten(Key key) {
+        if (!repeatStartedDuringCurrentTick || !key.equals(pressedKeyToRepeat))
+            pressedKeyToRepeat = null;
+    }
+
+    @Override
+    public void keyReleasedNotEaten(Key key) {
+        if (key.equals(pressedKeyToRepeat))
+            pressedKeyToRepeat = null;
+    }
+
+    @Override
+    public void recordEarlyReleaseForQueuedPress(Key key) {
+        for (SendInputMove queued : sendInputQueue) {
+            if (queued.move() instanceof ResolvedKeyMacroMove km &&
+                km.press() && km.key().equals(key) &&
+                km.destination() == MacroMoveDestination.OS) {
+                earlyReleasedQueuedKeys.add(key);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void clearEarlyReleaseForQueuedPress(Key key) {
+        earlyReleasedQueuedKeys.remove(key);
+    }
+
+    private final Set<Key> userPressedKeys = new HashSet<>();
+
+    /**
+     * When we inject -leftalt while the user physically holds alt, some apps (e.g.
+     * IntelliJ) inject +leftalt/-leftalt pairs to "correct" the state mismatch.
+     * These external events can cause apps to see alt+key instead of just key.
+     * When this flag is true, injected +leftalt events that are not our own ack
+     * are eaten (suppressed) to prevent this.
+     */
+    private boolean suppressExternalLeftalt;
+
+    private static final Set<Key> modifierKeys =
+            Set.of(Key.leftshift, Key.rightshift, Key.leftctrl, Key.rightctrl,
+                    Key.leftalt, Key.rightalt, Key.leftwin, Key.rightwin);
+
+    /**
+     * Returns true if this injected +leftalt event is from an external app
+     * and should be eaten to prevent apps from seeing alt+key.
+     */
+    public boolean shouldSuppressExternalLeftalt(KeyEvent keyEvent, boolean injected) {
+        if (true)
+            // Does not work for double tap of leftalt in IntelliJ.
+            return false;
+        if (!suppressExternalLeftalt || !injected || keyEvent == null ||
+            !keyEvent.key().equals(Key.leftalt) || !keyEvent.isPress())
+            return false;
+        // Don't suppress if this is our own +leftalt that we're waiting to ack.
+        if (moveWaitingForKeyboardHookCallbackAcknowledgment != null &&
+            moveWaitingForKeyboardHookCallbackAcknowledgment.key().equals(Key.leftalt) &&
+            moveWaitingForKeyboardHookCallbackAcknowledgment.press())
+            return false;
+        return true;
+    }
+
+    public void keyboardHookCallback(WinUser.KBDLLHOOKSTRUCT info,
+                                            WinDef.WPARAM wParam, String wParamString, KeyEvent keyEvent,
+                                            boolean injected, boolean altgrLeftctrl) {
+        if (!injected) {
+            if (keyEvent != null) {
+                if (keyEvent.isRelease()) {
+                    userPressedKeys.remove(keyEvent.key());
+                    if (keyEvent.key().equals(Key.leftalt))
+                        suppressExternalLeftalt = false;
+                }
+                else
+                    userPressedKeys.add(keyEvent.key());
+            }
+            return;
+        }
+        if (moveWaitingForKeyboardHookCallbackAcknowledgment == null)
+            return;
+        if (keyEvent == null)
+            return;
+        if (keyEvent.key()
+                    .equals(moveWaitingForKeyboardHookCallbackAcknowledgment.key()) &&
+            keyEvent.isPress() ==
+            moveWaitingForKeyboardHookCallbackAcknowledgment.press()) {
+            if (keyEvent.key().equals(Key.leftalt)) {
+//                if (keyEvent.isPress()
+//                    && (
+//                    wParam.intValue() != WinUser.WM_SYSKEYDOWN
+                    // Received key event: +leftalt, altgrLeftctrl = false, injected = true, vkCode = 0xa4 (VK_LMENU), scanCode = 0x0, flags = 0x30, wParam = WM_SYSKEYDOWN
+                    // Received key event: +leftalt, altgrLeftctrl = false, injected = true, vkCode = 0xa4 (VK_LMENU), scanCode = 0x38, flags = 0x30, wParam = WM_SYSKEYDOWN
+//                    || info.scanCode != 0x38
+//                    )
+//                )
+//                    return;
+                if (keyEvent.isRelease() &&
+                    userPressedKeys.contains(keyEvent.key()) &&
+                    info.scanCode != 0x38)
+                    // 0x38 is the phantom event that happens after the normal event (scanCode 0x0), only when the user is actually pressing leftalt.
+                    // We need to wait for this phantom event to be received, otherwise leftalt is still being pressed.
+                    return;
+            }
+            if (logger.isTraceEnabled())
+                logger.trace("Received ackowledgment of " +
+                             keyRedactor.move(
+                                     moveWaitingForKeyboardHookCallbackAcknowledgment) +
+                             ", scanCode = " +
+                             (keyRedactor.redactKeys() ? "<redacted>" :
+                                     "0x" + Integer.toHexString(info.scanCode)));
+            moveWaitingForKeyboardHookCallbackAcknowledgment = null;
+            // Continue processing next move (this is done synchronously before WindowsPlatform#keyboardHookCallback returns)
+            // idle-mode.macro.gitc={+g +i -g -i} +c -> 'git checkout'
+            // If user presses g, i, then a, the regurgitation of g then i will happen on
+            // the +a event (and before WindowsPlatform#keyboardHookCallback returns, i.e. before 'a' will be typed)
+            // User will see 'gia' (and not 'gai').
+            // Process the next queued move immediately, unless it targets
+            // the same modifier key (e.g. -leftwin after +leftwin): sending
+            // a modifier release from inside the same modifier's press hook
+            // callback can leave the key stuck because Windows hasn't fully
+            // committed the press.
+            boolean nextIsSameModifier = modifierKeys.contains(keyEvent.key())
+ /*                   && !sendInputQueue.isEmpty()
+                    && sendInputQueue.getFirst().move() instanceof ResolvedKeyMacroMove next
+                    && next.key().equals(keyEvent.key())*/;
+            if (!nextIsSameModifier)
+                processOneSendInputMove();
+        }
+    }
+
+    @Override
+    public void update(double delta) {
+        repeatStartedDuringCurrentTick = false;
+        if (moveWaitingForKeyboardHookCallbackAcknowledgment != null) {
+            ticksWaitingForAcknowledgment++;
+            if (ticksWaitingForAcknowledgment >= 5) {
+                logger.debug("Gave up waiting for keyboard hook acknowledgment of " +
+                             keyRedactor.move(
+                                     moveWaitingForKeyboardHookCallbackAcknowledgment));
+                moveWaitingForKeyboardHookCallbackAcknowledgment = null;
+            }
+            else
+                return;
+        }
+        if (processOneSendInputMove())
+            return;
+        if (pressedKeyToRepeat == null)
+            return;
+        durationUntilNextKeyPressRepeat -= delta;
+        if (durationUntilNextKeyPressRepeat <= 0) {
+            sendInputMoves(List.of(new ResolvedKeyMacroMove(pressedKeyToRepeat, true, MacroMoveDestination.OS)), true);
+            durationUntilNextKeyPressRepeat = 0.025d;
+        }
+    }
+
+    private boolean processOneSendInputMove() {
+        while (!sendInputQueue.isEmpty()) {
+            SendInputMove sendInputMove = sendInputQueue.removeFirst();
+            switch (sendInputMove.move()) {
+                case ResolvedKeyMacroMove keyMove -> {
+                    // Batch consecutive key moves into a single SendInput call. A single
+                    // SendInput guarantees atomic, in-order insertion (no interleaving
+                    // with user events). This also avoids nested hook callbacks: without
+                    // batching, regurgitating +leftwin, +leftwin's ack handler would
+                    // send -leftwin from inside +leftwin's hook callback, and Windows
+                    // would not fully commit the press before seeing the release, leaving
+                    // leftwin stuck.
+                    List<ResolvedKeyMacroMove> batch = new ArrayList<>();
+                    batch.add(keyMove);
+                    // Batching +leftalt (press) does not work because we need to wait for the phantom events to be acknowledged.
+                    while (!keyMove.key().equals(Key.leftalt) &&
+                           !sendInputQueue.isEmpty() &&
+                           sendInputQueue.getFirst().move() instanceof ResolvedKeyMacroMove next
+//                           && next.key().equals(keyMove.key())
+                    ) {
+                        batch.add(next);
+                        sendInputQueue.removeFirst();
+                        if (next.key().equals(Key.leftalt))
+                            break;
+//                        break;
+                    }
+                    // If the user released a key while its +key was
+                    // queued, append a -key so SendInput sends a tap
+                    // (no OS-level stuck key, no mousemaster repeat).
+                    for (ResolvedKeyMacroMove m : List.copyOf(batch)) {
+                        if (m.press() &&
+                            earlyReleasedQueuedKeys.remove(m.key())) {
+                            batch.add(new ResolvedKeyMacroMove(
+                                    m.key(), false, m.destination()));
+                        }
+                    }
+                    sendInputKeys(batch, sendInputMove.startRepeat());
+                    return true;
+                }
+                case StringMacroMove stringMove -> {
+                    // No acknowledgment needed for Unicode events.
+                    sendInputString(stringMove.string());
+                    // Continue processing the next queued move.
+                }
+            }
+        }
+        return false;
+    }
+
+    private void sendInputKeys(List<ResolvedKeyMacroMove> moves, boolean triggerKeyRepeating) {
+//        triggerKeyRepeating = false;
+        clearCapsLockToggleStateIfOn();
+        // Send a press event for the key to regurgitate.
+        WinUser.INPUT[] pInputs =
+                (WinUser.INPUT[]) new WinUser.INPUT().toArray(moves.size());
+        if (moves.stream()
+                 .map(move -> WindowsVirtualKey.windowsVirtualKeyFromKey(move.key(),
+                         activeKeyboardLayout))
+                 .anyMatch(Objects::isNull)) {
+            // Happens when a macro output contains a key not in the active keyboard layout.
+            return;
+        }
+        for (int moveIndex = 0; moveIndex < moves.size(); moveIndex++) {
+            ResolvedKeyMacroMove move = moves.get(moveIndex);
+            WindowsVirtualKey windowsVirtualKey =
+                    WindowsVirtualKey.windowsVirtualKeyFromKey(move.key(),
+                            activeKeyboardLayout);
+            // Key already pressed.
+            if (move.press()) {
+                if (triggerKeyRepeating) {
+                    pressedKeyToRepeat = move.key();
+                    durationUntilNextKeyPressRepeat = 0.5d;
+                    repeatStartedDuringCurrentTick = true;
+                }
+            }
+            else if (pressedKeyToRepeat == move.key()) {
+                pressedKeyToRepeat = null;
+            }
+            pInputs[moveIndex].type = new WinDef.DWORD(WinUser.INPUT.INPUT_KEYBOARD);
+            pInputs[moveIndex].input.setType(WinUser.KEYBDINPUT.class);
+            // Some keys are extended keys and need dwFlag:
+            // https://stackoverflow.com/questions/44924962/sendinput-on-c-doesnt-take-ctrl-and-shift-in-account
+            pInputs[moveIndex].input.ki.wVk =
+                    new WinDef.WORD(windowsVirtualKey.virtualKeyCode);
+            int scanCode = activeKeyboardLayout.scanCode(move.key());
+            if (scanCode != -1)
+                pInputs[moveIndex].input.ki.wScan =
+                        new WinDef.WORD(scanCode & 0xFF);
+            int flag = (extendedKeys.contains(move.key()) ? 1 : 0) | (!move.press() ? 2 : 0);
+            // If KEYEVENTF_EXTENDEDKEY dwFlag is not set,
+            // rightalt + f7 in IntelliJ gets stuck: it expects alt to be released (press-and-release leftalt to unstuck).
+            pInputs[moveIndex].input.ki.dwFlags = new WinDef.DWORD(flag);
+            pInputs[moveIndex].input.ki.dwExtraInfo =
+                    new BaseTSD.ULONG_PTR(MOUSEMASTER_INJECTED_EVENT_SIGNATURE);
+        }
+        if (logger.isTraceEnabled()) {
+            logger.trace("Sending " + keyRedactor.moves(moves) +
+                         ", triggerKeyRepeating = " + triggerKeyRepeating);
+            logger.trace("Waiting for ackowledgment of " +
+                         keyRedactor.move(moves.getLast()));
+        }
+        // Update external suppression flag before SendInput so reentrant external
+        // events during SendInput are caught. +leftalt clears the flag (re-pressing
+        // alt means no more externals), -leftalt while user holds alt sets it.
+        for (ResolvedKeyMacroMove move : moves) {
+            if (move.key().equals(Key.leftalt)) {
+                if (move.press())
+                    suppressExternalLeftalt = false;
+                else if (userPressedKeys.contains(Key.leftalt))
+                    suppressExternalLeftalt = true;
+            }
+        }
+        moveWaitingForKeyboardHookCallbackAcknowledgment = moves.getLast();
+        ticksWaitingForAcknowledgment = 0;
+        WinDef.DWORD sendInput =
+                User32.INSTANCE.SendInput(new WinDef.DWORD(moves.size()), pInputs,
+                        pInputs[0].size());
+    }
+
+    public void sendInputString(String string) {
+        logger.trace("Sending input string: " + string);
+        clearCapsLockToggleStateIfOn();
+        int inputCount = string.length() * 2; // down + up per character
+        WinUser.INPUT[] pInputs =
+                (WinUser.INPUT[]) new WinUser.INPUT().toArray(inputCount);
+        for (int i = 0; i < string.length(); i++) {
+            char c = string.charAt(i);
+            int downIndex = i * 2;
+            int upIndex = downIndex + 1;
+            // Key down.
+            pInputs[downIndex].type = new WinDef.DWORD(WinUser.INPUT.INPUT_KEYBOARD);
+            pInputs[downIndex].input.setType(WinUser.KEYBDINPUT.class);
+            pInputs[downIndex].input.ki.wVk = new WinDef.WORD(0);
+            pInputs[downIndex].input.ki.wScan = new WinDef.WORD(c);
+            pInputs[downIndex].input.ki.dwFlags = new WinDef.DWORD(WinUser.KEYBDINPUT.KEYEVENTF_UNICODE);
+            pInputs[downIndex].input.ki.dwExtraInfo =
+                    new BaseTSD.ULONG_PTR(MOUSEMASTER_INJECTED_EVENT_SIGNATURE);
+            // Key up.
+            pInputs[upIndex].type = new WinDef.DWORD(WinUser.INPUT.INPUT_KEYBOARD);
+            pInputs[upIndex].input.setType(WinUser.KEYBDINPUT.class);
+            pInputs[upIndex].input.ki.wVk = new WinDef.WORD(0);
+            pInputs[upIndex].input.ki.wScan = new WinDef.WORD(c);
+            pInputs[upIndex].input.ki.dwFlags = new WinDef.DWORD(
+                    WinUser.KEYBDINPUT.KEYEVENTF_UNICODE |
+                    WinUser.KEYBDINPUT.KEYEVENTF_KEYUP);
+            pInputs[upIndex].input.ki.dwExtraInfo =
+                    new BaseTSD.ULONG_PTR(MOUSEMASTER_INJECTED_EVENT_SIGNATURE);
+        }
+        User32.INSTANCE.SendInput(new WinDef.DWORD(inputCount), pInputs,
+                pInputs[0].size());
+    }
+
+    public void sendInputKeyRelease(int virtualKeyCode, boolean extendedKey) {
+        WinUser.INPUT[] pInputs =
+                (WinUser.INPUT[]) new WinUser.INPUT().toArray(1);
+        pInputs[0].type = new WinDef.DWORD(WinUser.INPUT.INPUT_KEYBOARD);
+        pInputs[0].input.setType(WinUser.KEYBDINPUT.class);
+        pInputs[0].input.ki.wVk = new WinDef.WORD(virtualKeyCode);
+        int flags = WinUser.KEYBDINPUT.KEYEVENTF_KEYUP;
+        if (extendedKey)
+            flags |= WinUser.KEYBDINPUT.KEYEVENTF_EXTENDEDKEY;
+        pInputs[0].input.ki.dwFlags = new WinDef.DWORD(flags);
+        pInputs[0].input.ki.dwExtraInfo =
+                new BaseTSD.ULONG_PTR(MOUSEMASTER_INJECTED_EVENT_SIGNATURE);
+        User32.INSTANCE.SendInput(new WinDef.DWORD(1), pInputs,
+                pInputs[0].size());
+    }
+
+    /**
+     * Sentinel value placed in dwExtraInfo of the synthetic VK_CAPITAL tap that we
+     * inject to clear the OS toggle state.  The keyboard hook recognises this value
+     * and lets the event pass through to the OS (so the toggle actually clears),
+     * while still eating any *other* injected VK_CAPITAL events from external apps.
+     */
+    public static final long CAPS_LOCK_CLEAR_EXTRA_INFO = 0xCAFECAFEL;
+
+    /**
+     * True while a synthetic CAPS_LOCK_CLEAR_EXTRA_INFO tap is in flight (SendInput
+     * called but the hook has not yet processed the release). Prevents re-injecting
+     * a second tap before the first one clears the toggle, which would flip it back on.
+     */
+    private static boolean capsLockClearTapInFlight;
+    private static int capsLockClearTapInFlightTicks;
+    private static final int CAPS_LOCK_CLEAR_TAP_TIMEOUT_TICKS = 10;
+
+    /** Called by the hook when our synthetic clear-tap release is acknowledged. */
+    public static void onCapsLockClearTapReleaseAcknowledged() {
+        capsLockClearTapInFlight = false;
+        capsLockClearTapInFlightTicks = 0;
+    }
+
+    /**
+     * If the OS caps-lock toggle is on, synthesize a tap on VK_CAPITAL so the LED
+     * and keyboard state turn off. Used when physical caps lock is remapped and
+     * must not leave caps-word mode engaged.
+     * GetKeyState low bit is the toggle state; GetAsyncKeyState low bit is
+     * "pressed since last call" which is unreliable for toggle detection.
+     */
+    public static void clearCapsLockToggleStateIfOn() {
+        short state =
+                ExtendedUser32.INSTANCE.GetKeyState(
+                        WindowsVirtualKey.VK_CAPITAL.virtualKeyCode);
+        if ((state & 1) == 0)
+            return;
+        // If a clear-tap is already in flight, don't inject another one.
+        // A second tap before the first is processed would flip the toggle back ON.
+        if (capsLockClearTapInFlight) {
+            capsLockClearTapInFlightTicks++;
+            if (capsLockClearTapInFlightTicks >= CAPS_LOCK_CLEAR_TAP_TIMEOUT_TICKS) {
+                logger.warn("CapsLock clear tap in-flight timeout, resetting flag");
+                capsLockClearTapInFlight = false;
+                capsLockClearTapInFlightTicks = 0;
+            }
+            else {
+                return;
+            }
+        }
+        capsLockClearTapInFlight = true;
+        WinUser.INPUT[] pInputs =
+                (WinUser.INPUT[]) new WinUser.INPUT().toArray(2);
+        for (int i = 0; i < 2; i++) {
+            pInputs[i].type = new WinDef.DWORD(WinUser.INPUT.INPUT_KEYBOARD);
+            pInputs[i].input.setType(WinUser.KEYBDINPUT.class);
+            pInputs[i].input.ki.wVk =
+                    new WinDef.WORD(WindowsVirtualKey.VK_CAPITAL.virtualKeyCode);
+            int flags = i == 0 ? 0 : WinUser.KEYBDINPUT.KEYEVENTF_KEYUP;
+            pInputs[i].input.ki.dwFlags = new WinDef.DWORD(flags);
+            pInputs[i].input.ki.dwExtraInfo =
+                    new BaseTSD.ULONG_PTR(CAPS_LOCK_CLEAR_EXTRA_INFO);
+        }
+        User32.INSTANCE.SendInput(new WinDef.DWORD(2), pInputs, pInputs[0].size());
+    }
+
+}

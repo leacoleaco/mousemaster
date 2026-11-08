@@ -106,11 +106,11 @@ public final class MousemasterTray {
         applyConsoleVisibility(checked);
     }
 
-    private static void applyConsoleVisibility(boolean visible) {
+    private void applyConsoleVisibility(boolean visible) {
         if (visible)
-            MousemasterApplication.showConsole();
+            app.console().show();
         else
-            MousemasterApplication.hideConsole();
+            app.console().hide();
     }
 
     private void blockConsoleActionSignals(Runnable runnable) {

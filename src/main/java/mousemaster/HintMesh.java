@@ -4,11 +4,16 @@ import java.util.List;
 
 /**
  * Unlike a grid, it does not necessarily have fixed-size cells.
+ *
+ * decoration = the whole-area decoration (the grid drawn as one big cell).
+ * subDecoration = the per-cell decoration tiled into each cell (its own
+ * subDecoration is the next depth: subsubdecoration).
  */
-public record HintMesh(boolean visible, List<Hint> hints, int prefixLength,
-                       List<Key> selectedKeySequence,
-                       ViewportFilterMap<HintMeshStyle> styleByFilter,
-                       Rectangle backgroundArea) {
+public record HintMesh(boolean visible, boolean excludeFromCapture, List<Hint> hints,
+                       int prefixLength, List<Key> selectedKeySequence,
+                       ScreenFilterMap<HintMeshStyle> styleByFilter,
+                       Rectangle area, Rectangle backgroundArea, HintMesh decoration,
+                       HintMesh subDecoration, List<Hint> savedHints) {
 
     public HintMeshBuilder builder() {
         return new HintMeshBuilder(this);
@@ -16,22 +21,32 @@ public record HintMesh(boolean visible, List<Hint> hints, int prefixLength,
 
     public static class HintMeshBuilder {
         private boolean visible;
+        private boolean excludeFromCapture;
         private List<Hint> hints;
         private int prefixLength;
         private List<Key> selectedKeySequence = List.of();
-        private ViewportFilterMap<HintMeshStyle> styleByFilter;
+        private ScreenFilterMap<HintMeshStyle> styleByFilter;
+        private Rectangle area;
         private Rectangle backgroundArea;
+        private HintMesh decoration;
+        private HintMesh subDecoration;
+        private List<Hint> savedHints = List.of();
 
         public HintMeshBuilder() {
         }
 
         public HintMeshBuilder(HintMesh hintMesh) {
             this.visible = hintMesh.visible;
+            this.excludeFromCapture = hintMesh.excludeFromCapture;
             this.hints = hintMesh.hints;
             this.prefixLength = hintMesh.prefixLength;
             this.selectedKeySequence = hintMesh.selectedKeySequence;
             this.styleByFilter = hintMesh.styleByFilter;
+            this.area = hintMesh.area;
             this.backgroundArea = hintMesh.backgroundArea;
+            this.decoration = hintMesh.decoration;
+            this.subDecoration = hintMesh.subDecoration;
+            this.savedHints = hintMesh.savedHints;
         }
 
 
@@ -51,12 +66,17 @@ public record HintMesh(boolean visible, List<Hint> hints, int prefixLength,
             return selectedKeySequence;
         }
 
-        public ViewportFilterMap<HintMeshStyle> styleByFilter() {
+        public ScreenFilterMap<HintMeshStyle> styleByFilter() {
             return styleByFilter;
         }
 
         public HintMeshBuilder visible(boolean visible) {
             this.visible = visible;
+            return this;
+        }
+
+        public HintMeshBuilder excludeFromCapture(boolean excludeFromCapture) {
+            this.excludeFromCapture = excludeFromCapture;
             return this;
         }
 
@@ -76,8 +96,17 @@ public record HintMesh(boolean visible, List<Hint> hints, int prefixLength,
         }
 
         public HintMeshBuilder styleByFilter(
-                ViewportFilterMap<HintMeshStyle> styleByFilter) {
+                ScreenFilterMap<HintMeshStyle> styleByFilter) {
             this.styleByFilter = styleByFilter;
+            return this;
+        }
+
+        public Rectangle area() {
+            return area;
+        }
+
+        public HintMeshBuilder area(Rectangle area) {
+            this.area = area;
             return this;
         }
 
@@ -90,9 +119,33 @@ public record HintMesh(boolean visible, List<Hint> hints, int prefixLength,
             return this;
         }
 
+        public HintMesh decoration() {
+            return decoration;
+        }
+
+        public HintMeshBuilder decoration(HintMesh decoration) {
+            this.decoration = decoration;
+            return this;
+        }
+
+        public HintMesh subDecoration() {
+            return subDecoration;
+        }
+
+        public HintMeshBuilder subDecoration(HintMesh subDecoration) {
+            this.subDecoration = subDecoration;
+            return this;
+        }
+
+        public HintMeshBuilder savedHints(List<Hint> savedHints) {
+            this.savedHints = savedHints;
+            return this;
+        }
+
         public HintMesh build() {
-            return new HintMesh(visible, hints, prefixLength, selectedKeySequence,
-                    styleByFilter, backgroundArea);
+            return new HintMesh(visible, excludeFromCapture, hints, prefixLength,
+                    selectedKeySequence, styleByFilter, area, backgroundArea, decoration,
+                    subDecoration, savedHints);
         }
     }
 
