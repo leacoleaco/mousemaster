@@ -1,5 +1,7 @@
 package mousemaster;
 
+import mousemaster.platform.UiAutomation.UiElement;
+
 public sealed interface Command {
 
     record SwitchMode(String modeName) implements Command {}
@@ -104,6 +106,9 @@ public sealed interface Command {
     record SelectHintKey() implements Command {}
     record DeselectHintKey() implements Command {}
     record DeselectAllHintKeys() implements Command {}
+
+    /** Keep only the UI hints of this role. The full scan stays, so another filter can replace it. */
+    record FilterUiHints(UiElement.Role role) implements Command {}
 
     record MutateMode(String modeName, ModePropertyPath propertyPath, Object newPropertyValue, Combo combo) implements Command {
         @Override

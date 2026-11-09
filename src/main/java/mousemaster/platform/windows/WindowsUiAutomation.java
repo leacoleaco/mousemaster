@@ -118,6 +118,7 @@ public class WindowsUiAutomation implements UiAutomation {
         cachedCacheRequest = uia.createCacheRequest();
         if (cachedCacheRequest != null) {
             cachedCacheRequest.addProperty(UIA_BoundingRectanglePropertyId);
+            cachedCacheRequest.addProperty(UIA_ControlTypePropertyId);
         }
     }
 
@@ -460,8 +461,9 @@ public class WindowsUiAutomation implements UiAutomation {
                 int height = rect.bottom - rect.top;
                 if (width <= 0 || height <= 0)
                     continue;
-                UiElement uiElement =
-                        new UiElement(new Rectangle(rect.left, rect.top, width, height));
+                UiElement uiElement = new UiElement(
+                        new Rectangle(rect.left, rect.top, width, height),
+                        UiElement.Role.fromWindowsControlType(element.getCachedControlType()));
                 if (!elementBounds.contains(uiElement.centerX(), uiElement.centerY()))
                     continue;
                 if (!clickReaches(hwnd, uiElement.centerX(), uiElement.centerY()))
@@ -627,6 +629,18 @@ public class WindowsUiAutomation implements UiAutomation {
             if (W32Errors.FAILED(hr) || ppArray.getValue() == null)
                 return null;
             return new UIAutomationElementArray(ppArray.getValue());
+        }
+
+        // IUIAutomationElement::GetCachedPropertyValue — vtable index 12
+        int getCachedControlType() {
+            Memory variant = new Memory(24);
+            variant.clear();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(12,
+                    new Object[]{getPointer(), UIA_ControlTypePropertyId, variant},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || variant.getShort(0) != VT_I4)
+                return 0;
+            return variant.getInt(8);
         }
 
         // IUIAutomationElement::get_CachedBoundingRectangle — vtable index 75

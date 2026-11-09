@@ -15,6 +15,7 @@ import mousemaster.VelocityConfiguration.VelocityConfigurationBuilder;
 import mousemaster.ScreenFilterMap.ScreenFilterMapBuilder;
 import mousemaster.Wheel.WheelBuilder;
 import mousemaster.ZoomConfiguration.ZoomConfigurationBuilder;
+import mousemaster.platform.UiAutomation.UiElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -180,6 +181,7 @@ public class ConfigurationParser {
                 new Property<>("select", Map.of()),
                 new Property<>("deselect", Map.of()),
                 new Property<>("deselect-all", Map.of()),
+                new Property<>("filter-ui-hints", Map.of()),
                 new Property<>("break-combo-preparation", Map.of()),
                 new Property<>("break-macro", Map.of()),
                 new Property<>("exit", Map.of()),
@@ -2135,6 +2137,21 @@ public class ConfigurationParser {
             case "deselect-all" -> mode.comboMap.deselectAll.parseReferenceOr(propertyKey, propertyValue,
                     commandsByCombo -> setCommand(mode.comboMap.deselectAll.builder, propertyValue, new DeselectAllHintKeys(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                     childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "filter-ui-hints" -> {
+                if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "filter-ui-hints requires a kind: filter-ui-hints.<text|button|link>");
+                UiElement.Role role = switch (keyMatcher.group(group4)) {
+                    case "text" -> UiElement.Role.TEXT;
+                    case "button" -> UiElement.Role.BUTTON;
+                    case "link" -> UiElement.Role.LINK;
+                    default -> throw new IllegalArgumentException(
+                            "Unknown filter-ui-hints kind: " + keyMatcher.group(group4));
+                };
+                setCommand(mode.comboMap.filterUiHints.builder, propertyValue,
+                        new FilterUiHints(role), propertyKey, defaultComboMoveDuration,
+                        keyAliases, appAliases, keyResolver, allVariableNames);
+            }
             case "break-combo-preparation" -> mode.comboMap.breakComboPreparation.parseReferenceOr(propertyKey, propertyValue,
                     commandsByCombo -> setCommand(mode.comboMap.breakComboPreparation.builder,  propertyValue, new BreakComboPreparation(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                     childPropertiesByParentProperty, nonRootPropertyKeys);
@@ -2980,22 +2997,29 @@ public class ConfigurationParser {
             throw new IllegalArgumentException(
                     "idle-mode.double-tap-to-normal.key-alias='" + cfg.keyAlias +
                     "' but key-alias." + cfg.keyAlias + " is not defined");
-        String alias = cfg.keyAlias;
+        KeyAlias keyAlias = keyAliases.get(cfg.keyAlias);
         int between = cfg.maxMillisBetweenTaps;
         int lead = cfg.leadingDebounceMillis;
         String targetMode = cfg.targetModeName;
         modeReferences.add(checkModeReference(targetMode));
-        String comboCore;
-        if (cfg.maxMillisPerTap != null) {
-            int per = cfg.maxMillisPerTap;
-            comboCore = "+" + alias + "-0-" + per + " -" + alias + "-0-" + between +
-                    " +" + alias + "-0-" + per + " -" + alias;
+        // One combo per key, so a double-tap is that key twice. Left Ctrl then Left Alt
+        // does not count.
+        List<String> comboParts = new ArrayList<>();
+        for (Key key : keyAlias.keys()) {
+            String name = key.staticName();
+            String comboCore;
+            if (cfg.maxMillisPerTap != null) {
+                int per = cfg.maxMillisPerTap;
+                comboCore = "+" + name + "-0-" + per + " -" + name + "-0-" + between +
+                        " +" + name + "-0-" + per + " -" + name;
+            }
+            else {
+                comboCore = "+" + name + " -" + name + "-0-" + between +
+                        " +" + name + " -" + name;
+            }
+            comboParts.add(lead > 0 ? "#!{" + name + "}-" + lead + " " + comboCore : comboCore);
         }
-        else {
-            comboCore = "+" + alias + " -" + alias + "-0-" + between +
-                    " +" + alias + " -" + alias;
-        }
-        String comboString = lead > 0 ? "#!{" + alias + "}-" + lead + " " + comboCore : comboCore;
+        String comboString = String.join(" | ", comboParts);
         String label = Mode.IDLE_MODE_NAME + ".double-tap-to-normal(generated)";
         setCommand(idle.comboMap.to.builder, comboString, new SwitchMode(targetMode),
                 label, defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
@@ -4961,6 +4985,7 @@ public class ConfigurationParser {
         Property<Map<Combo, List<Command>>> select;
         Property<Map<Combo, List<Command>>> deselect;
         Property<Map<Combo, List<Command>>> deselectAll;
+        Property<Map<Combo, List<Command>>> filterUiHints;
 
         public ComboMapConfigurationBuilder(String modeName,
                                             Map<PropertyKey, Property<?>> propertyByKey) {
@@ -4999,6 +5024,7 @@ public class ConfigurationParser {
             select = new ComboMapProperty("select", modeName, propertyByKey);
             deselect = new ComboMapProperty("deselect", modeName, propertyByKey);
             deselectAll = new ComboMapProperty("deselect-all", modeName, propertyByKey);
+            filterUiHints = new ComboMapProperty("filter-ui-hints", modeName, propertyByKey);
         }
 
           private static class ComboMapProperty extends Property<Map<Combo, List<Command>>> {
@@ -5053,6 +5079,7 @@ public class ConfigurationParser {
             add(commandsByCombo, select.builder);
             add(commandsByCombo, deselect.builder);
             add(commandsByCombo, deselectAll.builder);
+            add(commandsByCombo, filterUiHints.builder);
             add(commandsByCombo, to.builder);
             add(commandsByCombo, startMove.builder);
             add(commandsByCombo, stopMove.builder);

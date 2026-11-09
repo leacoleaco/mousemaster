@@ -25,7 +25,7 @@ public record KeyAliasUiDefinition(
                     "可与「启用修饰键」组合；可填多个键，空格分隔（例如 f、e、capslock）。"),
             new KeyAliasUiDefinition("enabledoubletap", true,
                     "双击进入正常模式 — 按键",
-                    "配合 idle-mode.double-tap-to-normal.*：在空闲模式下快速双击此别名中的键进入正常模式。"),
+                    "配合 idle-mode.double-tap-to-normal.*：空闲时把别名里的某一个键连按两次进入正常模式。左 Ctrl 两次、或左 Alt 两次，各自计算。"),
             new KeyAliasUiDefinition("exit", true,
                     "退出到空闲模式",
                     "从正常模式退回空闲模式的按键，可多个。"),

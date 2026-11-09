@@ -16,7 +16,11 @@ public interface UiAutomation {
      */
     Future<List<UiElement>> startFindUiElementsInArea(Rectangle area);
 
-    record UiElement(Rectangle rectangle) {
+    record UiElement(Rectangle rectangle, Role role) {
+
+        public UiElement(Rectangle rectangle) {
+            this(rectangle, Role.OTHER);
+        }
 
         public double centerX() {
             return rectangle.x() + rectangle.width() / 2d;
@@ -24,6 +28,24 @@ public interface UiAutomation {
 
         public double centerY() {
             return rectangle.y() + rectangle.height() / 2d;
+        }
+
+        /**
+         * The kinds a UI-hint filter can keep. {@link #OTHER} is everything else, including
+         * elements found by vision, which have no control type.
+         */
+        public enum Role {
+            TEXT, BUTTON, LINK, OTHER;
+
+            /** Windows UI Automation control type ids. A document is the page, not a field. */
+            public static Role fromWindowsControlType(int controlTypeId) {
+                return switch (controlTypeId) {
+                    case 50004, 50003, 50016 -> TEXT;   // Edit, ComboBox, Spinner
+                    case 50000, 50031 -> BUTTON;        // Button, SplitButton
+                    case 50005 -> LINK;                 // Hyperlink
+                    default -> OTHER;
+                };
+            }
         }
 
     }

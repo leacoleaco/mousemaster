@@ -230,6 +230,29 @@ class GridCommandTest {
     }
 
     @Test
+    void aUiHintFilterKeepsOneKindAndCanMatchNothing() throws IOException {
+        uiElements = List.of(
+                new UiElement(new Rectangle(100, 100, 40, 20), UiElement.Role.BUTTON),
+                new UiElement(new Rectangle(300, 100, 80, 20), UiElement.Role.TEXT));
+        start("""
+                idle-mode.to.ui-hint-mode=+u
+                ui-hint-mode.to.idle-mode=+esc
+                ui-hint-mode.overlay.type=ui-accessibility
+                ui-hint-mode.overlay.selection-keys=a b c d
+                """);
+        hintManager.mouseMoved(200, 300);
+        switchMode("ui-hint-mode");
+        hintManager.completePendingUiHintQuery();
+        assertEquals(2, hintManager.hintMesh().hints().size());
+        hintManager.filterUiHints(UiElement.Role.TEXT);
+        assertEquals(List.of(340.0), hintManager.hintMesh().hints().stream()
+                .map(Hint::centerX).toList());
+        hintManager.filterUiHints(UiElement.Role.LINK);
+        assertEquals(List.of(), hintManager.hintMesh().hints());
+        assertFalse(hintManager.hintMeshEmpty());
+    }
+
+    @Test
     void betweenUiHintsTheTargetGoesToTheNearestElement() throws IOException {
         uiElements = List.of(new UiElement(new Rectangle(100, 100, 50, 20)),
                 new UiElement(new Rectangle(400, 100, 50, 20)));

@@ -68,6 +68,8 @@ public class HintManager implements ModeListener, MousePositionListener {
 
     private PendingUiHintQuery pendingUiHintQuery;
     private List<UiElement> lastUiElements = List.of();
+    /** Null shows every scanned element. Set by {@link #filterUiHints}. */
+    private UiElement.Role uiHintRoleFilter;
     private Point uiElementQueryOrderPoint;
     private Rectangle uiElementQueryArea;
 
@@ -612,8 +614,10 @@ public class HintManager implements ModeListener, MousePositionListener {
         boolean hintWasJustSelected = hintJustSelected;
         boolean sameMode =
                 currentMode != null && newMode.name().equals(currentMode.name());
-        if (!sameMode)
+        if (!sameMode) {
             lastOverlayArea = overlayArea();
+            uiHintRoleFilter = null;
+        }
         if (newMode.hintMesh().mouseFollowsTarget())
             stoppedTargetPoint = null;
         else if (stoppedTargetPoint == null)
@@ -772,7 +776,7 @@ public class HintManager implements ModeListener, MousePositionListener {
             }
             else {
                 newHintMesh = buildHintMesh(hintMeshConfiguration, newMode.zoom(), newZoom,
-                        newScreenFilter, lastUiElements, uiElementQueryArea,
+                        newScreenFilter, filteredUiElements(lastUiElements), uiElementQueryArea,
                         uiElementQueryOrderPoint, screenManager.activeScreen());
             }
         }
@@ -889,8 +893,45 @@ public class HintManager implements ModeListener, MousePositionListener {
     }
 
     public boolean hintMeshEmpty() {
+        // A filter that keeps nothing is a choice, not an empty scan: stay in the mode
+        // so another filter key can be pressed.
         return pendingUiHintQuery == null && hintMesh != null &&
-               hintMesh.hints().isEmpty();
+               hintMesh.hints().isEmpty() && uiHintRoleFilter == null;
+    }
+
+    /**
+     * Shows only the UI hints of {@code role}. Ignored for vision hints, which have no
+     * control type. A filter pressed while the scan is still running is applied when it finishes.
+     */
+    public void filterUiHints(UiElement.Role role) {
+        if (currentMode == null ||
+            currentMode.hintMesh().type().type() != HintMeshTypeType.UI_ACCESSIBILITY)
+            return;
+        uiHintRoleFilter = role;
+        if (pendingUiHintQuery != null)
+            return;
+        showUiElements(filteredUiElements(lastUiElements));
+    }
+
+    private List<UiElement> filteredUiElements(List<UiElement> uiElements) {
+        if (uiHintRoleFilter == null)
+            return uiElements;
+        return uiElements.stream()
+                         .filter(element -> element.role() == uiHintRoleFilter)
+                         .toList();
+    }
+
+    private void showUiElements(List<UiElement> uiElements) {
+        if (hintMesh != null)
+            hintMesh = hintMesh.builder().selectedKeySequence(List.of()).build();
+        HintMeshConfiguration hintMeshConfiguration = currentMode.hintMesh();
+        HintMesh newHintMesh = buildHintMesh(hintMeshConfiguration,
+                currentMode.zoom(), currentZoom, screenFilter,
+                uiElements, uiElementQueryArea, uiElementQueryOrderPoint,
+                screenManager.activeScreen());
+        activateHintMesh(currentMode, newHintMesh, hintMeshConfiguration, screenFilter,
+                currentZoom, false, true);
+        overlay.runPendingHintMeshWork();
     }
 
     public void completePendingUiHintQuery() {
@@ -919,7 +960,7 @@ public class HintManager implements ModeListener, MousePositionListener {
         ZoomConfiguration zoom = currentMode.zoom();
         HintMesh newHintMesh = buildHintMesh(hintMeshConfiguration,
                 zoom, pending.zoom(), screenFilter,
-                uiElements, uiElementQueryArea, uiElementQueryOrderPoint,
+                filteredUiElements(uiElements), uiElementQueryArea, uiElementQueryOrderPoint,
                 screenManager.activeScreen());
         activateHintMesh(currentMode, newHintMesh, hintMeshConfiguration, screenFilter,
                 currentZoom, false, true);

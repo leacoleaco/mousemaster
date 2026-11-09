@@ -143,6 +143,7 @@ public class CommandRunner {
             case SelectHintKey selectHintKey -> hintManager.selectHintKey(eventKey);
             case DeselectHintKey deselectHintKey -> hintManager.deselectHintKey();
             case DeselectAllHintKeys deselectAllHintKeys -> hintManager.deselectAllHintKeys();
+            case FilterUiHints filterUiHints -> hintManager.filterUiHints(filterUiHints.role());
             // @formatter:on
         }
     }
