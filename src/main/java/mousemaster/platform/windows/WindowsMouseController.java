@@ -153,39 +153,52 @@ public class WindowsMouseController implements MouseController {
     }
 
     /**
-     * Button changes are sent on the calling thread. SendInput reenters the keyboard
-     * hook synchronously; that hook ignores the reentrant call. A background thread
-     * recorded the press (the indicator turned green) without the click reaching the
-     * window under the cursor.
+     * Button changes are queued while the keyboard hook is on the stack. Windows drops
+     * a mouse SendInput made before that hook returns, which is why the indicator turned
+     * green and the window under the cursor never received the click. The main loop
+     * flushes the queue after the hook has returned.
      */
+    private final ArrayDeque<Integer> pendingButtonFlags = new ArrayDeque<>();
+
     @Override
     public void pressLeft() {
-        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_LEFTDOWN);
+        pendingButtonFlags.add(ExtendedUser32.MOUSEEVENTF_LEFTDOWN);
     }
 
     @Override
     public void pressMiddle() {
-        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_MIDDLEDOWN);
+        pendingButtonFlags.add(ExtendedUser32.MOUSEEVENTF_MIDDLEDOWN);
     }
 
     @Override
     public void pressRight() {
-        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_RIGHTDOWN);
+        pendingButtonFlags.add(ExtendedUser32.MOUSEEVENTF_RIGHTDOWN);
     }
 
     @Override
     public void releaseLeft() {
-        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_LEFTUP);
+        pendingButtonFlags.add(ExtendedUser32.MOUSEEVENTF_LEFTUP);
     }
 
     @Override
     public void releaseMiddle() {
-        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_MIDDLEUP);
+        pendingButtonFlags.add(ExtendedUser32.MOUSEEVENTF_MIDDLEUP);
     }
 
     @Override
     public void releaseRight() {
-        sendInput(0, 0, 0, ExtendedUser32.MOUSEEVENTF_RIGHTUP);
+        pendingButtonFlags.add(ExtendedUser32.MOUSEEVENTF_RIGHTUP);
+    }
+
+    public void flushPendingButtons() {
+        if (pendingButtonFlags.isEmpty())
+            return;
+        int count = pendingButtonFlags.size();
+        int[] flags = new int[count];
+        for (int index = 0; index < count; index++)
+            flags[index] = pendingButtonFlags.removeFirst();
+        for (int flag : flags)
+            sendInput(0, 0, 0, flag);
     }
 
     /**

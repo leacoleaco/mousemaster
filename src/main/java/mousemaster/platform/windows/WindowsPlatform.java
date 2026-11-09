@@ -110,6 +110,8 @@ public class WindowsPlatform implements Platform {
 
     @Override
     public void update(double delta) {
+        if (!inKeyboardHookCallback)
+            mouse.flushPendingButtons();
         if (restartProcessRequested)
             restartProcess();
         if (killProcessRequested)
@@ -133,10 +135,14 @@ public class WindowsPlatform implements Platform {
 
     @Override
     public void pumpEvents() {
+        if (!inKeyboardHookCallback)
+            mouse.flushPendingButtons();
         while (User32.INSTANCE.PeekMessage(msg, null, 0, 0, 1)) {
             User32.INSTANCE.TranslateMessage(msg);
             User32.INSTANCE.DispatchMessage(msg);
         }
+        if (!inKeyboardHookCallback)
+            mouse.flushPendingButtons();
     }
 
 
