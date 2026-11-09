@@ -12,6 +12,22 @@ public class MouseState {
         return mouseManager.moving();
     }
 
+    public boolean movingUp() {
+        return mouseManager.movingUp();
+    }
+
+    public boolean movingDown() {
+        return mouseManager.movingDown();
+    }
+
+    public boolean movingLeft() {
+        return mouseManager.movingLeft();
+    }
+
+    public boolean movingRight() {
+        return mouseManager.movingRight();
+    }
+
     public boolean leftPressing() {
         return mouseManager.leftPressing();
     }
@@ -26,6 +42,22 @@ public class MouseState {
 
     public boolean wheeling() {
         return mouseManager.wheeling();
+    }
+
+    public boolean wheelingUp() {
+        return mouseManager.wheelingUp();
+    }
+
+    public boolean wheelingDown() {
+        return mouseManager.wheelingDown();
+    }
+
+    public boolean wheelingLeft() {
+        return mouseManager.wheelingLeft();
+    }
+
+    public boolean wheelingRight() {
+        return mouseManager.wheelingRight();
     }
 
     public boolean pressing() {

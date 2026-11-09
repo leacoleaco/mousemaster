@@ -78,32 +78,9 @@ class PreconditionOnlyMutationTest {
 
     /** Sets the mouse and keyboard keys the way ModeController does, for a left click. */
     private void leftClick() {
-        setMouseAndKeyboardKeys(new MouseState(null) {
-            @Override
-            public boolean moving() {
-                return false;
-            }
-
-            @Override
-            public boolean wheeling() {
-                return false;
-            }
-
-            @Override
-            public boolean leftPressing() {
-                return true;
-            }
-
-            @Override
-            public boolean middlePressing() {
-                return false;
-            }
-
-            @Override
-            public boolean rightPressing() {
-                return false;
-            }
-        });
+        MouseManager mouseManager = mouseManager();
+        mouseManager.pressLeft();
+        setMouseAndKeyboardKeys(new MouseState(mouseManager));
     }
 
     private void setMouseAndKeyboardKeys(MouseState mouseState) {

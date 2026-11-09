@@ -487,7 +487,9 @@ Some virtual keys are maintained by mousemaster. They can be read like any other
 | Key                        | Pressed when                                                                                                        |
 |----------------------------|------------------------------------------------------------------------------------------------------------------|
 | `ismoving`                 | mousemaster is moving the mouse.                                                                                 |
+| `ismovingup`, `ismovingdown`, `ismovingleft`, `ismovingright` | The mouse is traveling that way, including the coast after the key is released. The latest key on an axis wins. |
 | `iswheeling`               | mousemaster is wheeling.                                                                                         |
+| `iswheelingup`, `iswheelingdown`, `iswheelingleft`, `iswheelingright` | The wheel is traveling that way, including the coast after the key is released. The latest key on an axis wins. |
 | `ismousepressing`          | mousemaster is holding any mouse button.                                                                         |
 | `isleftmousepressing`      | mousemaster is holding the left mouse button.                                                                    |
 | `ismiddlemousepressing`    | mousemaster is holding the middle mouse button.                                                                  |

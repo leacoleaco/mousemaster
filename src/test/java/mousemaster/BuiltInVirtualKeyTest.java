@@ -11,7 +11,11 @@ class BuiltInVirtualKeyTest {
 
     private static final List<Key> KEYS =
             List.of(BuiltInVirtualKey.IS_IDLING, BuiltInVirtualKey.IS_MOVING,
-                    BuiltInVirtualKey.IS_WHEELING, BuiltInVirtualKey.IS_MOUSE_PRESSING,
+                    BuiltInVirtualKey.IS_MOVING_UP, BuiltInVirtualKey.IS_MOVING_DOWN,
+                    BuiltInVirtualKey.IS_MOVING_LEFT, BuiltInVirtualKey.IS_MOVING_RIGHT,
+                    BuiltInVirtualKey.IS_WHEELING, BuiltInVirtualKey.IS_WHEELING_UP,
+                    BuiltInVirtualKey.IS_WHEELING_DOWN, BuiltInVirtualKey.IS_WHEELING_LEFT,
+                    BuiltInVirtualKey.IS_WHEELING_RIGHT, BuiltInVirtualKey.IS_MOUSE_PRESSING,
                     BuiltInVirtualKey.IS_LEFT_MOUSE_PRESSING,
                     BuiltInVirtualKey.IS_MIDDLE_MOUSE_PRESSING,
                     BuiltInVirtualKey.IS_RIGHT_MOUSE_PRESSING,

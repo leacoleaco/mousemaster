@@ -309,6 +309,7 @@
                                     <filtering>true</filtering>
                                     <excludes>
                                         <exclude>**/*.gz</exclude> <!-- Exclude compressed resources from filtering. -->
+                                        <exclude>**/*.ico</exclude> <!-- Filtering would corrupt the icon bytes. -->
                                         <exclude>licenses/**</exclude> <!-- Exclude license texts from filtering. -->
                                     </excludes>
                                 </resource>

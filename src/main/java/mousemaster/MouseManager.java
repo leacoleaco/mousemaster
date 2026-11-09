@@ -52,6 +52,22 @@ public class MouseManager implements ModeListener, MousePositionListener {
         return mover.moving();
     }
 
+    boolean movingUp() {
+        return mover.movingUp();
+    }
+
+    boolean movingDown() {
+        return mover.movingDown();
+    }
+
+    boolean movingLeft() {
+        return mover.movingLeft();
+    }
+
+    boolean movingRight() {
+        return mover.movingRight();
+    }
+
     public boolean leftPressing() {
         return leftPressing || leftJustPressed;
     }
@@ -67,6 +83,35 @@ public class MouseManager implements ModeListener, MousePositionListener {
     boolean wheeling() {
         return !xWheelForwardStack.isEmpty() || !yWheelForwardStack.isEmpty() ||
                wheelDecelerating;
+    }
+
+    /** The way the wheel is traveling. The latest key on an axis wins, and a coast keeps
+     *  the direction it started with. */
+    boolean wheelingUp() {
+        return wheelDirection(yWheelForwardStack, false, wheelDecelerateYActive,
+                wheelDecelerateYForward);
+    }
+
+    boolean wheelingDown() {
+        return wheelDirection(yWheelForwardStack, true, wheelDecelerateYActive,
+                wheelDecelerateYForward);
+    }
+
+    boolean wheelingLeft() {
+        return wheelDirection(xWheelForwardStack, false, wheelDecelerateXActive,
+                wheelDecelerateXForward);
+    }
+
+    boolean wheelingRight() {
+        return wheelDirection(xWheelForwardStack, true, wheelDecelerateXActive,
+                wheelDecelerateXForward);
+    }
+
+    private boolean wheelDirection(Deque<Boolean> forwardStack, boolean forward,
+                                   boolean coastActive, boolean coastForward) {
+        if (!forwardStack.isEmpty())
+            return forwardStack.peek() == forward;
+        return wheelDecelerating && coastActive && coastForward == forward;
     }
 
     private boolean activelyWheeling() {

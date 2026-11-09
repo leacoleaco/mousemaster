@@ -57,6 +57,31 @@ public class Mover {
         return yMoveForwardStack.contains(forward);
     }
 
+    /** The way the mouse is traveling. The latest key on an axis wins, and a coast keeps
+     *  the direction it started with. Forward is right or down. */
+    boolean movingUp() {
+        return direction(yMoveForwardStack, false, decelerateYActive, decelerateYForward);
+    }
+
+    boolean movingDown() {
+        return direction(yMoveForwardStack, true, decelerateYActive, decelerateYForward);
+    }
+
+    boolean movingLeft() {
+        return direction(xMoveForwardStack, false, decelerateXActive, decelerateXForward);
+    }
+
+    boolean movingRight() {
+        return direction(xMoveForwardStack, true, decelerateXActive, decelerateXForward);
+    }
+
+    private boolean direction(Deque<Boolean> forwardStack, boolean forward, boolean coastActive,
+                              boolean coastForward) {
+        if (!forwardStack.isEmpty())
+            return forwardStack.peek() == forward;
+        return decelerating && coastActive && coastForward == forward;
+    }
+
     private boolean activelyMoving() {
         return !xMoveForwardStack.isEmpty() || !yMoveForwardStack.isEmpty();
     }

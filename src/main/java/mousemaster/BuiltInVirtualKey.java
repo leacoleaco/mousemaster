@@ -13,7 +13,17 @@ public final class BuiltInVirtualKey {
     public static final Key IS_IDLING = new Key("isidling", null, null);
 
     public static final Key IS_MOVING = new Key("ismoving", null, null);
+    /** Pressed while the mouse is traveling that way, including the coast after the key is released. */
+    public static final Key IS_MOVING_UP = new Key("ismovingup", null, null);
+    public static final Key IS_MOVING_DOWN = new Key("ismovingdown", null, null);
+    public static final Key IS_MOVING_LEFT = new Key("ismovingleft", null, null);
+    public static final Key IS_MOVING_RIGHT = new Key("ismovingright", null, null);
     public static final Key IS_WHEELING = new Key("iswheeling", null, null);
+    /** Pressed while the wheel is traveling that way, including the coast after the key is released. */
+    public static final Key IS_WHEELING_UP = new Key("iswheelingup", null, null);
+    public static final Key IS_WHEELING_DOWN = new Key("iswheelingdown", null, null);
+    public static final Key IS_WHEELING_LEFT = new Key("iswheelingleft", null, null);
+    public static final Key IS_WHEELING_RIGHT = new Key("iswheelingright", null, null);
     public static final Key IS_MOUSE_PRESSING = new Key("ismousepressing", null, null);
     public static final Key IS_LEFT_MOUSE_PRESSING =
             new Key("isleftmousepressing", null, null);
@@ -30,7 +40,9 @@ public final class BuiltInVirtualKey {
     public static final Key IS_MACOS = new Key("ismacos", null, null);
 
     public static final Set<Key> STATIC_KEYS =
-            Set.of(IS_IDLING, IS_MOVING, IS_WHEELING, IS_MOUSE_PRESSING,
+            Set.of(IS_IDLING, IS_MOVING, IS_MOVING_UP, IS_MOVING_DOWN, IS_MOVING_LEFT,
+                    IS_MOVING_RIGHT, IS_WHEELING, IS_WHEELING_UP, IS_WHEELING_DOWN,
+                    IS_WHEELING_LEFT, IS_WHEELING_RIGHT, IS_MOUSE_PRESSING,
                     IS_LEFT_MOUSE_PRESSING, IS_MIDDLE_MOUSE_PRESSING,
                     IS_RIGHT_MOUSE_PRESSING, IS_UNHANDLED_KEY_PRESSING,
                     IS_OVERLAY_EMPTY, IS_WINDOWS, IS_MACOS);
