@@ -10,10 +10,18 @@ if errorlevel 1 (
 cd /d "%~dp0"
 
 set "JAVA=%~dp0runtime\bin\javaw.exe"
-set "JAR=%~dp0mousemaster-95-jar-with-dependencies.jar"
+set "JAR="
+for /f "delims=" %%F in ('dir /b /a:-d /o:-d "%~dp0mousemaster-*-jar-with-dependencies.jar" 2^>nul') do (
+    if not defined JAR set "JAR=%~dp0%%F"
+)
 
 if not exist "%JAVA%" (
     echo ERROR: runtime not found: %JAVA%
+    pause
+    exit /b 1
+)
+if not defined JAR (
+    echo ERROR: JAR not found: %~dp0mousemaster-*-jar-with-dependencies.jar
     pause
     exit /b 1
 )

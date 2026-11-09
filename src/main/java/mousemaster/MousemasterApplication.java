@@ -15,6 +15,7 @@ import org.slf4j.bridge.SLF4JBridgeHandler;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.Scanner;
 import java.util.logging.LogManager;
@@ -86,6 +87,10 @@ public class MousemasterApplication {
         platform.killProcess(1);
     }
 
+    public static Path logFile() {
+        return Path.of("mousemaster.log").toAbsolutePath();
+    }
+
     public static void enableLogToFile() {
         LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
         Logger rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME);
@@ -97,7 +102,7 @@ public class MousemasterApplication {
         FileAppender<ILoggingEvent> fileAppender = new FileAppender<>();
         fileAppender.setName("FILE");
         fileAppender.setContext(context);
-        fileAppender.setFile("mousemaster.log");
+        fileAppender.setFile(logFile().toString());
         fileAppender.setEncoder(encoder);
         fileAppender.setAppend(true);
         fileAppender.start();

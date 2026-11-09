@@ -6,8 +6,6 @@ import mousemaster.Licenses;
 import mousemaster.Mousemaster;
 import mousemaster.MousemasterApplication;
 import mousemaster.Platform;
-import mousemaster.QtManager;
-import mousemaster.VisualSettingsWindow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,19 +44,6 @@ public class WindowsMain {
         }
         if (options.showLicenses()) {
             Licenses.print();
-            return;
-        }
-        if (options.visualSettings()) {
-            logger.info("mousemaster v" + version + " (" + commitId + ")");
-            try {
-                QtManager.initialize();
-                new VisualSettingsWindow(options.configurationPath()).exec();
-            } catch (Throwable e) {
-                MousemasterApplication.shutdownAfterException(e, null, false,
-                        options.pauseOnError());
-            } finally {
-                QtManager.stop();
-            }
             return;
         }
         if (options.graalvmAgentRun()) {

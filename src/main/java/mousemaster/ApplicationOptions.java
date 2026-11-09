@@ -17,7 +17,6 @@ public record ApplicationOptions(String tempDirectory,
                                  boolean graalvmAgentRun,
                                  boolean ignoreInjectedEvents,
                                  boolean preWarmHints,
-                                 boolean visualSettings,
                                  String simulationKeyEvents) {
 
     public static ApplicationOptions parse(String[] args) {
@@ -35,7 +34,6 @@ public record ApplicationOptions(String tempDirectory,
                 Stream.of(args).anyMatch(Predicate.isEqual("--graalvm-agent-run")),
                 booleanArg(args, "--ignore-injected-events=", false),
                 booleanArg(args, "--pre-warm-hints=", true),
-                Stream.of(args).anyMatch("--visual-settings"::equals),
                 stringArg(args, "--simulation-key-events=", null)
         );
     }

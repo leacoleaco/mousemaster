@@ -85,6 +85,7 @@ public class WindowsPlatform implements Platform {
     private boolean locked;
     private ExtendedKernel32.PhandlerRoutine consoleCtrlHandler;
     private volatile boolean killProcessRequested;
+    private volatile boolean hooksSuspended;
     private boolean restartProcessRequested;
     private final boolean startedWithAConsole =
             Kernel32.INSTANCE.GetConsoleWindow() != null;
@@ -117,6 +118,12 @@ public class WindowsPlatform implements Platform {
         if (killProcessRequested)
             killProcess(0);
         killProcessIfConsoleIsGone(delta);
+        if (hooksSuspended) {
+            mouse.showCursor();
+            resetIfLockedChanged(delta);
+            overlay.update(delta);
+            return;
+        }
         overlay.setWaitForZoomBeforeRepainting(false);
         keyboard.update(delta);
         if (suppressCapsLockOsPassthrough)
@@ -390,6 +397,23 @@ public class WindowsPlatform implements Platform {
     }
 
     @Override
+    public void setHooksSuspended(boolean suspended) {
+        hooksSuspended = suspended;
+        if (!suspended)
+            return;
+        if (keyboardManager != null)
+            keyboardManager.reset(true);
+        if (mouseManager != null)
+            mouseManager.releaseAll();
+        mouse.showCursor();
+        keysPressedInHook.clear();
+        currentlyPressedNotEatenKeys.clear();
+        mustEatNextReleaseOfRightalt = false;
+        altgrLeftctrlPressEaten = false;
+        altgrRightaltPressEaten = false;
+    }
+
+    @Override
     public void shutdown() {
         if (shutdown)
             return;
@@ -400,9 +424,10 @@ public class WindowsPlatform implements Platform {
             mouseManager.releaseAll();
         }
         mouse.showCursor(); // Just in case we are shutting down while cursor is hidden.
-        boolean keyboardHookUnhooked =
+        boolean keyboardHookUnhooked = keyboardHook != null &&
                 User32.INSTANCE.UnhookWindowsHookEx(keyboardHook);
-        boolean mouseHookUnhooked = User32.INSTANCE.UnhookWindowsHookEx(mouseHook);
+        boolean mouseHookUnhooked = mouseHook != null &&
+                User32.INSTANCE.UnhookWindowsHookEx(mouseHook);
         logger.info(
                 "Uninstalled Keyboard and mouse hooks " +
                 (keyboardHookUnhooked && mouseHookUnhooked ? "successfully" : "unsuccessfully"));
@@ -576,6 +601,8 @@ public class WindowsPlatform implements Platform {
         long hookEventLagMillis = (tickCount - info.time) & 0xFFFFFFFFL;
         clock.setLastKeyboardHookEventRelativeTimeMillis(tickCount - hookEventLagMillis);
         try {
+            if (hooksSuspended)
+                return passThroughWhileSuspended(nCode, wParam, info);
             if (nCode >= 0) {
                 if (inKeyboardHookCallback) {
                     // Reentrant call: typically injected keys from regurgitation
@@ -774,6 +801,30 @@ public class WindowsPlatform implements Platform {
         }
     }
 
+    private WinDef.LRESULT passThroughWhileSuspended(int nCode, WinDef.WPARAM wParam,
+                                                      WinUser.KBDLLHOOKSTRUCT info) {
+        if (nCode >= 0 && info != null) {
+            switch (wParam.intValue()) {
+                case WinUser.WM_KEYUP:
+                case WinUser.WM_KEYDOWN:
+                case WinUser.WM_SYSKEYUP:
+                case WinUser.WM_SYSKEYDOWN:
+                    boolean altgrLeftctrl = info.vkCode ==
+                                            WindowsVirtualKey.VK_LCONTROL.virtualKeyCode &&
+                                            info.scanCode == 0x21d;
+                    KeyEvent keyEvent = buildKeyEvent(info, wParam, altgrLeftctrl);
+                    boolean injected = (info.flags & ExtendedUser32.LLKHF_INJECTED) ==
+                                       ExtendedUser32.LLKHF_INJECTED;
+                    keyboard.keyboardHookCallback(info, wParam, null, keyEvent, injected,
+                            altgrLeftctrl);
+                    break;
+                default:
+                    break;
+            }
+        }
+        return ExtendedUser32.INSTANCE.CallNextHookEx(keyboardHook, nCode, wParam, info);
+    }
+
     private static String wParamString(WinDef.WPARAM wParam) {
         return switch (wParam.intValue()) {
             case WinUser.WM_KEYUP -> "WM_KEYUP";
@@ -937,6 +988,8 @@ public class WindowsPlatform implements Platform {
      */
     private WinDef.LRESULT mouseHookCallback(int nCode, WinDef.WPARAM wParam,
                                              WinUser.MSLLHOOKSTRUCT info) {
+        if (hooksSuspended)
+            return ExtendedUser32.INSTANCE.CallNextHookEx(mouseHook, nCode, wParam, info);
         if (nCode >= 0) {
             WinDef.POINT mousePosition = info.pt;
             mousePositionQueue.add(mousePosition);

@@ -33,6 +33,9 @@ public class Mousemaster {
     private final boolean preWarmHints;
     private boolean logToFileEnabledByConfiguration;
     private MousemasterTray tray;
+    private ComboWatcher comboWatcher;
+    private List<ModeListener> modeListeners;
+    private boolean paused;
 
     public Mousemaster(Path configurationPath, Platform platform, boolean preWarmHints)
             throws IOException {
@@ -42,12 +45,29 @@ public class Mousemaster {
         this.activeKeyboardLayout = platform.activeKeyboardLayout();
         platform.console().hide();
         QtManager.initialize();
-        loadConfiguration(true, false);
+        try {
+            loadConfiguration(true, false);
+        } catch (Exception e) {
+            logger.error("Unable to load configuration file " + configurationPath, e);
+            showBlockingConfigurationError(
+                    ConfigurationProblem.locate(configurationPath, e).summary(false));
+            if (e instanceof IOException ioException)
+                throw ioException;
+            if (e instanceof RuntimeException runtimeException)
+                throw runtimeException;
+            throw new IOException("Unable to load configuration file " + configurationPath, e);
+        }
         watchService = FileSystems.getDefault().newWatchService();
         configurationPath.toAbsolutePath()
                          .getParent()
                          .register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
         tray = new MousemasterTray(this);
+        if (tray.isActive()) {
+            modeListeners.add(tray);
+            comboWatcher.setModeListeners(modeListeners);
+            if (modeController.currentMode() != null)
+                tray.modeChanged(modeController.currentMode());
+        }
         if (!tray.isActive()) {
             if (configuration.hideConsole())
                 platform.console().hide();
@@ -88,13 +108,15 @@ public class Mousemaster {
             platform.pumpEvents();
             timeBeforeOp = System.nanoTime();
             pumpEventsNanos += timeBeforeOp - timeAfterOp;
-            modeController.update(delta);
+            if (!paused)
+                modeController.update(delta);
             timeAfterOp = System.nanoTime();
             long modeControllerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
             platform.pumpEvents();
             timeBeforeOp = System.nanoTime();
             pumpEventsNanos += timeBeforeOp - timeAfterOp;
-            mouseManager.update(delta);
+            if (!paused)
+                mouseManager.update(delta);
             hintManager.update(delta);
             timeAfterOp = System.nanoTime();
             long mouseControllerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
@@ -102,13 +124,15 @@ public class Mousemaster {
             timeBeforeOp = System.nanoTime();
             pumpEventsNanos += timeBeforeOp - timeAfterOp;
             animationPlayer.update(delta);
-            keyboardManager.update(delta);
+            if (!paused)
+                keyboardManager.update(delta);
             timeAfterOp = System.nanoTime();
             long keyboardManagerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);
             platform.pumpEvents();
             timeBeforeOp = System.nanoTime();
             pumpEventsNanos += timeBeforeOp - timeAfterOp;
-            modeController.updateBuiltInVirtualKeys();
+            if (!paused)
+                modeController.updateBuiltInVirtualKeys();
             if (!hintManager.waitingForUiElements())
                 indicatorManager.update(delta);
             timeAfterOp = System.nanoTime();
@@ -122,7 +146,8 @@ public class Mousemaster {
             platform.pumpEvents();
             timeBeforeOp = System.nanoTime();
             pumpEventsNanos += timeBeforeOp - timeAfterOp;
-            macroPlayer.update(
+            if (!paused)
+                macroPlayer.update(
                     (timeBeforeOp - previousMacroPlayerUpdateTime) / 1e9d);
             previousMacroPlayerUpdateTime = timeBeforeOp;
             timeAfterOp = System.nanoTime();
@@ -179,12 +204,29 @@ public class Mousemaster {
         key.reset();
     }
 
-    private void tryLoadConfiguration(boolean reReadFile) {
+    private boolean tryLoadConfiguration(boolean reReadFile) {
         try {
             loadConfiguration(reReadFile, true);
+            if (tray != null)
+                tray.clearConfigurationError();
+            return true;
         } catch (Exception e) {
             logger.error(
                     "Unable to load configuration file " + configurationPath, e);
+            String message = ConfigurationProblem.locate(configurationPath, e).summary(true);
+            if (tray != null && tray.isActive())
+                tray.showConfigurationError(message);
+            else
+                showBlockingConfigurationError(message);
+            return false;
+        }
+    }
+
+    private static void showBlockingConfigurationError(String text) {
+        try {
+            io.qt.widgets.QMessageBox.critical(null, "Mousemaster 配置错误", text);
+        } catch (Exception dialogError) {
+            logger.error("Could not show the configuration error dialog", dialogError);
         }
     }
 
@@ -194,18 +236,18 @@ public class Mousemaster {
      */
     private void loadConfiguration(boolean readFile, boolean applyHideConsoleFromConfig) throws IOException {
         boolean reload = configuration != null;
+        List<String> propertiesRead = null;
         if (readFile) {
-            List<String> properties;
             try (BufferedReader reader = Files.newBufferedReader(configurationPath,
                     StandardCharsets.UTF_8)) {
-                properties = PropertiesReader.readPropertiesFile(reader);
+                propertiesRead = PropertiesReader.readPropertiesFile(reader);
             }
-            if (properties.equals(configurationProperties))
+            if (propertiesRead.equals(configurationProperties))
                 return;
-            configurationProperties = properties;
         }
-        configuration =
-                ConfigurationParser.parse(configurationProperties, activeKeyboardLayout);
+        configuration = ConfigurationParser.parse(
+                propertiesRead != null ? propertiesRead : configurationProperties,
+                activeKeyboardLayout);
         // User can override the layout. When active layout is dvorak, Windows HKL only
         // gives the language identifier, which is 0409. But it is missing the other part
         // of the layout identifier (00010409).
@@ -263,7 +305,7 @@ public class Mousemaster {
                                                          .allKeys());
             }
         }
-        ComboWatcher comboWatcher =
+        comboWatcher =
                 new ComboWatcher(commandRunner, hintManager, platform.activeAppFinder(),
                         screenManager, platform.clock(),
                         unpressedComboPreconditionKeys,
@@ -288,10 +330,12 @@ public class Mousemaster {
         // ZoomManager must be notified after HintManager because it calls
         // lastSelectedHintPoint() which is updated by HintManager#modeChanged. IndicatorManager
         // draws with the state of both.
-        List<ModeListener> modeListeners = new ArrayList<>(
+        modeListeners = new ArrayList<>(
                 List.of(platform, mouseManager, hintManager, zoomManager, indicatorManager));
         if (Os.windows)
             modeListeners.add(new CursorPingManager());
+        if (tray != null && tray.isActive())
+            modeListeners.add(tray);
         comboWatcher.setModeListeners(modeListeners);
         if (modeController != null)
             modeController.showCursor();
@@ -319,6 +363,10 @@ public class Mousemaster {
         Integer density = uiVisionDensity(configuration.modeMap());
         if (density != null)
             platform.vision().preWarm(screenManager.activeScreen(), density);
+        if (propertiesRead != null)
+            configurationProperties = propertiesRead;
+        if (paused)
+            showCursorWhilePaused();
     }
 
     public Path configurationPath() {
@@ -331,6 +379,34 @@ public class Mousemaster {
 
     public mousemaster.platform.Console console() {
         return platform.console();
+    }
+
+    public void setPaused(boolean paused) {
+        if (this.paused == paused)
+            return;
+        this.paused = paused;
+        logger.info(paused ? "Paused; keyboard and mouse events pass through"
+                           : "Resumed keyboard and mouse hooks");
+        if (tray != null)
+            tray.onPausedChanged(paused);
+        platform.setHooksSuspended(paused);
+        if (paused && modeController != null) {
+            Mode current = modeController.currentMode();
+            if (current != null && !Mode.IDLE_MODE_NAME.equals(current.name()))
+                modeController.switchMode(Mode.IDLE_MODE_NAME);
+            showCursorWhilePaused();
+        }
+    }
+
+    public void reloadConfiguration() {
+        if (tryLoadConfiguration(true) && tray != null)
+            tray.showInformation("配置已重新加载", "已从配置文件重新加载。");
+    }
+
+    private void showCursorWhilePaused() {
+        if (modeController != null)
+            modeController.showCursor();
+        platform.mouse().showCursor();
     }
 
     void exitFromTray() {

@@ -1,7 +1,10 @@
 package mousemaster;
 
+import io.qt.core.QTimer;
+import io.qt.core.QUrl;
 import io.qt.gui.QAction;
 import io.qt.gui.QColor;
+import io.qt.gui.QDesktopServices;
 import io.qt.gui.QIcon;
 import io.qt.gui.QPainter;
 import io.qt.gui.QPen;
@@ -9,25 +12,37 @@ import io.qt.gui.QPixmap;
 import io.qt.widgets.QApplication;
 import io.qt.widgets.QMenu;
 import io.qt.widgets.QSystemTrayIcon;
+import mousemaster.platform.windows.WindowsProcessElevation;
+import mousemaster.platform.windows.WindowsStartupShortcut;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
- * Windows 通知区域图标：默认仅显示在右下角托盘；右键打开菜单，从菜单进入「设置」才会打开设置窗口。
+ * Windows 通知区域图标。配置只从 properties 文件读取；右键菜单可暂停、重新加载、
+ * 打开配置和日志，以及开机自启。
  */
-public final class MousemasterTray {
+public final class MousemasterTray implements ModeListener {
 
     private static final Logger logger = LoggerFactory.getLogger(MousemasterTray.class);
 
     private final Mousemaster app;
     private final TrayUiPreferences prefs;
     private QSystemTrayIcon trayIcon;
+    private QIcon normalIcon;
+    private QIcon errorIcon;
+    private QMenu menu;
+    private QAction modeAction;
+    private QAction pauseAction;
+    private QAction startupAction;
     private QAction consoleInTaskbarAction;
-    private VisualSettingsWindow settingsWindow;
+    private String currentModeName = Mode.IDLE_MODE_NAME;
+    private boolean paused;
+    private boolean configurationError;
     private boolean active;
 
     public MousemasterTray(Mousemaster app) {
@@ -38,25 +53,39 @@ public final class MousemasterTray {
             return;
         }
         try {
-            QMenu menu = new QMenu();
-            menu.addAction("设置").triggered.connect(this::openSettings);
+            menu = new QMenu();
+            modeAction = menu.addAction("当前模式：" + currentModeName);
+            modeAction.setEnabled(false);
+            menu.addSeparator();
+            pauseAction = menu.addAction("暂停");
+            pauseAction.setCheckable(true);
+            pauseAction.triggered.connect(this::onPauseClicked);
+            menu.addAction("重新加载配置").triggered.connect(app::reloadConfiguration);
+            menu.addAction("打开配置文件").triggered.connect(this::openConfigurationFile);
+            menu.addAction("打开日志目录").triggered.connect(this::openLogDirectory);
+            if (Os.windows) {
+                startupAction = menu.addAction("开机自启");
+                startupAction.setCheckable(true);
+                startupAction.setChecked(WindowsStartupShortcut.isEnabled());
+                startupAction.triggered.connect(this::onStartupClicked);
+            }
             menu.addSeparator();
             consoleInTaskbarAction = menu.addAction("在任务栏显示控制台");
             consoleInTaskbarAction.setCheckable(true);
+            consoleInTaskbarAction.triggered.connect(this::onConsoleInTaskbarClicked);
             menu.addSeparator();
             menu.addAction("退出").triggered.connect(this::quit);
+            menu.aboutToShow.connect(this::onMenuAboutToShow);
 
-            QIcon mouseIcon = createTrayIcon();
-            QApplication.setWindowIcon(mouseIcon);
-            QSystemTrayIcon icon = new QSystemTrayIcon(mouseIcon);
-            icon.setToolTip("Mousemaster — 右键打开菜单");
+            normalIcon = createTrayIcon();
+            errorIcon = withErrorBadge(normalIcon);
+            QApplication.setWindowIcon(normalIcon);
+            QSystemTrayIcon icon = new QSystemTrayIcon(normalIcon);
             icon.setContextMenu(menu);
-
-            consoleInTaskbarAction.triggered.connect(this::onConsoleInTaskbarClicked);
-
             icon.show();
             this.trayIcon = icon;
             this.active = true;
+            refreshStatus();
 
             boolean fromConfig = !app.configuration().hideConsole();
             boolean visible;
@@ -69,6 +98,8 @@ public final class MousemasterTray {
             blockConsoleActionSignals(() -> consoleInTaskbarAction.setChecked(visible));
             applyConsoleVisibility(visible);
             logger.info("System tray icon active; preferences at {}", prefs.path());
+            if (Os.windows)
+                QTimer.singleShot(400, this::warnIfNotAdministrator);
         } catch (Exception e) {
             logger.error("Failed to initialize system tray", e);
         }
@@ -153,8 +184,70 @@ public final class MousemasterTray {
         return new QIcon(pixmap);
     }
 
+    private static QIcon withErrorBadge(QIcon base) {
+        QIcon badged = new QIcon();
+        boolean any = false;
+        for (int size : new int[] {16, 24, 32, 48}) {
+            QPixmap source = base.pixmap(size, size);
+            if (source == null || source.isNull())
+                continue;
+            QPixmap pixmap = source.copy();
+            QPainter painter = new QPainter(pixmap);
+            try {
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing);
+                int diameter = Math.max(7, size / 2);
+                painter.setPen(new QPen(new QColor(255, 255, 255), Math.max(1d, size / 16d)));
+                painter.setBrush(new QColor(0xDC, 0x26, 0x26));
+                painter.drawEllipse(size - diameter, size - diameter, diameter - 1, diameter - 1);
+            } finally {
+                painter.end();
+            }
+            badged.addPixmap(pixmap);
+            any = true;
+        }
+        return any ? badged : base;
+    }
+
     public boolean isActive() {
         return active;
+    }
+
+    @Override
+    public void modeChanged(Mode newMode) {
+        if (!active || newMode == null)
+            return;
+        currentModeName = newMode.name();
+        refreshStatus();
+    }
+
+    @Override
+    public void modeTimedOut() {
+    }
+
+    void onPausedChanged(boolean paused) {
+        this.paused = paused;
+        refreshStatus();
+    }
+
+    void showConfigurationError(String message) {
+        configurationError = true;
+        if (trayIcon != null && errorIcon != null)
+            trayIcon.setIcon(errorIcon);
+        refreshStatus();
+        showBalloon("配置错误", message, QSystemTrayIcon.MessageIcon.Critical);
+    }
+
+    void clearConfigurationError() {
+        if (!configurationError)
+            return;
+        configurationError = false;
+        if (trayIcon != null && normalIcon != null)
+            trayIcon.setIcon(normalIcon);
+        refreshStatus();
+    }
+
+    void showInformation(String title, String message) {
+        showBalloon(title, message, QSystemTrayIcon.MessageIcon.Information);
     }
 
     /**
@@ -171,6 +264,100 @@ public final class MousemasterTray {
         } catch (IOException e) {
             logger.warn("Could not read tray preferences", e);
         }
+    }
+
+    private void warnIfNotAdministrator() {
+        if (!active || !Os.windows || WindowsProcessElevation.isElevated())
+            return;
+        showBalloon("未以管理员身份运行",
+                "覆盖层会被管理员窗口挡住，也读不到这些窗口里的控件。需要时请退出后用管理员身份重新运行。",
+                QSystemTrayIcon.MessageIcon.Warning);
+    }
+
+    private void onMenuAboutToShow() {
+        if (startupAction == null)
+            return;
+        boolean enabled = WindowsStartupShortcut.isEnabled();
+        if (startupAction.isChecked() == enabled)
+            return;
+        startupAction.blockSignals(true);
+        try {
+            startupAction.setChecked(enabled);
+        } finally {
+            startupAction.blockSignals(false);
+        }
+    }
+
+    private void onPauseClicked() {
+        app.setPaused(pauseAction.isChecked());
+    }
+
+    private void onStartupClicked() {
+        if (startupAction == null)
+            return;
+        boolean want = startupAction.isChecked();
+        try {
+            WindowsStartupShortcut.setEnabled(want, app.configurationPath());
+            showInformation("开机自启", want ? "已加入开机启动。" : "已取消开机启动。");
+        } catch (Exception e) {
+            logger.warn("Could not update the startup shortcut", e);
+            startupAction.blockSignals(true);
+            try {
+                startupAction.setChecked(!want);
+            } finally {
+                startupAction.blockSignals(false);
+            }
+            showBalloon("开机自启", e.getMessage() == null ? "无法更新开机启动项" : e.getMessage(),
+                    QSystemTrayIcon.MessageIcon.Warning);
+        }
+    }
+
+    private void openConfigurationFile() {
+        openPath(app.configurationPath(), "打开配置文件");
+    }
+
+    private void openLogDirectory() {
+        Path logFile = MousemasterApplication.logFile();
+        Path directory = logFile.getParent();
+        openPath(directory == null ? Path.of("").toAbsolutePath() : directory, "打开日志目录");
+    }
+
+    private void openPath(Path path, String title) {
+        if (path == null || !Files.exists(path)) {
+            showBalloon(title, "找不到：" + path, QSystemTrayIcon.MessageIcon.Warning);
+            return;
+        }
+        boolean opened = QDesktopServices.openUrl(
+                QUrl.fromLocalFile(path.toAbsolutePath().toString()));
+        if (!opened)
+            showBalloon(title, "无法打开：" + path, QSystemTrayIcon.MessageIcon.Warning);
+    }
+
+    private void refreshStatus() {
+        if (!active)
+            return;
+        String mode = currentModeName == null ? Mode.IDLE_MODE_NAME : currentModeName;
+        String status = paused ? mode + "（已暂停）" : mode;
+        if (configurationError)
+            status = status + " · 配置有误";
+        if (modeAction != null)
+            modeAction.setText("当前模式：" + status);
+        if (trayIcon != null)
+            trayIcon.setToolTip("Mousemaster — " + status);
+        if (pauseAction != null && pauseAction.isChecked() != paused) {
+            pauseAction.blockSignals(true);
+            try {
+                pauseAction.setChecked(paused);
+            } finally {
+                pauseAction.blockSignals(false);
+            }
+        }
+    }
+
+    private void showBalloon(String title, String message, QSystemTrayIcon.MessageIcon icon) {
+        if (trayIcon == null || message == null || message.isBlank())
+            return;
+        trayIcon.showMessage(title, message, icon, 8000);
     }
 
     private void onConsoleInTaskbarClicked() {
@@ -203,19 +390,6 @@ public final class MousemasterTray {
         } finally {
             consoleInTaskbarAction.blockSignals(false);
         }
-    }
-
-    private void openSettings() {
-        if (settingsWindow != null) {
-            settingsWindow.raise();
-            settingsWindow.activateWindow();
-            return;
-        }
-        VisualSettingsWindow w = new VisualSettingsWindow(app.configurationPath());
-        w.setAttribute(io.qt.core.Qt.WidgetAttribute.WA_DeleteOnClose, true);
-        w.finished.connect((Integer r) -> settingsWindow = null);
-        settingsWindow = w;
-        w.show();
     }
 
     private void quit() {

@@ -99,6 +99,7 @@ public class MacosPlatform implements Platform {
     /** Read by the hid thread, which regrabs a released library if it misses the write. */
     private volatile boolean shutdown;
     private volatile boolean killProcessRequested;
+    private volatile boolean hooksSuspended;
     private boolean restartProcessRequested;
     private FileChannel singleInstanceChannel;
 
@@ -189,7 +190,7 @@ public class MacosPlatform implements Platform {
 
     private void keyEvent(KeyEvent keyEvent) {
         // Whatever was already queued when the keyboard was released still has to reach the os.
-        if (grabPaused) {
+        if (grabPaused || hooksSuspended) {
             keyboard.send(keyEvent.key(), keyEvent.isPress());
             return;
         }
@@ -452,6 +453,18 @@ public class MacosPlatform implements Platform {
     @Override
     public void requestRestartProcess() {
         restartProcessRequested = true;
+    }
+
+    @Override
+    public void setHooksSuspended(boolean suspended) {
+        if (hooksSuspended == suspended)
+            return;
+        hooksSuspended = suspended;
+        if (!suspended || keyboardManager == null)
+            return;
+        keyboardManager.reset();
+        if (mouseManager != null)
+            mouseManager.releaseAll();
     }
 
     @Override

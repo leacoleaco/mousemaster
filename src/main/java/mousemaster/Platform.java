@@ -41,6 +41,12 @@ public interface Platform extends ModeListener {
 
     void requestRestartProcess();
 
+    /**
+     * When suspended, keyboard and mouse hooks pass events to the operating system
+     * and mousemaster does not eat them.
+     */
+    void setHooksSuspended(boolean suspended);
+
     Clock clock();
 
     KeyboardLayout activeKeyboardLayout();
