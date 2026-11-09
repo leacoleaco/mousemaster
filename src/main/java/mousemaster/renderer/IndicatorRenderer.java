@@ -704,6 +704,18 @@ public final class IndicatorRenderer {
                     screen.x() + screen.width()));
             centerY = Math.max(screen.y(), Math.min(centerY,
                     screen.y() + screen.height()));
+            if (zoom != null && zoom.cursorAnchored()) {
+                // The cursor stays where it is, so the circle stays on the cursor.
+                // Scaling the gap between the hotspot and the cursor body would slide it off.
+                double hotX = Math.max(screen.x(), Math.min(mouseRectangle.x(),
+                        screen.x() + screen.width()));
+                double hotY = Math.max(screen.y(), Math.min(mouseRectangle.y(),
+                        screen.y() + screen.height()));
+                return new Point(zoomedX(hotX, zoom) + anchor.cursorVisualCenter().x() -
+                                 layerSizeWithStroke.width() / 2.0,
+                        zoomedY(hotY, zoom) + anchor.cursorVisualCenter().y() -
+                        layerSizeWithStroke.height() / 2.0);
+            }
             return new Point(zoomedX(centerX, zoom) - layerSizeWithStroke.width() / 2.0,
                     zoomedY(centerY, zoom) - layerSizeWithStroke.height() / 2.0);
         }
@@ -729,6 +741,9 @@ public final class IndicatorRenderer {
         boolean placeBottom = defaultBottom ? !nearBottomEdge : nearTopEdge;
         int layerY = placeBottom ?
                 mouseY + mouseRectangle.height() / 2 : mouseY - layerSizeWithStroke.height();
+        if (zoom != null && zoom.cursorAnchored())
+            return new Point(zoomedX(mouseX, zoom) + layerX - mouseX,
+                    zoomedY(mouseY, zoom) + layerY - mouseY);
         return new Point(zoomedX(layerX, zoom), zoomedY(layerY, zoom));
     }
 

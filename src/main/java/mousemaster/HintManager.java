@@ -792,7 +792,8 @@ public class HintManager implements ModeListener, MousePositionListener {
         Rectangle screenRectangle = screenManager.nearestScreenContaining(zoomCenterPoint.x(),
                 zoomCenterPoint.y()).rectangle();
         Zoom newZoom = new Zoom(mode.zoom().percent(lastSelectedHintCell, screenRectangle),
-                zoomCenterPoint, screenRectangle);
+                zoomCenterPoint, screenRectangle,
+                mode.zoom().center() == AreaCenter.MOUSE);
         Zoom noZoom = new Zoom(1, screenRectangle.center(), screenRectangle);
         return newZoom.equals(noZoom) || overlay.canZoom(screenRectangle) ? newZoom : noZoom;
     }

@@ -1,21 +1,35 @@
 package mousemaster;
 
-public record Zoom(double percent, Point center, Rectangle screenRectangle) {
+public record Zoom(double percent, Point center, Rectangle screenRectangle,
+                   boolean cursorAnchored) {
+
+    /** The center is drawn at the middle of the screen. */
+    public Zoom(double percent, Point center, Rectangle screenRectangle) {
+        this(percent, center, screenRectangle, false);
+    }
+
+    /**
+     * Where {@code center} is drawn. A magnifier around the cursor keeps that pixel under
+     * the cursor. Every other zoom puts it in the middle of the screen.
+     */
+    private Point anchor() {
+        return cursorAnchored ? center : screenRectangle.center();
+    }
 
     public double zoomedX(double x) {
-        return screenRectangle.center().x() + (x - center.x()) * percent;
+        return anchor().x() + (x - center.x()) * percent;
     }
 
     public double zoomedY(double y) {
-        return screenRectangle.center().y() + (y - center.y()) * percent;
+        return anchor().y() + (y - center.y()) * percent;
     }
 
     public double unzoomedX(double zoomedX) {
-        return (zoomedX - screenRectangle.center().x()) / percent + center.x();
+        return (zoomedX - anchor().x()) / percent + center.x();
     }
 
     public double unzoomedY(double zoomedY) {
-        return (zoomedY - screenRectangle.center().y()) / percent + center.y();
+        return (zoomedY - anchor().y()) / percent + center.y();
     }
 
     /** A desktop region as it appears on screen. */

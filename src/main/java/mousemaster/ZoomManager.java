@@ -16,6 +16,8 @@ public class ZoomManager implements ModeListener {
     private final TransitionedValue centerX = new TransitionedValue(0);
     private final TransitionedValue centerY = new TransitionedValue(0);
     private boolean zoomShown;
+    /** The magnified pixel stays under the cursor instead of jumping to the screen center. */
+    private boolean cursorAnchored;
     /** Hidden while the image moves, shown again when it settles. */
     private boolean hintMeshHidden;
 
@@ -50,18 +52,40 @@ public class ZoomManager implements ModeListener {
         double endPercent = newMode.zoom().percent(
                 hintManager.lastSelectedHintCell(), screenRectangle);
         endIsNoZoom = endPercent == 1 && endCenter == AreaCenter.ACTIVE_SCREEN_CENTER;
+        boolean aroundCursor = endCenter == AreaCenter.MOUSE;
+        // Releasing the magnifier shrinks toward the cursor. Switching the anchor to the
+        // screen center while it is still magnified would throw the picture off the cursor.
+        boolean releaseAroundCursor = cursorAnchored && !aroundCursor && endIsNoZoom;
+        cursorAnchored = aroundCursor || releaseAroundCursor;
         if (!zoomShown) {
-            Point screenCenter = screenManager.activeScreen().rectangle().center();
             percent.jumpTo(1);
-            centerX.jumpTo(screenCenter.x());
-            centerY.jumpTo(screenCenter.y());
+            if (aroundCursor) {
+                centerX.jumpTo(endCenterPoint.x());
+                centerY.jumpTo(endCenterPoint.y());
+            }
+            else {
+                Point screenCenter = screenManager.activeScreen().rectangle().center();
+                centerX.jumpTo(screenCenter.x());
+                centerY.jumpTo(screenCenter.y());
+            }
         }
-        if (percent.value() != endPercent || centerX.value() != endCenterPoint.x() ||
-            centerY.value() != endCenterPoint.y()) {
+        // When transitioning to no-zoom, use previous mode's transition.
+        Transition transition = (endIsNoZoom && previousMode != null ? previousMode :
+                newMode).zoom().transition();
+        if (cursorAnchored) {
+            Point mouse = hintManager.areaCenterPoint(AreaCenter.MOUSE);
+            centerX.jumpTo(mouse.x());
+            centerY.jumpTo(mouse.y());
+            if (percent.value() != endPercent) {
+                overlay.stopHintMatchAnimation();
+                percent.transitionTo(transition, endPercent);
+            }
+            else
+                percent.jumpTo(endPercent);
+        }
+        else if (percent.value() != endPercent || centerX.value() != endCenterPoint.x() ||
+                 centerY.value() != endCenterPoint.y()) {
             overlay.stopHintMatchAnimation();
-            // When transitioning to no-zoom, use previous mode's transition.
-            Transition transition = (endIsNoZoom && previousMode != null ? previousMode :
-                    newMode).zoom().transition();
             percent.transitionTo(transition, endPercent);
             centerX.transitionTo(transition, endCenterPoint.x());
             centerY.transitionTo(transition, endCenterPoint.y());
@@ -105,11 +129,18 @@ public class ZoomManager implements ModeListener {
             return;
         }
         percent.update(delta);
-        centerX.update(delta);
-        centerY.update(delta);
-        Point endCenterPoint = hintManager.areaCenterPoint(endCenter);
-        centerX.follow(endCenterPoint.x());
-        centerY.follow(endCenterPoint.y());
+        if (cursorAnchored) {
+            Point mouse = hintManager.areaCenterPoint(AreaCenter.MOUSE);
+            centerX.jumpTo(mouse.x());
+            centerY.jumpTo(mouse.y());
+        }
+        else {
+            centerX.update(delta);
+            centerY.update(delta);
+            Point endCenterPoint = hintManager.areaCenterPoint(endCenter);
+            centerX.follow(endCenterPoint.x());
+            centerY.follow(endCenterPoint.y());
+        }
         overlay.setZoom(zoom());
         if (!transitioning())
             settle();
@@ -123,6 +154,13 @@ public class ZoomManager implements ModeListener {
     private void settle() {
         animating = false;
         zoomShown = !endIsNoZoom;
+        if (endIsNoZoom) {
+            cursorAnchored = false;
+            // At 1x the picture is the desktop only when the anchor sits on the center.
+            Point screenCenter = screenManager.activeScreen().rectangle().center();
+            centerX.jumpTo(screenCenter.x());
+            centerY.jumpTo(screenCenter.y());
+        }
         Zoom zoom = zoom();
         overlay.setZoom(endIsNoZoom ? null : zoom);
         if (hintMeshHidden) {
@@ -139,7 +177,8 @@ public class ZoomManager implements ModeListener {
         Point center = new Point(Math.round(centerX.value()),
                 Math.round(centerY.value()));
         return new Zoom(percent.value(), center,
-                screenManager.nearestScreenContaining(center.x(), center.y()).rectangle());
+                screenManager.nearestScreenContaining(center.x(), center.y()).rectangle(),
+                cursorAnchored);
     }
 
     @Override

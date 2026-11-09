@@ -189,12 +189,13 @@ final class WindowsZoomRenderer {
     private void draw(Zoom zoom) {
         int width = outputBounds.width();
         int height = outputBounds.height();
-        float sourceWidth = (float) (width / zoom.percent());
-        float sourceHeight = (float) (height / zoom.percent());
-        // Unclamped: hints and the indicator are placed from the same center, so shifting
-        // the view near a screen edge would disagree with them.
-        float left = (float) (zoom.center().x() - outputBounds.x()) - sourceWidth / 2;
-        float top = (float) (zoom.center().y() - outputBounds.y()) - sourceHeight / 2;
+        Rectangle screen = zoom.screenRectangle();
+        float sourceWidth = (float) (screen.width() / zoom.percent());
+        float sourceHeight = (float) (screen.height() / zoom.percent());
+        // The same mapping as Zoom.unzoomedX: a cursor-anchored zoom keeps that pixel
+        // under the cursor, and every other zoom keeps it at the screen center.
+        float left = (float) (zoom.unzoomedX(screen.x()) - outputBounds.x());
+        float top = (float) (zoom.unzoomedY(screen.y()) - outputBounds.y());
         Memory constants = new Memory(32);
         constants.setFloat(0, left / width);
         constants.setFloat(4, top / height);
