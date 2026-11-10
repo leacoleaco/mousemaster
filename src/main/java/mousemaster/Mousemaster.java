@@ -332,8 +332,6 @@ public class Mousemaster {
         // draws with the state of both.
         modeListeners = new ArrayList<>(
                 List.of(platform, mouseManager, hintManager, zoomManager, indicatorManager));
-        if (Os.windows)
-            modeListeners.add(new CursorPingManager());
         if (tray != null && tray.isActive())
             modeListeners.add(tray);
         comboWatcher.setModeListeners(modeListeners);

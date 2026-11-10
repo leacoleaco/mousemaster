@@ -1596,6 +1596,9 @@ public class ComboWatcher {
         return switch (command) {
             case Command.BreakComboPreparation c -> CommandOrder.RUN_LAST;
             case Command.SwitchMode c -> CommandOrder.RUN_LAST;
+            // After SwitchMode on the activation double-tap, so a hint's idle→normal
+            // is not what shows the spotlight, and the ring is drawn once the mode settled.
+            case Command.ShowCursorSpotlight c -> CommandOrder.RUN_LAST;
             default -> CommandOrder.RUN_FIRST;
         };
     }

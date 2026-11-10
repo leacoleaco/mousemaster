@@ -3024,8 +3024,14 @@ public class ConfigurationParser {
         setCommand(idle.comboMap.to.builder, comboString, new SwitchMode(targetMode),
                 label, defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
                 allVariableNames);
-        // The same double-tap, once already out of idle, only repeats the cursor spotlight.
+        // Same combo, after the mode switch. A later idle→normal from a UI hint
+        // (hint key switches to idle and then normal) must not show this.
         Command spotlight = new Command.ShowCursorSpotlight();
+        setCommand(idle.comboMap.to.builder, comboString, spotlight,
+                Mode.IDLE_MODE_NAME + ".double-tap-cursor-spotlight(generated)",
+                defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
+                allVariableNames);
+        // The same double-tap, once already out of idle, only repeats the cursor spotlight.
         for (ModeBuilder mode : modeByName.values()) {
             if (mode.modeName.equals(Mode.IDLE_MODE_NAME) || mode.modeName.startsWith("_"))
                 continue;
