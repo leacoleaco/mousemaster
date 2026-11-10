@@ -24,10 +24,15 @@ public interface UiAutomation {
      */
     Future<List<UiElement>> startFindUiElementsInArea(Rectangle area);
 
-    record UiElement(Rectangle rectangle, Role role) {
+    record UiElement(Rectangle rectangle, Role role, Control control) {
 
+        public UiElement(Rectangle rectangle, Role role) {
+            this(rectangle, role, null);
+        }
+
+        /** A rectangle whose control type was not reported. Vision hints use this. */
         public UiElement(Rectangle rectangle) {
-            this(rectangle, Role.OTHER);
+            this(rectangle, null, null);
         }
 
         public double centerX() {
@@ -39,20 +44,157 @@ public interface UiAutomation {
         }
 
         /**
-         * The kinds a UI-hint filter can keep. {@link #OTHER} is everything else, including
-         * elements found by vision, which have no control type.
+         * What selecting the hint of an element is for. {@link #CLICK} is clicked,
+         * {@link #INPUT} is clicked and then typed into, {@link #WIDGET} is operated with
+         * keys of its own (a scroll bar), {@link #OTHER} is only pointed at. A null role
+         * was not classified at all.
          */
         public enum Role {
-            TEXT, BUTTON, LINK, OTHER;
+            CLICK("click"), INPUT("input"), WIDGET("widget"), OTHER("other");
 
-            /** Windows UI Automation control type ids. A document is the page, not a field. */
+            /** The name in the configuration, such as {@code click} for {@code click-box-color}. */
+            private final String propertyName;
+
+            Role(String propertyName) {
+                this.propertyName = propertyName;
+            }
+
+            public String propertyName() {
+                return propertyName;
+            }
+
+            /** Null when no role bears that name. */
+            public static Role fromPropertyName(String propertyName) {
+                for (Role role : values())
+                    if (role.propertyName.equals(propertyName))
+                        return role;
+                return null;
+            }
+
+            /** The role of a Windows UI Automation control type id, going by the type alone. */
             public static Role fromWindowsControlType(int controlTypeId) {
-                return switch (controlTypeId) {
-                    case 50004, 50003, 50016 -> TEXT;   // Edit, ComboBox, Spinner
-                    case 50000, 50031 -> BUTTON;        // Button, SplitButton
-                    case 50005 -> LINK;                 // Hyperlink
-                    default -> OTHER;
+                return of(Control.fromWindowsControlType(controlTypeId), false);
+            }
+
+            /**
+             * The role of a control. A type that is only pointed at going by its type (an
+             * image, a group, a text) is clicked when the application says it reacts to a
+             * click: {@code clickable} is whether it can be invoked, toggled, selected,
+             * or expanded. A container stays pointed at: a click in the middle of a
+             * tree lands on whichever item happens to be there.
+             */
+            public static Role of(Control control, boolean clickable) {
+                Role typeRole = control == null ? OTHER : control.role();
+                if (typeRole != OTHER || !clickable)
+                    return typeRole;
+                return control != null && control.container() ? OTHER : CLICK;
+            }
+        }
+
+        /**
+         * One Windows UI Automation control type, with the role its type gives it. A
+         * document is the page, not a field. A menu, a list, a tree and a tab are the
+         * containers of the items that are clicked.
+         */
+        public enum Control {
+            BUTTON(50000, Role.CLICK, "button"),
+            CALENDAR(50001, Role.OTHER, "calendar"),
+            CHECK_BOX(50002, Role.CLICK, "checkbox"),
+            COMBO_BOX(50003, Role.INPUT, "combo-box"),
+            EDIT(50004, Role.INPUT, "edit"),
+            HYPERLINK(50005, Role.CLICK, "hyperlink"),
+            IMAGE(50006, Role.OTHER, "image"),
+            LIST_ITEM(50007, Role.CLICK, "list-item"),
+            LIST(50008, Role.OTHER, "list"),
+            MENU(50009, Role.OTHER, "menu"),
+            MENU_BAR(50010, Role.OTHER, "menu-bar"),
+            MENU_ITEM(50011, Role.CLICK, "menu-item"),
+            PROGRESS_BAR(50012, Role.OTHER, "progress-bar"),
+            RADIO_BUTTON(50013, Role.CLICK, "radio-button"),
+            SCROLL_BAR(50014, Role.WIDGET, "scroll-bar"),
+            SLIDER(50015, Role.WIDGET, "slider"),
+            SPINNER(50016, Role.INPUT, "spinner"),
+            STATUS_BAR(50017, Role.OTHER, "status-bar"),
+            TAB(50018, Role.OTHER, "tab"),
+            TAB_ITEM(50019, Role.CLICK, "tab-item"),
+            TEXT(50020, Role.OTHER, "static-text"),
+            TOOL_BAR(50021, Role.OTHER, "tool-bar"),
+            TOOL_TIP(50022, Role.OTHER, "tool-tip"),
+            TREE(50023, Role.OTHER, "tree"),
+            TREE_ITEM(50024, Role.CLICK, "tree-item"),
+            CUSTOM(50025, Role.OTHER, "custom"),
+            GROUP(50026, Role.OTHER, "group"),
+            THUMB(50027, Role.OTHER, "thumb"),
+            DATA_GRID(50028, Role.OTHER, "data-grid"),
+            DATA_ITEM(50029, Role.CLICK, "data-item"),
+            DOCUMENT(50030, Role.OTHER, "document"),
+            SPLIT_BUTTON(50031, Role.CLICK, "split-button"),
+            WINDOW(50032, Role.OTHER, "window"),
+            PANE(50033, Role.OTHER, "pane"),
+            HEADER(50034, Role.OTHER, "header"),
+            HEADER_ITEM(50035, Role.CLICK, "header-item"),
+            TABLE(50036, Role.OTHER, "table"),
+            TITLE_BAR(50037, Role.OTHER, "title-bar"),
+            SEPARATOR(50038, Role.OTHER, "separator"),
+            SEMANTIC_ZOOM(50039, Role.OTHER, "semantic-zoom"),
+            APP_BAR(50040, Role.OTHER, "app-bar");
+
+            private static final java.util.Map<Integer, Control> BY_ID;
+            private static final java.util.Map<String, Control> BY_BOX_COLOR_PROPERTY;
+
+            static {
+                java.util.Map<Integer, Control> byId = new java.util.HashMap<>();
+                java.util.Map<String, Control> byProperty = new java.util.HashMap<>();
+                for (Control control : values()) {
+                    byId.put(control.windowsControlTypeId, control);
+                    byProperty.put(control.propertyName + "-box-color", control);
+                }
+                BY_ID = java.util.Map.copyOf(byId);
+                BY_BOX_COLOR_PROPERTY = java.util.Map.copyOf(byProperty);
+            }
+
+            private final int windowsControlTypeId;
+            private final Role role;
+            /** The name in the configuration, such as {@code checkbox} for {@code checkbox-box-color}. */
+            private final String propertyName;
+
+            Control(int windowsControlTypeId, Role role, String propertyName) {
+                this.windowsControlTypeId = windowsControlTypeId;
+                this.role = role;
+                this.propertyName = propertyName;
+            }
+
+            /** Whether the control holds the controls that are acted on, rather than being one. */
+            public boolean container() {
+                return switch (this) {
+                    case CALENDAR, LIST, MENU, MENU_BAR, STATUS_BAR, TAB, TOOL_BAR, TREE,
+                         DATA_GRID, DOCUMENT, WINDOW, PANE, HEADER, TABLE, TITLE_BAR,
+                         SEMANTIC_ZOOM, APP_BAR -> true;
+                    default -> false;
                 };
+            }
+
+            /** The role the type gives. See {@link Role#of} for the role of one element. */
+            public Role role() {
+                return role;
+            }
+
+            public String propertyName() {
+                return propertyName;
+            }
+
+            public int windowsControlTypeId() {
+                return windowsControlTypeId;
+            }
+
+            /** Null when Windows reports a control type this build does not know. */
+            public static Control fromWindowsControlType(int controlTypeId) {
+                return BY_ID.get(controlTypeId);
+            }
+
+            /** Null when {@code key} is not one control's box color, such as {@code checkbox-box-color}. */
+            public static Control fromBoxColorProperty(String key) {
+                return BY_BOX_COLOR_PROPERTY.get(key);
             }
         }
 

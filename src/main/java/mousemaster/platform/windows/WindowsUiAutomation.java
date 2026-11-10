@@ -42,6 +42,14 @@ public class WindowsUiAutomation implements UiAutomation {
 
     private static final int UIA_ButtonControlTypeId = 50000;
 
+    /** The patterns of a control that does something when it is clicked. */
+    private static final int[] CLICK_PATTERN_PROPERTY_IDS = {
+            UIA_IsInvokePatternAvailablePropertyId,
+            UIA_IsExpandCollapsePatternAvailablePropertyId,
+            UIA_IsTogglePatternAvailablePropertyId,
+            UIA_IsSelectionItemPatternAvailablePropertyId
+    };
+
     private static final int TreeScope_Children = 2;
     private static final int TreeScope_Descendants = 4;
 
@@ -119,6 +127,9 @@ public class WindowsUiAutomation implements UiAutomation {
         if (cachedCacheRequest != null) {
             cachedCacheRequest.addProperty(UIA_BoundingRectanglePropertyId);
             cachedCacheRequest.addProperty(UIA_ControlTypePropertyId);
+            // What tells a control that reacts to a click from one that is only focusable.
+            for (int clickPatternPropertyId : CLICK_PATTERN_PROPERTY_IDS)
+                cachedCacheRequest.addProperty(clickPatternPropertyId);
         }
     }
 
@@ -126,15 +137,19 @@ public class WindowsUiAutomation implements UiAutomation {
      * IsOffscreen=false AND IsEnabled=true
      * AND (IsKeyboardFocusable OR IsInvokePatternAvailable OR ControlType=Button
      *      OR IsExpandCollapsePatternAvailable OR IsTogglePatternAvailable
-     *      OR IsSelectionItemPatternAvailable)
+     *      OR IsSelectionItemPatternAvailable OR ControlType=ScrollBar)
      */
     private static UIAutomationCondition buildUiAutomationCondition(UIAutomation uia) {
         Memory boolTrue = createBoolVariantTrue();
         Memory boolFalse = createBoolVariantFalse();
         UIAutomationCondition focusable = null, invokable = null,
                 button = null, expandCollapse = null, toggle = null,
-                selectionItem = null, onscreen = null, enabled = null;
+                selectionItem = null, scrollBar = null, onscreen = null, enabled = null;
         try {
+            // A scroll bar cannot be focused or invoked, and is still operated.
+            scrollBar = uia.createPropertyCondition(
+                    UIA_ControlTypePropertyId,
+                    createIntVariant(UiElement.Control.SCROLL_BAR.windowsControlTypeId()));
             focusable = uia.createPropertyCondition(
                     UIA_IsKeyboardFocusablePropertyId, boolTrue);
             invokable = uia.createPropertyCondition(
@@ -155,7 +170,7 @@ public class WindowsUiAutomation implements UiAutomation {
             if (focusable == null || invokable == null ||
                 button == null || expandCollapse == null ||
                 toggle == null || selectionItem == null ||
-                onscreen == null || enabled == null)
+                scrollBar == null || onscreen == null || enabled == null)
                 return null;
             UIAutomationCondition or1 =
                     uia.createOrCondition(focusable, invokable);
@@ -181,9 +196,14 @@ public class WindowsUiAutomation implements UiAutomation {
             or4.Release();
             if (or5 == null)
                 return null;
-            UIAutomationCondition and1 =
-                    uia.createAndCondition(or5, onscreen);
+            UIAutomationCondition or6 =
+                    uia.createOrCondition(or5, scrollBar);
             or5.Release();
+            if (or6 == null)
+                return null;
+            UIAutomationCondition and1 =
+                    uia.createAndCondition(or6, onscreen);
+            or6.Release();
             if (and1 == null)
                 return null;
             UIAutomationCondition result =
@@ -203,6 +223,8 @@ public class WindowsUiAutomation implements UiAutomation {
                 toggle.Release();
             if (selectionItem != null)
                 selectionItem.Release();
+            if (scrollBar != null)
+                scrollBar.Release();
             if (onscreen != null)
                 onscreen.Release();
             if (enabled != null)
@@ -461,9 +483,17 @@ public class WindowsUiAutomation implements UiAutomation {
                 int height = rect.bottom - rect.top;
                 if (width <= 0 || height <= 0)
                     continue;
+                int controlTypeId = element.getCachedControlType();
+                UiElement.Control control =
+                        UiElement.Control.fromWindowsControlType(controlTypeId);
+                UiElement.Role typeRole = UiElement.Role.of(control, false);
                 UiElement uiElement = new UiElement(
                         new Rectangle(rect.left, rect.top, width, height),
-                        UiElement.Role.fromWindowsControlType(element.getCachedControlType()));
+                        // Only a type that is not clicked by itself needs the patterns read.
+                        typeRole == UiElement.Role.OTHER ?
+                                UiElement.Role.of(control, element.isCachedClickable()) :
+                                typeRole,
+                        control);
                 if (!elementBounds.contains(uiElement.centerX(), uiElement.centerY()))
                     continue;
                 if (!clickReaches(hwnd, uiElement.centerX(), uiElement.centerY()))
@@ -652,6 +682,21 @@ public class WindowsUiAutomation implements UiAutomation {
             if (W32Errors.FAILED(hr) || variant.getShort(0) != VT_I4)
                 return 0;
             return variant.getInt(8);
+        }
+
+        /** Whether one of the cached click patterns is available. False when none was cached. */
+        boolean isCachedClickable() {
+            for (int propertyId : CLICK_PATTERN_PROPERTY_IDS) {
+                Memory variant = new Memory(24);
+                variant.clear();
+                WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(12,
+                        new Object[]{getPointer(), propertyId, variant},
+                        WinNT.HRESULT.class);
+                if (!W32Errors.FAILED(hr) && variant.getShort(0) == VT_BOOL &&
+                    variant.getShort(8) != VARIANT_FALSE)
+                    return true;
+            }
+            return false;
         }
 
         // IUIAutomationElement::get_CachedBoundingRectangle — vtable index 75

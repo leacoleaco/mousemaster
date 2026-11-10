@@ -875,6 +875,66 @@ A scan that finds no element leaves the mode showing nothing. The built-in virtu
 ui-hint-mode.to.normal-mode=_{isoverlayempty}
 ```
 
+#### Roles of accessibility UI hints
+
+On Windows, each accessibility hint has a role, which says what selecting it is for:
+
+| Role     | Controls                                                                                         | Meant to be                         |
+|----------|--------------------------------------------------------------------------------------------------|-------------------------------------|
+| `click`  | button, split button, hyperlink, checkbox, radio button, menu item, tab item, list item, tree item, data item, header item | clicked                             |
+| `input`  | edit, combo box, spinner                                                                         | clicked, then typed into            |
+| `widget` | scroll bar, slider                                                                               | operated with keys of its own       |
+| `other`  | everything else: a document, a pane, a list, a tree, an image, a text...                         | pointed at                          |
+
+A control of another type that the application says reacts to a click (it can be invoked,
+toggled, selected, or expanded), such as a clickable image, text or group, is `click` rather
+than `other`. A container (a list, a tree, a tab, a menu, a pane, a document...) stays `other`:
+a click in its middle would land on whichever item is there. Scroll bars are scanned even
+though they can be neither focused nor invoked. Many applications, Chromium and Electron ones
+among them, draw their scroll bars themselves and do not report them: they get no hint.
+
+The role has its own tag color (`click-box-color`, `input-box-color`, `widget-box-color`,
+`other-box-color`, see [hint appearance](#hint-appearance)), and the **`filter-ui-hints.<role>`**
+command keeps only the hints of one role:
+
+```properties
+ui-hint-mode.filter-ui-hints.click=+g
+ui-hint-mode.filter-ui-hints.input=+t
+ui-hint-mode.filter-ui-hints.widget=+b
+```
+
+mousemaster itself does nothing but move the mouse when a hint is selected. What happens next
+is a matter of modes, which read the
+[built-in virtual keys](combo-reference.md#built-in-virtual-keys) of the last selected hint:
+`isselectedhintclick`, `isselectedhintinput`, `isselectedhintwidget` and `isselectedhintother`
+for its role, `isselectedhint<control>` for its control type (`isselectedhintscrollbar`,
+`isselectedhintslider`, `isselectedhintcheckbox`...: the name used by `<control>-box-color`
+without its hyphens), and `isselectedhinthorizontal` or `isselectedhintvertical` for an element
+that is wider than tall or not. They are pressed as soon as the hint is selected, so the mode
+its last key switches to can read them right away:
+
+```properties
+ui-hint-mode.select=+hint1key
+ui-hint-mode.to.selected-mode=+hint1key
+# Leaves at once, for the mode of the role.
+selected-mode.to.click-mode=_{isselectedhintclick} wait-0
+selected-mode.to.click-then-idle-mode=_{isselectedhintinput} wait-0
+selected-mode.to.scroll-bar-mode=_{isselectedhintscrollbar} wait-0
+selected-mode.to.normal-mode=_{isselectedhintother} wait-0 | ^{isselectedhintscrollbar} _{isselectedhintwidget} wait-0
+click-mode.mouse.smooth-jump-enabled=false
+click-mode.press.left=wait-0
+click-mode.release.left=wait-20
+click-mode.to.normal-mode=wait-30
+# The mouse is on the scroll bar: the wheel scrolls what the bar belongs to.
+scroll-bar-mode.start-wheel.down=_{isselectedhintvertical} +j
+scroll-bar-mode.stop-wheel.down=-j
+scroll-bar-mode.start-wheel.right=_{isselectedhinthorizontal} +l
+scroll-bar-mode.stop-wheel.right=-l
+```
+
+A hint with no role (a grid cell, a vision hint, a macOS element) presses
+`isselectedhintother`, and none of the control keys.
+
 Accessibility UI hints use the same appearance properties as other hint types (`box-*`,
 `font-*`, etc.). The `box-horizontal-padding` and `box-vertical-padding` properties are
 particularly useful for UI hints since the hint boxes are sized to fit the label text rather than
@@ -1282,6 +1342,18 @@ hint-mode.overlay.background-opacity=0
       `across-hint`.
     - A grid without subgrids, such as one without `selection-keys`, is one subgrid: with
       `per-subgrid`, all its boxes share one color.
+  - `click-box-color`, `input-box-color`, `widget-box-color`, `other-box-color`: the tag fill of
+    an accessibility hint of that [role](#roles-of-accessibility-ui-hints). One Windows control
+    type can have a color of its own, which wins over the color of its role, with
+    `<control>-box-color`: `button-box-color`, `split-button-box-color`, `hyperlink-box-color`,
+    `checkbox-box-color`, `radio-button-box-color`, `menu-item-box-color`, `list-item-box-color`,
+    `tree-item-box-color`, `tab-item-box-color`, `data-item-box-color`, `header-item-box-color`,
+    `edit-box-color`, `combo-box-box-color`, `spinner-box-color`, `scroll-bar-box-color`,
+    `slider-box-color`, and the same form for `menu`, `menu-bar`, `list`, `tree`, `tab`,
+    `data-grid`, `table`, `calendar`, `image`, `static-text`, `custom`, `group`, `pane`,
+    `document`, `tool-bar`, `header`, `progress-bar`, `status-bar`, `tool-tip`, `thumb`,
+    `window`, `title-bar`, `separator`, `semantic-zoom` and `app-bar`. A role left unset uses
+    `box-color`, and so does a hint with no role (a vision hint, or a macOS element).
   - `box-border-color`: One color, or a gradient as for `box-color`. So are
     `prefix-box-border-color`, `ui-element-box-color`, `ui-element-box-border-color` and
     `<level>-box-border-color`.

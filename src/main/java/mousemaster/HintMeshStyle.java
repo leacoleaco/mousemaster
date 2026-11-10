@@ -1,12 +1,21 @@
 package mousemaster;
 
+import mousemaster.platform.UiAutomation.UiElement;
+
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 public record HintMeshStyle(HintFontStyle fontStyle,
                             boolean prefixInBackground,
                             HintFontStyle prefixFontStyle,
                             GradientColor boxColor,
+                            GradientColor inputBoxColor,
+                            GradientColor clickBoxColor,
+                            GradientColor widgetBoxColor,
+                            GradientColor otherBoxColor,
+                            Map<UiElement.Control, GradientColor> controlBoxColors,
                             double boxOpacity,
                             double boxBorderThickness,
                             double boxBorderLength,
@@ -58,6 +67,35 @@ public record HintMeshStyle(HintFontStyle fontStyle,
         return new HintMeshStyleBuilder(this);
     }
 
+    /**
+     * The tag fill for this role. A role with no color of its own, and a hint
+     * whose role was not reported, use {@link #boxColor}.
+     */
+    public GradientColor boxColor(UiElement.Role role) {
+        if (role == null)
+            return boxColor;
+        GradientColor roleColor = switch (role) {
+            case CLICK -> clickBoxColor;
+            case INPUT -> inputBoxColor;
+            case WIDGET -> widgetBoxColor;
+            case OTHER -> otherBoxColor;
+        };
+        return roleColor != null ? roleColor : boxColor;
+    }
+
+    /**
+     * The tag fill for this control. A control with its own color uses that. Otherwise
+     * the color of its role, and a hint whose control was not reported uses {@link #boxColor}.
+     */
+    public GradientColor boxColor(UiElement.Role role, UiElement.Control control) {
+        if (control != null && controlBoxColors != null) {
+            GradientColor specific = controlBoxColors.get(control);
+            if (specific != null)
+                return specific;
+        }
+        return boxColor(role);
+    }
+
     /** The style of a hint at a saved position: the saved values where they are set. */
     public HintMeshStyle saved() {
         HintMeshStyleBuilder saved = new HintMeshStyleBuilder(this)
@@ -87,6 +125,11 @@ public record HintMeshStyle(HintFontStyle fontStyle,
         private Boolean prefixInBackground;
         private HintFontStyle.HintFontStyleBuilder prefixFontStyle = new HintFontStyle.HintFontStyleBuilder();
         private GradientColor boxColor;
+        private GradientColor inputBoxColor;
+        private GradientColor clickBoxColor;
+        private GradientColor widgetBoxColor;
+        private GradientColor otherBoxColor;
+        private Map<UiElement.Control, GradientColor> controlBoxColors;
         private Double boxOpacity;
         private Double boxBorderThickness;
         private Double boxBorderLength;
@@ -147,6 +190,12 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             this.prefixInBackground = style.prefixInBackground;
             this.prefixFontStyle = style.prefixFontStyle.builder();
             this.boxColor = style.boxColor;
+            this.inputBoxColor = style.inputBoxColor;
+            this.clickBoxColor = style.clickBoxColor;
+            this.widgetBoxColor = style.widgetBoxColor;
+            this.otherBoxColor = style.otherBoxColor;
+            this.controlBoxColors = style.controlBoxColors == null || style.controlBoxColors.isEmpty()
+                    ? null : new EnumMap<>(style.controlBoxColors);
             this.boxOpacity = style.boxOpacity;
             this.boxBorderThickness = style.boxBorderThickness;
             this.boxBorderLength = style.boxBorderLength;
@@ -206,6 +255,37 @@ public record HintMeshStyle(HintFontStyle fontStyle,
         public HintMeshStyleBuilder boxColor(GradientColor boxColor) {
             this.boxColor = boxColor;
             return this;
+        }
+
+        public HintMeshStyleBuilder inputBoxColor(GradientColor inputBoxColor) {
+            this.inputBoxColor = inputBoxColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder clickBoxColor(GradientColor clickBoxColor) {
+            this.clickBoxColor = clickBoxColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder widgetBoxColor(GradientColor widgetBoxColor) {
+            this.widgetBoxColor = widgetBoxColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder otherBoxColor(GradientColor otherBoxColor) {
+            this.otherBoxColor = otherBoxColor;
+            return this;
+        }
+
+        public HintMeshStyleBuilder controlBoxColor(UiElement.Control control, GradientColor color) {
+            if (controlBoxColors == null)
+                controlBoxColors = new EnumMap<>(UiElement.Control.class);
+            controlBoxColors.put(control, color);
+            return this;
+        }
+
+        public GradientColor controlBoxColor(UiElement.Control control) {
+            return controlBoxColors == null ? null : controlBoxColors.get(control);
         }
 
         public HintMeshStyleBuilder boxOpacity(Double boxOpacity) {
@@ -452,6 +532,26 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return boxColor;
         }
 
+        public GradientColor inputBoxColor() {
+            return inputBoxColor;
+        }
+
+        public GradientColor clickBoxColor() {
+            return clickBoxColor;
+        }
+
+        public GradientColor widgetBoxColor() {
+            return widgetBoxColor;
+        }
+
+        public GradientColor otherBoxColor() {
+            return otherBoxColor;
+        }
+
+        public Map<UiElement.Control, GradientColor> controlBoxColors() {
+            return controlBoxColors;
+        }
+
         public Double boxOpacity() {
             return boxOpacity;
         }
@@ -632,6 +732,15 @@ public record HintMeshStyle(HintFontStyle fontStyle,
             return labelOverride;
         }
 
+        private Map<UiElement.Control, GradientColor> controlBoxColors(HintMeshStyle defaultStyle) {
+            Map<UiElement.Control, GradientColor> built = new EnumMap<>(UiElement.Control.class);
+            if (defaultStyle != null && defaultStyle.controlBoxColors != null)
+                built.putAll(defaultStyle.controlBoxColors);
+            if (controlBoxColors != null)
+                built.putAll(controlBoxColors);
+            return built.isEmpty() ? Map.of() : Map.copyOf(built);
+        }
+
         public HintMeshStyle build(HintMeshStyle defaultStyle) {
             if (defaultStyle != null) {
                 boxShadow.extend(new Shadow.ShadowBuilder(defaultStyle.boxShadow));
@@ -647,6 +756,11 @@ public record HintMeshStyle(HintFontStyle fontStyle,
                     prefixInBackground == null ? defaultStyle.prefixInBackground : prefixInBackground,
                     prefixFontStyle.build(),
                     boxColor == null ? defaultStyle.boxColor : boxColor,
+                    inputBoxColor == null && defaultStyle != null ? defaultStyle.inputBoxColor : inputBoxColor,
+                    clickBoxColor == null && defaultStyle != null ? defaultStyle.clickBoxColor : clickBoxColor,
+                    widgetBoxColor == null && defaultStyle != null ? defaultStyle.widgetBoxColor : widgetBoxColor,
+                    otherBoxColor == null && defaultStyle != null ? defaultStyle.otherBoxColor : otherBoxColor,
+                    controlBoxColors(defaultStyle),
                     boxOpacity == null ? defaultStyle.boxOpacity : boxOpacity,
                     boxBorderThickness == null ? defaultStyle.boxBorderThickness : boxBorderThickness,
                     boxBorderLength == null ? defaultStyle.boxBorderLength : boxBorderLength,

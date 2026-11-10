@@ -43,6 +43,8 @@ public class HintManager implements ModeListener, MousePositionListener {
             new HashMap<>();
     private Point lastSelectedHintPoint;
     private Rectangle lastSelectedHintCell;
+    /** The hint the last selection ended on. Null until a hint is selected. */
+    private Hint lastSelectedHint;
     // One level per last-selected-hint-cell drill-down step. The area is frozen at push
     // time so going back restores the view that step rendered.
     private final Deque<CellGridLevel> cellGridLevelStack = new ArrayDeque<>();
@@ -261,6 +263,11 @@ public class HintManager implements ModeListener, MousePositionListener {
 
     public Rectangle lastSelectedHintCell() {
         return lastSelectedHintCell;
+    }
+
+    /** The hint the last selection ended on, of any mode. Null until a hint is selected. */
+    public Hint lastSelectedHint() {
+        return lastSelectedHint;
     }
 
     public void moveToTarget() {
@@ -1486,7 +1493,8 @@ public class HintManager implements ModeListener, MousePositionListener {
                     0, -1, i,
                     -1, -1, -1, -1, -1, -1, false, prefixLengths);
             hints.add(new Hint(element.centerX(), element.centerY(),
-                    -1, -1, keySequence, element.rectangle()));
+                    -1, -1, keySequence, element.rectangle(), element.role(),
+                    element.control()));
         }
     }
 
@@ -2033,6 +2041,7 @@ public class HintManager implements ModeListener, MousePositionListener {
                     exactMatchHint.cellWidth() > 0 || exactMatchHint.elementRectangle() != null ?
                             unzoomedHintCell(exactMatchHint, currentZoom) : null;
             lastSelectedHintCell = pendingSelectedCell;
+            lastSelectedHint = exactMatchHint;
             areaOverride = null;
             moveTargetTo(exactMatchHintCenter);
             finalizeHintSelection(exactMatchHint, newSelectedKeySequence);

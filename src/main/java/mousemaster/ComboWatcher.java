@@ -3,6 +3,7 @@ package mousemaster;
 import mousemaster.ComboMove.WaitComboMove;
 import mousemaster.ResolvedKeyComboMove.ResolvedPressComboMove;
 import mousemaster.platform.ActiveAppFinder;
+import mousemaster.platform.UiAutomation.UiElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,6 +80,8 @@ public class ComboWatcher {
     private boolean mutatedModeNotificationPending;
     private boolean modeJustTimedOut;
     private boolean entryCombosPending;
+    /** The hint the selected hint keys were last pressed for. */
+    private Hint selectedHintOfKeys;
     private ComboPreparation comboPreparation;
     private PressKeyEventProcessingSet lastProcessingSet;
     private ComboMoveDuration previousComboMoveDuration;
@@ -304,6 +307,7 @@ public class ComboWatcher {
                 keyboardState.pressingUnhandledKeyInCurrentMode());
         setVirtualKeyPressed(BuiltInVirtualKey.IS_OVERLAY_EMPTY,
                 hintManager.hintMeshEmpty());
+        updateSelectedHintKeys();
         for (String positionHistoryName : hintManager.positionHistoryNames())
             setVirtualKeyPressed(BuiltInVirtualKey.positionHistoryKey(positionHistoryName),
                     hintManager.positionHistory(positionHistoryName, () -> lastActiveApp)
@@ -318,6 +322,30 @@ public class ComboWatcher {
             refreshPreconditionOnlyMutations();
         }
         resumeMutatedModeNotification();
+    }
+
+    /**
+     * Presses the keys that describe the last selected hint: its role, its control, and
+     * whether its element is wider than tall. Called as soon as a hint is selected, so the
+     * mode its key switches to can read them in its entry combos.
+     */
+    private void updateSelectedHintKeys() {
+        Hint hint = hintManager.lastSelectedHint();
+        if (hint == null || hint == selectedHintOfKeys)
+            return;
+        selectedHintOfKeys = hint;
+        UiElement.Role selectedRole = hint.role() == null ? UiElement.Role.OTHER : hint.role();
+        for (UiElement.Role role : UiElement.Role.values())
+            setVirtualKeyPressed(BuiltInVirtualKey.selectedHintRoleKey(role),
+                    role == selectedRole);
+        for (UiElement.Control control : UiElement.Control.values())
+            setVirtualKeyPressed(BuiltInVirtualKey.selectedHintControlKey(control),
+                    control == hint.control());
+        Rectangle element = hint.elementRectangle();
+        setVirtualKeyPressed(BuiltInVirtualKey.IS_SELECTED_HINT_HORIZONTAL,
+                element != null && element.width() > element.height());
+        setVirtualKeyPressed(BuiltInVirtualKey.IS_SELECTED_HINT_VERTICAL,
+                element != null && element.width() <= element.height());
     }
 
     void suspendMutatedModeNotification() {
@@ -1281,6 +1309,8 @@ public class ComboWatcher {
                 commandRunner.run(command, lastEventKey);
                 commands.remove(i);
                 i--;
+                // Before the switch mode command of the same key runs.
+                updateSelectedHintKeys();
                 if (hintManager.pollLastHintCommandSupercedesOtherCommands() && ofKeyEvent) {
                     if (!commands.isEmpty() && logger.isDebugEnabled())
                         logger.debug("Ignoring commands (superseded by hint command): " +

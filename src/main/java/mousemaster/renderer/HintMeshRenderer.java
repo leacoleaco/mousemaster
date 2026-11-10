@@ -1414,12 +1414,8 @@ public final class HintMeshRenderer {
         boolean hasForegroundPrefixKeys = !style.prefixInBackground() && hintMesh.prefixLength() != -1;
         HintFontStyle prefixFontStyle = hasForegroundPrefixKeys ? style.prefixFontStyle() : null;
         QtHintFontStyle labelFontStyle = QtHintFont.qtHintFontStyle(style.fontStyle(), prefixFontStyle, screenScale, lastSelectedHintBoxHexColor);
-        GradientColor boxColor = style.boxColor();
-        boolean boxSweptPerHint = style.boxOpacity() != 0 && boxColor.gradient() &&
-                                  boxColor.area() != GradientArea.ELEMENT;
-        Rectangle boxGradientArea =
-                boxSweptPerHint ? gradientArea(boxColor.area(), hintMeshWindow, hintMesh) : null;
-        QBrush boxBrush = boxSweptPerHint ? null : fillBrush(boxColor, style.boxOpacity());
+        Map<GradientColor, Rectangle> boxGradientAreaByColor = new HashMap<>();
+        Map<GradientColor, QBrush> solidBoxBrushByColor = new HashMap<>();
         List<Hint> savedHints = hintMesh.savedHints();
         HintMeshStyle savedStyle = style.saved();
         QtHintFontStyle savedLabelFontStyle = savedHints.isEmpty() ? null :
@@ -1571,11 +1567,9 @@ public final class HintMeshRenderer {
             HintBox hintBox =
                     new HintBox(hint, boxBorderLength,
                             boxBorderThickness,
-                            boxSweptPerHint &&
-                            boxColor.step() != GradientStep.PIXEL ?
-                                    sampledBrush(boxColor, style.boxOpacity(), boxGradientArea,
-                                            hintGroup, new Point(hint.centerX(), hint.centerY())) :
-                                    boxBrush,
+                            hintBoxBrush(style.boxColor(hint.role(), hint.control()), style.boxOpacity(),
+                                    hint, hintGroup, hintMeshWindow, hintMesh,
+                                    boxGradientAreaByColor, solidBoxBrushByColor),
                             null,
                             isHintPartOfGrid,
                             gridLeftEdge, gridTopEdge, gridRightEdge, gridBottomEdge,
@@ -1796,9 +1790,12 @@ public final class HintMeshRenderer {
             HintLabel hintLabel = hintLabels.get(hintIndex);
             hintLabel.move(hintBox.x(), hintBox.y());
             HintGroup hintGroup = hintGroupOf(hintMesh, hintGroupByPrefix, meshGroup, hintBox.hint);
-            if (boxSweptPerHint && boxColor.step() == GradientStep.PIXEL)
-                hintBox.setColor(sweptBrush(boxColor, style.boxOpacity(),
-                        areaNarrowedToGroup(boxColor, boxGradientArea, hintGroup),
+            GradientColor hintBoxColor = style.boxColor(hintBox.hint.role(), hintBox.hint.control());
+            if (sweptPerPixel(hintBoxColor, style.boxOpacity()))
+                hintBox.setColor(sweptBrush(hintBoxColor, style.boxOpacity(),
+                        areaNarrowedToGroup(hintBoxColor, boxGradientAreaByColor.computeIfAbsent(
+                                hintBoxColor, color -> gradientArea(color.area(), hintMeshWindow, hintMesh)),
+                                hintGroup),
                         sweepOrigin));
             Point hintCenter = new Point(hintBox.hint.centerX(), hintBox.hint.centerY());
             // The live border layer paints a grid's border, and that layer starts at the window.
@@ -1983,6 +1980,27 @@ public final class HintMeshRenderer {
                         - (2 * otherBox.x() + otherBox.width())) <= 1
                && Math.abs(2 * box.y() + box.height()
                            - (2 * otherBox.y() + otherBox.height())) <= 1;
+    }
+
+    /** A solid tag fill is shared by every hint of that color. A per-pixel gradient is filled later. */
+    private QBrush hintBoxBrush(GradientColor color, double opacity, Hint hint,
+                                HintGroup hintGroup, HintMeshWindow hintMeshWindow,
+                                HintMesh hintMesh,
+                                Map<GradientColor, Rectangle> areaByColor,
+                                Map<GradientColor, QBrush> solidBrushByColor) {
+        if (sweptPerPixel(color, opacity))
+            return null;
+        if (opacity == 0 || !color.gradient() || color.area() == GradientArea.ELEMENT)
+            return solidBrushByColor.computeIfAbsent(color, fill -> fillBrush(fill, opacity));
+        Rectangle area = areaByColor.computeIfAbsent(color,
+                fill -> gradientArea(fill.area(), hintMeshWindow, hintMesh));
+        return sampledBrush(color, opacity, area, hintGroup,
+                new Point(hint.centerX(), hint.centerY()));
+    }
+
+    private static boolean sweptPerPixel(GradientColor color, double opacity) {
+        return opacity != 0 && color.gradient() && color.area() != GradientArea.ELEMENT &&
+               color.step() == GradientStep.PIXEL;
     }
 
     private static QBrush fillBrush(int rgb, double opacity) {
@@ -2345,7 +2363,7 @@ public final class HintMeshRenderer {
                             hint.centerY() - minHintCenterY, hint.cellWidth(),
                             hint.cellHeight(), hint.keySequence(),
                             trimmedRectangle(hint.elementRectangle(), minHintCenterX,
-                                    minHintCenterY)))
+                                    minHintCenterY), hint.role(), hint.control()))
                     .toList();
     }
 
@@ -2373,7 +2391,7 @@ public final class HintMeshRenderer {
         int bottom = hintRoundedBottom(hint.centerY(), cellHeight, qtScaleFactor);
         return new Hint((left + right) / 2d * qtScaleFactor, (top + bottom) / 2d * qtScaleFactor,
                 (right - left) * qtScaleFactor, (bottom - top) * qtScaleFactor,
-                hint.keySequence(), hint.elementRectangle());
+                hint.keySequence(), hint.elementRectangle(), hint.role(), hint.control());
     }
 
     private static boolean looksTheSameAnywhere(HintMesh hintMesh) {
@@ -2383,12 +2401,16 @@ public final class HintMeshRenderer {
     }
 
     private static Stream<Color> colors(HintMeshStyle style) {
-        return Stream.of(Stream.of(style.boxColor(), style.boxBorderColor(),
+        return Stream.of(Stream.concat(Stream.of(style.boxColor(), style.clickBoxColor(),
+                                 style.inputBoxColor(), style.widgetBoxColor(),
+                                 style.otherBoxColor(), style.boxBorderColor(),
                                  style.boxShadow().color(), style.prefixBoxBorderColor(),
                                  style.uiElementBoxColor(), style.uiElementBoxBorderColor(),
                                  style.savedBoxColor(), style.savedBoxBorderColor(),
                                  style.savedUiElementBoxColor(),
                                  style.savedUiElementBoxBorderColor()),
+                         style.controlBoxColors() == null ? Stream.empty() :
+                                 style.controlBoxColors().values().stream()),
                          colors(style.fontStyle()), colors(style.prefixFontStyle()),
                          style.decorations().stream().flatMap(decoration -> Stream.concat(
                                  Stream.of(decoration.boxColor(), decoration.boxBorderColor()),
@@ -4065,7 +4087,7 @@ public final class HintMeshRenderer {
         HintMesh lastHintMeshKey = hintMeshWindow.lastHintMeshKeyReference().get();
         HintMeshStyle style =
                 lastHintMeshKey.styleByFilter().get(ScreenFilter.of(screen));
-        GradientColor boxColor = style.boxColor();
+        GradientColor boxColor = style.boxColor(hint.role(), hint.control());
         Rectangle boxColorArea = gradientArea(boxColor.area(), hintMeshWindow, currentHintMesh);
         lastSelectedHintBoxHexColor = Color.hexColor(boxColorArea == null ?
                 boxColor.rgbAt(GradientColor.unitArea, 0.5, 0.5) :

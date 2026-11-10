@@ -2165,14 +2165,12 @@ public class ConfigurationParser {
             case "filter-ui-hints" -> {
                 if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "filter-ui-hints requires a kind: filter-ui-hints.<text|button|link>");
-                UiElement.Role role = switch (keyMatcher.group(group4)) {
-                    case "text" -> UiElement.Role.TEXT;
-                    case "button" -> UiElement.Role.BUTTON;
-                    case "link" -> UiElement.Role.LINK;
-                    default -> throw new IllegalArgumentException(
-                            "Unknown filter-ui-hints kind: " + keyMatcher.group(group4));
-                };
+                            "filter-ui-hints requires a role: filter-ui-hints.<click|input|widget|other>");
+                UiElement.Role role = UiElement.Role.fromPropertyName(keyMatcher.group(group4));
+                if (role == null)
+                    throw new IllegalArgumentException(
+                            "Unknown filter-ui-hints role: " + keyMatcher.group(group4) +
+                            " (expected click, input, widget or other)");
                 setCommand(mode.comboMap.filterUiHints.builder, propertyValue,
                         new FilterUiHints(role), propertyKey, defaultComboMoveDuration,
                         keyAliases, appAliases, keyResolver, allVariableNames);
@@ -3633,6 +3631,10 @@ public class ConfigurationParser {
             case "prefix-focused-font-shadow-vertical-offset" -> ModePropertyHandler.of(prefix.append("styleByFilter", "prefixFontStyle", "focusedFontStyle", "shadow", "verticalOffset"), v -> parseDouble(v, true, -100, 100), v -> hintMeshBuilder.style(screenFilter).prefixFontStyle().focusedFontStyle().shadow().verticalOffset(v));
             // Style: box
             case "box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).boxColor(v));
+            case "click-box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "clickBoxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).clickBoxColor(v));
+            case "input-box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "inputBoxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).inputBoxColor(v));
+            case "widget-box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "widgetBoxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).widgetBoxColor(v));
+            case "other-box-color" -> ModePropertyHandler.of(prefix.append("styleByFilter", "otherBoxColor"), v -> GradientColor.parse(v, colorAliases), v -> hintMeshBuilder.style(screenFilter).otherBoxColor(v));
             case "box-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).boxOpacity(v));
             case "box-border-thickness" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderThickness"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).boxBorderThickness(v));
             case "box-border-length" -> ModePropertyHandler.of(prefix.append("styleByFilter", "boxBorderLength"), v -> parseDouble(v, true, 0, 10_000), v -> hintMeshBuilder.style(screenFilter).boxBorderLength(v));
@@ -3692,8 +3694,22 @@ public class ConfigurationParser {
             case "background-border-opacity" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundBorderOpacity"), v -> parseDouble(v, true, 0, 1), v -> hintMeshBuilder.style(screenFilter).backgroundBorderOpacity(v));
             case "background-border-radius" -> ModePropertyHandler.of(prefix.append("styleByFilter", "backgroundBorderRadius"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.style(screenFilter).backgroundBorderRadius(v));
             // @formatter:on
-            default -> null;
+            default -> controlBoxColorHandler(prefix, hintMeshBuilder, screenFilter, key,
+                    colorAliases);
         };
+    }
+
+    /** {@code checkbox-box-color} and the other per-control tag fills. Null for any other key. */
+    private static ModePropertyHandler controlBoxColorHandler(
+            ModePropertyPath prefix, HintMeshConfiguration.HintMeshConfigurationBuilder hintMeshBuilder,
+            ScreenFilter screenFilter, String key, Map<String, GradientColor> colorAliases) {
+        UiElement.Control control = UiElement.Control.fromBoxColorProperty(key);
+        if (control == null)
+            return null;
+        return ModePropertyHandler.of(
+                prefix.append("styleByFilter", "controlBoxColor", control.propertyName()),
+                v -> GradientColor.parse(v, colorAliases),
+                v -> hintMeshBuilder.style(screenFilter).controlBoxColor(control, v));
     }
 
 
@@ -4557,6 +4573,31 @@ public class ConfigurationParser {
                             HintMeshStyleBuilder::boxColor, childStyleByFilter,
                             filter))
                         childStyle.boxColor(parentStyle.boxColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::inputBoxColor, childStyleByFilter,
+                            filter))
+                        childStyle.inputBoxColor(parentStyle.inputBoxColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::clickBoxColor, childStyleByFilter,
+                            filter))
+                        childStyle.clickBoxColor(parentStyle.clickBoxColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::widgetBoxColor, childStyleByFilter,
+                            filter))
+                        childStyle.widgetBoxColor(parentStyle.widgetBoxColor());
+                    if (!childDoesNotNeedParentProperty(
+                            HintMeshStyleBuilder::otherBoxColor, childStyleByFilter,
+                            filter))
+                        childStyle.otherBoxColor(parentStyle.otherBoxColor());
+                    for (UiElement.Control control : UiElement.Control.values()) {
+                        if (parentStyle.controlBoxColor(control) == null)
+                            continue;
+                        if (!childDoesNotNeedParentProperty(
+                                builder -> builder.controlBoxColor(control),
+                                childStyleByFilter, filter))
+                            childStyle.controlBoxColor(control,
+                                    parentStyle.controlBoxColor(control));
+                    }
                     if (!childDoesNotNeedParentProperty(
                             HintMeshStyleBuilder::boxOpacity, childStyleByFilter,
                             filter))

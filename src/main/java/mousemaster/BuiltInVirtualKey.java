@@ -1,7 +1,13 @@
 package mousemaster;
 
+import mousemaster.platform.UiAutomation.UiElement;
+
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Virtual keys that mousemaster presses and releases itself. They can be read in a combo
@@ -39,19 +45,65 @@ public final class BuiltInVirtualKey {
     public static final Key IS_WINDOWS = new Key("iswindows", null, null);
     public static final Key IS_MACOS = new Key("ismacos", null, null);
 
+    /** Pressed once the last selected hint is on an element wider than it is tall. */
+    public static final Key IS_SELECTED_HINT_HORIZONTAL =
+            new Key("isselectedhinthorizontal", null, null);
+    /** Pressed once the last selected hint is on an element at least as tall as it is wide. */
+    public static final Key IS_SELECTED_HINT_VERTICAL =
+            new Key("isselectedhintvertical", null, null);
+
+    private static final Map<UiElement.Role, Key> SELECTED_HINT_ROLE_KEYS;
+    private static final Map<UiElement.Control, Key> SELECTED_HINT_CONTROL_KEYS;
+
+    static {
+        Map<UiElement.Role, Key> roleKeys = new EnumMap<>(UiElement.Role.class);
+        for (UiElement.Role role : UiElement.Role.values())
+            roleKeys.put(role, new Key("isselectedhint" + role.propertyName(), null, null));
+        SELECTED_HINT_ROLE_KEYS = Collections.unmodifiableMap(roleKeys);
+        Map<UiElement.Control, Key> controlKeys = new EnumMap<>(UiElement.Control.class);
+        for (UiElement.Control control : UiElement.Control.values())
+            controlKeys.put(control, new Key(
+                    "isselectedhint" + control.propertyName().replace("-", ""), null, null));
+        SELECTED_HINT_CONTROL_KEYS = Collections.unmodifiableMap(controlKeys);
+    }
+
     public static final Set<Key> STATIC_KEYS =
-            Set.of(IS_IDLING, IS_MOVING, IS_MOVING_UP, IS_MOVING_DOWN, IS_MOVING_LEFT,
-                    IS_MOVING_RIGHT, IS_WHEELING, IS_WHEELING_UP, IS_WHEELING_DOWN,
-                    IS_WHEELING_LEFT, IS_WHEELING_RIGHT, IS_MOUSE_PRESSING,
-                    IS_LEFT_MOUSE_PRESSING, IS_MIDDLE_MOUSE_PRESSING,
-                    IS_RIGHT_MOUSE_PRESSING, IS_UNHANDLED_KEY_PRESSING,
-                    IS_OVERLAY_EMPTY, IS_WINDOWS, IS_MACOS);
+            Stream.of(Stream.of(IS_IDLING, IS_MOVING, IS_MOVING_UP, IS_MOVING_DOWN,
+                                    IS_MOVING_LEFT, IS_MOVING_RIGHT, IS_WHEELING,
+                                    IS_WHEELING_UP, IS_WHEELING_DOWN, IS_WHEELING_LEFT,
+                                    IS_WHEELING_RIGHT, IS_MOUSE_PRESSING,
+                                    IS_LEFT_MOUSE_PRESSING, IS_MIDDLE_MOUSE_PRESSING,
+                                    IS_RIGHT_MOUSE_PRESSING, IS_UNHANDLED_KEY_PRESSING,
+                                    IS_OVERLAY_EMPTY, IS_WINDOWS, IS_MACOS,
+                                    IS_SELECTED_HINT_HORIZONTAL, IS_SELECTED_HINT_VERTICAL),
+                          SELECTED_HINT_ROLE_KEYS.values().stream(),
+                          SELECTED_HINT_CONTROL_KEYS.values().stream())
+                  .flatMap(keys -> keys)
+                  .collect(Collectors.toUnmodifiableSet());
 
     public static final Set<String> STATIC_KEY_NAMES =
             STATIC_KEYS.stream().map(Key::name).collect(Collectors.toUnmodifiableSet());
 
     public static boolean isBuiltIn(String keyName) {
         return STATIC_KEY_NAMES.contains(keyName) || ScreenFilter.of(keyName) != null;
+    }
+
+    /**
+     * Pressed once the last selected hint has that role, until a hint of another role is
+     * selected: {@code isselectedhintclick}, {@code isselectedhintinput},
+     * {@code isselectedhintwidget}, {@code isselectedhintother}. A hint with no role
+     * (a grid cell, a vision hint) is other.
+     */
+    public static Key selectedHintRoleKey(UiElement.Role role) {
+        return SELECTED_HINT_ROLE_KEYS.get(role);
+    }
+
+    /**
+     * Pressed once the last selected hint is on that control, such as
+     * {@code isselectedhintscrollbar}.
+     */
+    public static Key selectedHintControlKey(UiElement.Control control) {
+        return SELECTED_HINT_CONTROL_KEYS.get(control);
     }
 
     /** Pressed while the active screen matches the filter. */

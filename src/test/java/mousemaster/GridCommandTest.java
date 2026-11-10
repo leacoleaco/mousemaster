@@ -232,8 +232,8 @@ class GridCommandTest {
     @Test
     void aUiHintFilterKeepsOneKindAndCanMatchNothing() throws IOException {
         uiElements = List.of(
-                new UiElement(new Rectangle(100, 100, 40, 20), UiElement.Role.BUTTON),
-                new UiElement(new Rectangle(300, 100, 80, 20), UiElement.Role.TEXT));
+                new UiElement(new Rectangle(100, 100, 40, 20), UiElement.Role.CLICK),
+                new UiElement(new Rectangle(300, 100, 80, 20), UiElement.Role.INPUT));
         start("""
                 idle-mode.to.ui-hint-mode=+u
                 ui-hint-mode.to.idle-mode=+esc
@@ -244,10 +244,11 @@ class GridCommandTest {
         switchMode("ui-hint-mode");
         hintManager.completePendingUiHintQuery();
         assertEquals(2, hintManager.hintMesh().hints().size());
-        hintManager.filterUiHints(UiElement.Role.TEXT);
+        hintManager.filterUiHints(UiElement.Role.INPUT);
         assertEquals(List.of(340.0), hintManager.hintMesh().hints().stream()
                 .map(Hint::centerX).toList());
-        hintManager.filterUiHints(UiElement.Role.LINK);
+        assertEquals(UiElement.Role.INPUT, hintManager.hintMesh().hints().getFirst().role());
+        hintManager.filterUiHints(UiElement.Role.WIDGET);
         assertEquals(List.of(), hintManager.hintMesh().hints());
         assertFalse(hintManager.hintMeshEmpty());
     }
