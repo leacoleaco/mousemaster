@@ -32,6 +32,8 @@ class UiHintRoleDispatchTest {
 
     private static final UiElement BUTTON = new UiElement(new Rectangle(100, 100, 80, 30),
             UiElement.Role.CLICK, UiElement.Control.BUTTON);
+    private static final UiElement CHECK_BOX = new UiElement(new Rectangle(100, 200, 20, 20),
+            UiElement.Role.CLICK, UiElement.Control.CHECK_BOX);
     private static final UiElement EDIT = new UiElement(new Rectangle(300, 100, 200, 30),
             UiElement.Role.INPUT, UiElement.Control.EDIT);
     private static final UiElement VERTICAL_SCROLL_BAR =
@@ -68,8 +70,8 @@ class UiHintRoleDispatchTest {
                 () -> Set.of(new Screen(new Rectangle(0, 0, 1920, 1080), 96, 1)));
         mouseManager = new MouseManager(screenManager, proxy(MouseController.class));
         Future<List<UiElement>> found = CompletableFuture.completedFuture(
-                List.of(BUTTON, EDIT, VERTICAL_SCROLL_BAR, HORIZONTAL_SCROLL_BAR, SLIDER,
-                        PANE, CLICKABLE_IMAGE));
+                List.of(BUTTON, CHECK_BOX, EDIT, VERTICAL_SCROLL_BAR, HORIZONTAL_SCROLL_BAR,
+                        SLIDER, PANE, CLICKABLE_IMAGE));
         Overlay overlay = (Overlay) Proxy.newProxyInstance(Overlay.class.getClassLoader(),
                 new Class<?>[] {Overlay.class}, (proxy, method, args) ->
                         method.getReturnType() == Rectangle.class ?
@@ -207,13 +209,27 @@ class UiHintRoleDispatchTest {
 
     @Test
     void aClickHintIsClickedAndNormalModeIsBack() {
-        choose(BUTTON);
+        choose(CHECK_BOX);
         assertEquals(List.of(new Command.SwitchMode("ui-hint-selected-mode"),
                         new Command.SwitchMode("click-hint-mode"), new Command.PressLeft(),
                         new Command.ReleaseLeft(), new Command.SwitchMode("normal-mode")),
                 ran(Command.SwitchMode.class, Command.PressLeft.class,
                         Command.ReleaseLeft.class));
         assertEquals("normal-mode", currentModeName);
+    }
+
+    @Test
+    void aButtonIsPointedAtWithoutAClick() {
+        choose(BUTTON);
+        assertEquals(List.of(new Command.SwitchMode("ui-hint-selected-mode"),
+                        new Command.SwitchMode("point-button-mode"),
+                        new Command.SwitchMode("normal-mode")),
+                ran(Command.SwitchMode.class, Command.PressLeft.class,
+                        Command.ReleaseLeft.class));
+        assertEquals(List.of(), ran(Command.PressLeft.class, Command.ReleaseLeft.class));
+        assertEquals("normal-mode", currentModeName);
+        assertEquals(140, mouseManager.jumpEndX());
+        assertEquals(115, mouseManager.jumpEndY());
     }
 
     @Test
@@ -227,7 +243,7 @@ class UiHintRoleDispatchTest {
     @Test
     void aClickHintIsClickedWhileItsLastKeyIsStillHeld() {
         Hint hint = hintManager.hintMesh().hints().stream()
-                               .filter(candidate -> BUTTON.rectangle().equals(
+                               .filter(candidate -> CHECK_BOX.rectangle().equals(
                                        candidate.elementRectangle()))
                                .findFirst().orElseThrow();
         List<Key> keys = hint.keySequence();
@@ -352,7 +368,7 @@ class UiHintRoleDispatchTest {
         hintManager.completePendingUiHintQuery();
         tick();
         ranCommands.clear();
-        choose(BUTTON);
+        choose(CHECK_BOX);
         assertEquals(List.of(new Command.PressLeft(), new Command.ReleaseLeft()),
                 ran(Command.PressLeft.class, Command.ReleaseLeft.class));
         assertEquals("normal-mode", currentModeName);
