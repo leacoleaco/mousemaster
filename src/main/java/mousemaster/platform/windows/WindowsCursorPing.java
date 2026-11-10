@@ -26,7 +26,7 @@ import java.util.Set;
 
 /**
  * Full-screen dim with a white ring at the cursor. Shown when entering normal mode
- * from idle, held for one second, then hidden so the screen returns as it was.
+ * from idle, held for half a second, then hidden so the screen returns as it was.
  * <p>
  * Drawn with UpdateLayeredWindow, the same path as the indicator. A Qt window does not
  * get a full-screen translucent frame onto the desktop.
@@ -35,7 +35,7 @@ public final class WindowsCursorPing {
 
     private static final Logger logger = LoggerFactory.getLogger(WindowsCursorPing.class);
 
-    private static final double HOLD_SECONDS = 1;
+    private static final double HOLD_SECONDS = 0.5;
     /** Logical pixels; multiplied by the screen scale. */
     private static final double CIRCLE_RADIUS = 64;
     private static final double STROKE_WIDTH = 4;
