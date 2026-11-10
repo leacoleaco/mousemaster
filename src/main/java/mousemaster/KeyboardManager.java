@@ -200,24 +200,16 @@ public class KeyboardManager {
     }
 
     /**
-     * Left Ctrl + e/d/s/f moves the pointer. Every other key pressed while either
-     * Ctrl is already held is a system shortcut (copy, paste, select all, and so on)
-     * and must not be eaten or run a combo. Ctrl itself still reaches the combo
-     * watcher so a double-tap can activate mouse mode.
+     * Any key pressed while either Ctrl is already held is a system shortcut
+     * (copy, paste, select all, save, and so on) and must not be eaten or run a
+     * combo. Ctrl itself still reaches the combo watcher so a double-tap can
+     * activate mouse mode.
      */
     private boolean shouldPassCtrlShortcutToOs(Key key) {
         if (key.equals(Key.leftctrl) || key.equals(Key.rightctrl))
             return false;
-        boolean leftHeld = currentlyPressedKeys.containsKey(Key.leftctrl);
-        boolean rightHeld = currentlyPressedKeys.containsKey(Key.rightctrl);
-        if (!leftHeld && !rightHeld)
-            return false;
-        return !(leftHeld && isLeftCtrlMoveKey(key));
-    }
-
-    private static boolean isLeftCtrlMoveKey(Key key) {
-        return key.equals(Key.ofName("e")) || key.equals(Key.ofName("d"))
-               || key.equals(Key.ofName("s")) || key.equals(Key.ofName("f"));
+        return currentlyPressedKeys.containsKey(Key.leftctrl)
+               || currentlyPressedKeys.containsKey(Key.rightctrl);
     }
 
     private EatAndRegurgitates singleKeyEvent(KeyEvent keyEvent) {
@@ -225,7 +217,7 @@ public class KeyboardManager {
         Key key = keyEvent.key();
         PressKeyEventProcessingSet processingSet = currentlyPressedKeys.get(key);
         if (keyEvent.isPress() && processingSet == null && shouldPassCtrlShortcutToOs(key)) {
-            // A non-move key cancels an in-progress double-tap, but Ctrl stays held.
+            // Another key cancels an in-progress double-tap, but Ctrl stays held.
             comboWatcher.breakComboPreparation();
             currentlyPressedKeys.put(key, ctrlShortcutPassthrough);
             macroPlayer.clearEarlyRelease(key);

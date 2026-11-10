@@ -3029,8 +3029,7 @@ public class ConfigurationParser {
         modeReferences.add(checkModeReference(targetMode));
         // One combo per key, so a double-tap is that key twice. Left Ctrl then another key
         // does not count. Presses are not eaten, so the operating system still sees the
-        // key. KeyboardManager then passes every other Ctrl chord through; left Ctrl
-        // plus e/d/s/f stays the movement chord.
+        // key. KeyboardManager then passes every Ctrl chord through.
         List<String> comboParts = new ArrayList<>();
         for (Key key : keyAlias.keys()) {
             String name = key.staticName();

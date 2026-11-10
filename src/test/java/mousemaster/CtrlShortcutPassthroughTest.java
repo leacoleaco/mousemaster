@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Ctrl is not swallowed. Left Ctrl + e/d/s/f still moves; every other Ctrl chord
- * is passed through and does not run a mouse-mode command.
+ * Ctrl is not swallowed. Every Ctrl chord, including e/d/s/f, is passed through
+ * and does not run a mouse-mode command.
  */
 class CtrlShortcutPassthroughTest {
 
@@ -170,40 +170,41 @@ class CtrlShortcutPassthroughTest {
         assertFalse(press("c").mustBeEaten());
         assertFalse(press("v").mustBeEaten());
         assertFalse(press("a").mustBeEaten());
+        assertFalse(press("e").mustBeEaten());
+        assertFalse(press("d").mustBeEaten());
+        assertFalse(press("s").mustBeEaten());
+        assertFalse(press("f").mustBeEaten());
         assertEquals(List.of(), ranCommands);
         assertFalse(keyboardManager.pressingUnhandledKeyInCurrentMode());
         assertTrue(keyboardManager.isPressedKeyNotEaten(Key.ofName("c")));
         assertFalse(release("c").mustBeEaten());
         assertFalse(release("v").mustBeEaten());
         assertFalse(release("a").mustBeEaten());
+        assertFalse(release("e").mustBeEaten());
+        assertFalse(release("d").mustBeEaten());
+        assertFalse(release("s").mustBeEaten());
+        assertFalse(release("f").mustBeEaten());
         assertFalse(release("leftctrl").mustBeEaten());
     }
 
     @Test
-    void leftCtrlPlusMoveKeysStillMove() {
+    void leftCtrlPlusMoveKeysArePassedThrough() {
         loadMouseMode();
         press("e");
         assertFalse(ranCommands.contains(new Command.StartMoveUp()));
         release("e");
 
         press("leftctrl");
-        assertTrue(press("e").mustBeEaten());
-        assertTrue(press("s").mustBeEaten());
-        assertTrue(ranCommands.contains(new Command.StartMoveUp()));
-        assertTrue(ranCommands.contains(new Command.StartMoveLeft()));
+        assertFalse(press("e").mustBeEaten());
+        assertFalse(press("s").mustBeEaten());
+        assertFalse(press("d").mustBeEaten());
+        assertFalse(press("f").mustBeEaten());
+        assertFalse(ranCommands.contains(new Command.StartMoveUp()));
+        assertFalse(ranCommands.contains(new Command.StartMoveLeft()));
     }
 
     @Test
-    void moveKeyStillWorksWhileAnotherCtrlChordIsHeld() {
-        loadMouseMode();
-        press("leftctrl");
-        assertFalse(press("c").mustBeEaten());
-        assertTrue(press("e").mustBeEaten());
-        assertEquals(List.of(new Command.StartMoveUp()), ranCommands);
-    }
-
-    @Test
-    void rightCtrlDoesNotMoveAndDoesNotEatTheLetter() {
+    void rightCtrlDoesNotEatTheLetter() {
         loadMouseMode();
         press("rightctrl");
         assertFalse(press("e").mustBeEaten());
