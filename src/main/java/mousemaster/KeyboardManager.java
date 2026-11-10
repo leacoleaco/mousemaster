@@ -154,6 +154,16 @@ public class KeyboardManager {
             mustNotBeEatenOnly = new EatAndRegurgitates(false, List.of());
     private static final EatAndRegurgitates
             mustBeEatenOnly = new EatAndRegurgitates(true, List.of());
+    /**
+     * A Ctrl chord that belongs to the app, not to a combo. Handled so it does not
+     * count as an unhandled key, and not eaten so the operating system sees it.
+     * The release is not fed back into combo matching.
+     */
+    private static final PressKeyEventProcessingSet ctrlShortcutPassthrough =
+            new PressKeyEventProcessingSet(
+                    Map.of(PressKeyEventProcessingSet.dummyCombo,
+                            PressKeyEventProcessing.comboPreparationBreaker(false)),
+                    Map.of());
 
     public EatAndRegurgitates keyEvent(KeyEvent keyEvent) {
         boolean osAutoRepeat = keyEvent.isPress() &&
@@ -189,10 +199,42 @@ public class KeyboardManager {
         return lastKeyEvents;
     }
 
+    /**
+     * Left Ctrl + e/d/s/f moves the pointer. Every other key pressed while either
+     * Ctrl is already held is a system shortcut (copy, paste, select all, and so on)
+     * and must not be eaten or run a combo. Ctrl itself still reaches the combo
+     * watcher so a double-tap can activate mouse mode.
+     */
+    private boolean shouldPassCtrlShortcutToOs(Key key) {
+        if (key.equals(Key.leftctrl) || key.equals(Key.rightctrl))
+            return false;
+        boolean leftHeld = currentlyPressedKeys.containsKey(Key.leftctrl);
+        boolean rightHeld = currentlyPressedKeys.containsKey(Key.rightctrl);
+        if (!leftHeld && !rightHeld)
+            return false;
+        return !(leftHeld && isLeftCtrlMoveKey(key));
+    }
+
+    private static boolean isLeftCtrlMoveKey(Key key) {
+        return key.equals(Key.ofName("e")) || key.equals(Key.ofName("d"))
+               || key.equals(Key.ofName("s")) || key.equals(Key.ofName("f"));
+    }
+
     private EatAndRegurgitates singleKeyEvent(KeyEvent keyEvent) {
         macroPlayer.newKeyEvent();
         Key key = keyEvent.key();
         PressKeyEventProcessingSet processingSet = currentlyPressedKeys.get(key);
+        if (keyEvent.isPress() && processingSet == null && shouldPassCtrlShortcutToOs(key)) {
+            // A non-move key cancels an in-progress double-tap, but Ctrl stays held.
+            comboWatcher.breakComboPreparation();
+            currentlyPressedKeys.put(key, ctrlShortcutPassthrough);
+            macroPlayer.clearEarlyRelease(key);
+            macroPlayer.clearDeferredRelease(key);
+            boolean mustBeEaten = macroPlayer.isKeyPressedByMacro(key);
+            if (!mustBeEaten)
+                macroPlayer.keyPressedNotEaten(key);
+            return eatAndRegurgitates(mustBeEaten, List.of());
+        }
         if (keyEvent.isPress()) {
             List<Regurgitate> regurgitates = List.of();
             if (processingSet == null) {
