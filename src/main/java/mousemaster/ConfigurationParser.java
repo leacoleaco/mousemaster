@@ -3024,6 +3024,16 @@ public class ConfigurationParser {
         setCommand(idle.comboMap.to.builder, comboString, new SwitchMode(targetMode),
                 label, defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
                 allVariableNames);
+        // The same double-tap, once already out of idle, only repeats the cursor spotlight.
+        Command spotlight = new Command.ShowCursorSpotlight();
+        for (ModeBuilder mode : modeByName.values()) {
+            if (mode.modeName.equals(Mode.IDLE_MODE_NAME) || mode.modeName.startsWith("_"))
+                continue;
+            setCommand(mode.comboMap.to.builder, comboString, spotlight,
+                    mode.modeName + ".double-tap-cursor-spotlight(generated)",
+                    defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
+                    allVariableNames);
+        }
     }
 
     /**

@@ -6,6 +6,9 @@ public sealed interface Command {
 
     record SwitchMode(String modeName) implements Command {}
 
+    /** Dim the screen and ring the cursor, without changing mode. */
+    record ShowCursorSpotlight() implements Command {}
+
     record StartMoveUp() implements Command {}
     record StartMoveDown() implements Command {}
     record StartMoveLeft() implements Command {}

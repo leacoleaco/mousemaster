@@ -41,6 +41,10 @@ public interface Platform extends ModeListener {
 
     void requestRestartProcess();
 
+    /** Dim the screen and ring the cursor. Platforms without that overlay do nothing. */
+    default void showCursorSpotlight() {
+    }
+
     /**
      * When suspended, keyboard and mouse hooks pass events to the operating system
      * and mousemaster does not eat them.

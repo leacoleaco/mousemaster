@@ -1027,6 +1027,11 @@ public class WindowsPlatform implements Platform {
     }
 
     @Override
+    public void showCursorSpotlight() {
+        WindowsCursorPing.startAtCursor();
+    }
+
+    @Override
     public void modeChanged(Mode newMode) {
         // If zoom is going to change, WindowsOverlay.setZoom() will repaint the hint mesh
         // after the zoom window is initialized.

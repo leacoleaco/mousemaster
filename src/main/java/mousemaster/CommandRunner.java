@@ -38,6 +38,7 @@ public class CommandRunner {
         switch (command) {
             // @formatter:off
             case SwitchMode switchMode -> modeController.switchMode(switchMode.modeName());
+            case ShowCursorSpotlight showCursorSpotlight -> platform.showCursorSpotlight();
 
             case StartMoveUp startMoveUp -> mouseManager.startMoveUp();
             case StartMoveDown startMoveDown -> mouseManager.startMoveDown();

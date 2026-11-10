@@ -3,8 +3,9 @@ package mousemaster;
 import mousemaster.platform.windows.WindowsCursorPing;
 
 /**
- * When leaving idle for normal mode, plays a short double ripple at the cursor
- * so the pointer position is easy to spot.
+ * When leaving idle for normal mode, dims the screen and draws a white ring at
+ * the cursor for one second so the pointer position is easy to spot.
+ * Repeating the activation double-tap while already active is a separate command.
  */
 public class CursorPingManager implements ModeListener {
 

@@ -196,6 +196,10 @@ public class WindowsOverlay implements Overlay {
             hwnds.add(indicatorWindow.hwnd());
         if (zoomHwnd != null)
             (currentZoom != null ? hwnds : notTopmostHwnds).add(zoomHwnd);
+        // The cursor spotlight covers the other overlays for its one-second hold.
+        WinDef.HWND cursorPing = WindowsCursorPing.showingHwnd();
+        if (cursorPing != null)
+            hwnds.addFirst(cursorPing);
         // The shell demotes the taskbar under a topmost window that covers a screen.
         notTopmostHwnds.forEach(this::setWindowNotTopmost);
         if (hwnds.isEmpty())

@@ -89,7 +89,9 @@ public final class MousemasterTray implements ModeListener {
 
             boolean fromConfig = !app.configuration().hideConsole();
             boolean visible;
-            if (Files.isRegularFile(prefs.path()))
+            if (keepConsole())
+                visible = true;
+            else if (Files.isRegularFile(prefs.path()))
                 visible = prefs.readConsoleVisibleInTaskbar(fromConfig);
             else {
                 visible = false;
@@ -98,6 +100,8 @@ public final class MousemasterTray implements ModeListener {
             blockConsoleActionSignals(() -> consoleInTaskbarAction.setChecked(visible));
             applyConsoleVisibility(visible);
             logger.info("System tray icon active; preferences at {}", prefs.path());
+            if (keepConsole())
+                logger.info("Console stays visible (-Dmousemaster.keepConsole); close it to exit");
             if (Os.windows)
                 QTimer.singleShot(400, this::warnIfNotAdministrator);
         } catch (Exception e) {
@@ -258,7 +262,7 @@ public final class MousemasterTray implements ModeListener {
             return;
         try {
             boolean fromConfig = !app.configuration().hideConsole();
-            boolean visible = prefs.readConsoleVisibleInTaskbar(fromConfig);
+            boolean visible = keepConsole() || prefs.readConsoleVisibleInTaskbar(fromConfig);
             blockConsoleActionSignals(() -> consoleInTaskbarAction.setChecked(visible));
             applyConsoleVisibility(visible);
         } catch (IOException e) {
@@ -363,6 +367,11 @@ public final class MousemasterTray implements ModeListener {
     private void onConsoleInTaskbarClicked() {
         if (consoleInTaskbarAction == null)
             return;
+        if (keepConsole()) {
+            blockConsoleActionSignals(() -> consoleInTaskbarAction.setChecked(true));
+            applyConsoleVisibility(true);
+            return;
+        }
         boolean checked = consoleInTaskbarAction.isChecked();
         try {
             prefs.writeConsoleVisibleInTaskbar(checked);
@@ -370,6 +379,15 @@ public final class MousemasterTray implements ModeListener {
             logger.warn("Could not save tray preferences", e);
         }
         applyConsoleVisibility(checked);
+    }
+
+    /**
+     * {@code start_dev.cmd} passes {@code -Dmousemaster.keepConsole=true}. The saved tray
+     * preference hides the console, which would leave the process running with no window
+     * to close. This flag keeps the window for this process and does not rewrite the preference.
+     */
+    private static boolean keepConsole() {
+        return Boolean.getBoolean("mousemaster.keepConsole");
     }
 
     private void applyConsoleVisibility(boolean visible) {
