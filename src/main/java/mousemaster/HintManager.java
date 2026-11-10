@@ -991,12 +991,13 @@ public class HintManager implements ModeListener, MousePositionListener {
                     ScreenFilter.of(screenManager.activeScreen());
             case ALL_SCREENS ->
                     ScreenFilter.of(sortedScreens().getFirst());
-            case ACTIVE_WINDOW -> activeWindowScreenFilter();
+            case ACTIVE_WINDOW -> screenFilterOf(overlay.activeWindowRectangle());
+            case MOUSE_WINDOW -> screenFilterOf(overlay.mouseWindowRectangle(mouseX, mouseY));
         };
     }
 
-    private ScreenFilter activeWindowScreenFilter() {
-        Point areaCenter = overlay.activeWindowRectangle().center();
+    private ScreenFilter screenFilterOf(Rectangle rectangle) {
+        Point areaCenter = rectangle.center();
         return ScreenFilter.of(screenManager.nearestScreenContaining(
                 areaCenter.x(), areaCenter.y()));
     }
@@ -1023,10 +1024,22 @@ public class HintManager implements ModeListener, MousePositionListener {
         if (type.type() == HintMeshTypeType.UI_VISION)
             return vision.startFindElements(screenManager.screens(), uiElementQueryArea,
                     type.density(), type.minSize());
+        if (area.size().source() == AreaSizeSource.MOUSE_WINDOW &&
+            coversItsSource(area) &&
+            uiElementQueryArea.equals(overlay.mouseWindowRectangle(mouseX, mouseY)))
+            return uiAutomation.startFindMouseWindowUiElements(mouseX, mouseY);
         return area.size().source() == AreaSizeSource.ACTIVE_WINDOW &&
                uiElementQueryArea.equals(overlay.activeWindowRectangle()) ?
                 uiAutomation.startFindActiveWindowUiElements() :
                 uiAutomation.startFindUiElementsInArea(uiElementQueryArea);
+    }
+
+    /** Unscaled and without insets: the query is the window itself, popups included. */
+    private static boolean coversItsSource(Area area) {
+        AreaSize size = area.size();
+        return size.widthPercent() == 1 && size.heightPercent() == 1 &&
+               size.topInset() == 0 && size.bottomInset() == 0 &&
+               size.leftInset() == 0 && size.rightInset() == 0;
     }
 
     /** The area an indicator layer covers, without its insets: the layer cuts them to a
@@ -1051,6 +1064,7 @@ public class HintManager implements ModeListener, MousePositionListener {
                     area.size(), area.centerOrDefault());
         Rectangle sourceRectangle = switch (area.size().source()) {
             case ACTIVE_WINDOW -> overlay.activeWindowRectangle();
+            case MOUSE_WINDOW -> overlay.mouseWindowRectangle(mouseX, mouseY);
             case LAST_OVERLAY_AREA -> lastOverlayArea();
             default -> screenManager.activeScreen().rectangle();
         };
@@ -1115,6 +1129,8 @@ public class HintManager implements ModeListener, MousePositionListener {
                     screenManager.activeScreen().rectangle().center() : lastSelectedHintPoint;
             case ACTIVE_WINDOW_CENTER ->
                     overlay.activeWindowRectangle().center();
+            case MOUSE_WINDOW_CENTER ->
+                    overlay.mouseWindowRectangle(mouseX, mouseY).center();
             case LAST_OVERLAY_AREA_CENTER -> lastOverlayArea().center();
         };
     }
@@ -1217,6 +1233,8 @@ public class HintManager implements ModeListener, MousePositionListener {
                     Rectangle sourceRectangle = switch (area.size().source()) {
                         case ACTIVE_SCREEN -> activeScreen.rectangle();
                         case ACTIVE_WINDOW -> zoom.zoomedRectangle(overlay.activeWindowRectangle());
+                        case MOUSE_WINDOW -> zoom.zoomedRectangle(
+                                overlay.mouseWindowRectangle(mouseX, mouseY));
                         case LAST_OVERLAY_AREA -> zoom.zoomedRectangle(lastOverlayArea());
                         default -> throw new IllegalStateException();
                     };
@@ -1225,7 +1243,8 @@ public class HintManager implements ModeListener, MousePositionListener {
                         case LAST_SELECTED_HINT -> lastSelectedHintPoint == null ?
                                 activeScreen.rectangle().center() :
                                 zoomedPoint(lastSelectedHintPoint, zoom);
-                        case MOUSE, TARGET, ACTIVE_WINDOW_CENTER, LAST_OVERLAY_AREA_CENTER ->
+                        case MOUSE, TARGET, ACTIVE_WINDOW_CENTER, MOUSE_WINDOW_CENTER,
+                             LAST_OVERLAY_AREA_CENTER ->
                                 zoomedPoint(areaCenterPoint(area.centerOrDefault()), zoom);
                     };
                     areaRectangle = scaledArea(sourceRectangle, area.size(), gridCenter,
@@ -1239,7 +1258,8 @@ public class HintManager implements ModeListener, MousePositionListener {
                         gridLayout, scaleScreen.scale(), zoom));
                 hintMesh.area(areaRectangle);
                 hintMesh.backgroundArea(
-                        area.size().source() == AreaSizeSource.ACTIVE_WINDOW ?
+                        area.size().source() == AreaSizeSource.ACTIVE_WINDOW ||
+                        area.size().source() == AreaSizeSource.MOUSE_WINDOW ?
                                 areaRectangle : scaleScreen.rectangle());
             }
             int hintCountSum = fixedSizeHintGrids.stream()

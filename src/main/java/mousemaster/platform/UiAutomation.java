@@ -11,6 +11,14 @@ public interface UiAutomation {
     Future<List<UiElement>> startFindActiveWindowUiElements();
 
     /**
+     * Elements of the top-level window under the point, and of its popups.
+     * The point is in screen pixels.
+     */
+    default Future<List<UiElement>> startFindMouseWindowUiElements(int x, int y) {
+        return startFindActiveWindowUiElements();
+    }
+
+    /**
      * Elements of every visible window that intersects the area, cropped to the area.
      * Elements a window in front covers are left out.
      */

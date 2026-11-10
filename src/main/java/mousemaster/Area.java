@@ -11,6 +11,7 @@ public record Area(AreaSize size, AreaCenter center) {
         return switch (source) {
             case ACTIVE_SCREEN, ALL_SCREENS -> AreaCenter.ACTIVE_SCREEN_CENTER;
             case ACTIVE_WINDOW -> AreaCenter.ACTIVE_WINDOW_CENTER;
+            case MOUSE_WINDOW -> AreaCenter.MOUSE_WINDOW_CENTER;
             case LAST_SELECTED_HINT_CELL -> AreaCenter.LAST_SELECTED_HINT;
             case LAST_OVERLAY_AREA -> AreaCenter.LAST_OVERLAY_AREA_CENTER;
         };

@@ -2,6 +2,7 @@ package mousemaster.platform.windows;
 
 import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.*;
+import com.sun.jna.ptr.IntByReference;
 import io.qt.core.Qt;
 import io.qt.gui.QImage;
 import io.qt.gui.QPixmap;
@@ -165,6 +166,74 @@ public class WindowsOverlay implements Overlay {
         return new Rectangle(excludeShadow.left, excludeShadow.top,
                 excludeShadow.right - excludeShadow.left,
                 excludeShadow.bottom - excludeShadow.top);
+    }
+
+    @Override
+    public Rectangle mouseWindowRectangle(int x, int y) {
+        WinDef.HWND window = topLevelWindowAt(x, y);
+        if (window == null)
+            return activeWindowRectangle();
+        Rectangle rectangle = rectangleExcludingShadow(window);
+        return rectangle == null ? activeWindowRectangle() : rectangle;
+    }
+
+    /**
+     * The top-level window under the point. Click-through overlays are skipped, and a
+     * window of this process is skipped in favor of the window drawn under it.
+     */
+    static WinDef.HWND topLevelWindowAt(int x, int y) {
+        WinDef.POINT.ByValue point = new WinDef.POINT.ByValue();
+        point.x = x;
+        point.y = y;
+        WinDef.HWND hwnd = ExtendedUser32.INSTANCE.WindowFromPoint(point);
+        if (hwnd == null)
+            return null;
+        WinDef.HWND root = User32.INSTANCE.GetAncestor(hwnd, WinUser.GA_ROOT);
+        if (root != null)
+            hwnd = root;
+        int self = Kernel32.INSTANCE.GetCurrentProcessId();
+        if (!ownedByProcess(hwnd, self))
+            return hwnd;
+        WinDef.HWND[] found = new WinDef.HWND[1];
+        User32.INSTANCE.EnumWindows((candidate, data) -> {
+            if (!User32.INSTANCE.IsWindowVisible(candidate) ||
+                ExtendedUser32.INSTANCE.IsIconic(candidate) ||
+                ownedByProcess(candidate, self))
+                return true;
+            if ((User32.INSTANCE.GetWindowLong(candidate, WinUser.GWL_EXSTYLE) &
+                 ExtendedUser32.WS_EX_TRANSPARENT) != 0)
+                return true;
+            IntByReference cloaked = new IntByReference();
+            Dwmapi.INSTANCE.DwmGetWindowAttribute(candidate, Dwmapi.DWMWA_CLOAKED,
+                    cloaked, 4);
+            if (cloaked.getValue() != 0)
+                return true;
+            Rectangle bounds = rectangleExcludingShadow(candidate);
+            if (bounds != null && bounds.contains(x, y)) {
+                found[0] = candidate;
+                return false;
+            }
+            return true;
+        }, null);
+        return found[0];
+    }
+
+    private static boolean ownedByProcess(WinDef.HWND hwnd, int processId) {
+        IntByReference pid = new IntByReference();
+        User32.INSTANCE.GetWindowThreadProcessId(hwnd, pid);
+        return pid.getValue() == processId;
+    }
+
+    private static Rectangle rectangleExcludingShadow(WinDef.HWND hwnd) {
+        if (hwnd == null)
+            return null;
+        // https://stackoverflow.com/a/65605845
+        WinDef.RECT excludeShadow = windowRectExcludingShadow(hwnd);
+        int width = excludeShadow.right - excludeShadow.left;
+        int height = excludeShadow.bottom - excludeShadow.top;
+        if (width <= 0 || height <= 0)
+            return null;
+        return new Rectangle(excludeShadow.left, excludeShadow.top, width, height);
     }
 
     static WinDef.RECT windowRectExcludingShadow(WinDef.HWND hwnd) {

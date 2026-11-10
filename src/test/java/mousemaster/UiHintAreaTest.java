@@ -55,8 +55,56 @@ public class UiHintAreaTest {
     void uiHintAreaCanBeAWindowOrEveryScreen() throws IOException {
         assertEquals(AreaSizeSource.ACTIVE_WINDOW, uiHintArea(
                 parse(uiMode + "ui-hint-mode.hint.area=active-window\n")).size().source());
+        assertEquals(AreaSizeSource.MOUSE_WINDOW, uiHintArea(
+                parse(uiMode + "ui-hint-mode.hint.area=mouse-window\n")).size().source());
         assertEquals(AreaSizeSource.ALL_SCREENS, uiHintArea(
                 parse(uiMode + "ui-hint-mode.hint.area=all-screens\n")).size().source());
+    }
+
+    @Test
+    void theElementsAreLookedForInTheWindowUnderTheMouse() throws IOException {
+        Mode mode = parse(uiMode + "ui-hint-mode.hint.area=mouse-window\n")
+                .modeMap().get("ui-hint-mode");
+        Rectangle mouseWindow = new Rectangle(40, 50, 600, 400);
+        List<Point> queriedAt = new ArrayList<>();
+        List<Rectangle> areaQueries = new ArrayList<>();
+        Overlay overlay = (Overlay) Proxy.newProxyInstance(Overlay.class.getClassLoader(),
+                new Class<?>[]{Overlay.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("mouseWindowRectangle"))
+                        return mouseWindow;
+                    if (method.getReturnType() == boolean.class)
+                        return false;
+                    if (method.getReturnType() == int.class)
+                        return 0;
+                    return null;
+                });
+        ScreenManager screenManager = new ScreenManager(
+                () -> Set.of(new Screen(new Rectangle(0, 0, 1920, 1080), 96, 1)));
+        HintManager hintManager = new HintManager(Map.of(), screenManager,
+                new MouseManager(screenManager, proxy(MouseController.class)), overlay,
+                new UiAutomation() {
+                    @Override
+                    public Future<List<UiElement>> startFindActiveWindowUiElements() {
+                        fail("looked in the active window");
+                        return CompletableFuture.completedFuture(List.of());
+                    }
+
+                    @Override
+                    public Future<List<UiElement>> startFindUiElementsInArea(Rectangle area) {
+                        areaQueries.add(area);
+                        return CompletableFuture.completedFuture(List.of());
+                    }
+
+                    @Override
+                    public Future<List<UiElement>> startFindMouseWindowUiElements(int x, int y) {
+                        queriedAt.add(new Point(x, y));
+                        return CompletableFuture.completedFuture(List.of());
+                    }
+                }, () -> new App("test.exe"), new KeyRedactor(KeyRedaction.NONE), null);
+        hintManager.mouseMoved(120, 80);
+        hintManager.modeChanged(mode);
+        assertEquals(List.of(new Point(120, 80)), queriedAt);
+        assertEquals(List.of(), areaQueries);
     }
 
     @Test

@@ -33,6 +33,9 @@ public interface Overlay {
 
     Rectangle activeWindowRectangle();
 
+    /** The top-level window under the point, or the active window when none is there. */
+    Rectangle mouseWindowRectangle(int x, int y);
+
     void setIndicator(IndicatorConfiguration indicator,
                       Map<IndicatorLayerCopyKey, IndicatorConfiguration> indicatorByCopyKey,
                       Set<String> layerNamesToAnchor,

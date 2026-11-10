@@ -17,6 +17,20 @@ public class MacosUiAutomation implements UiAutomation {
                 () -> elements(MacosAccessibility.focusedWindowElementFrames(), null));
     }
 
+    @Override
+    public Future<List<UiElement>> startFindMouseWindowUiElements(int x, int y) {
+        return CompletableFuture.supplyAsync(() -> {
+            int self = (int) ProcessHandle.current().pid();
+            for (MacosWindowList.OnScreenWindow window : MacosWindowList.onScreenWindows()) {
+                if (window.processId() == self || !window.bounds().contains(x, y))
+                    continue;
+                return elements(MacosAccessibility.windowElementFrames(
+                        window.processId(), window.bounds()), null);
+            }
+            return elements(MacosAccessibility.focusedWindowElementFrames(), null);
+        });
+    }
+
     /**
      * A window is matched to its accessibility element by frame, and an application that
      * reports none leaves the whole list empty, so the focused window answers instead.

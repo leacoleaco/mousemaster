@@ -4069,13 +4069,14 @@ public class ConfigurationParser {
         return switch (propertyValue) {
             case "active-screen" -> AreaSizeSource.ACTIVE_SCREEN;
             case "active-window" -> AreaSizeSource.ACTIVE_WINDOW;
+            case "mouse-window" -> AreaSizeSource.MOUSE_WINDOW;
             case "all-screens" -> AreaSizeSource.ALL_SCREENS;
             case "last-selected-hint-cell" -> AreaSizeSource.LAST_SELECTED_HINT_CELL;
             case "last-overlay-area" -> AreaSizeSource.LAST_OVERLAY_AREA;
             default -> throw new IllegalArgumentException(
                     "Invalid property value in " + propertyKey + "=" + propertyValue +
                     ": should be one of " +
-                    List.of("active-screen", "active-window", "all-screens",
+                    List.of("active-screen", "active-window", "mouse-window", "all-screens",
                             "last-selected-hint-cell", "last-overlay-area"));
         };
     }
@@ -4125,11 +4126,12 @@ public class ConfigurationParser {
             case "target" -> AreaCenter.TARGET;
             case "last-selected-hint" -> AreaCenter.LAST_SELECTED_HINT;
             case "active-window-center" -> AreaCenter.ACTIVE_WINDOW_CENTER;
+            case "mouse-window-center" -> AreaCenter.MOUSE_WINDOW_CENTER;
             case "last-overlay-area-center" -> AreaCenter.LAST_OVERLAY_AREA_CENTER;
             default -> throw new IllegalArgumentException(
                     "Invalid property value in " + propertyKey + "=" + propertyValue +
                     ": expected one of " + List.of("active-screen-center", "mouse", "target",
-                            "last-selected-hint", "active-window-center",
+                            "last-selected-hint", "active-window-center", "mouse-window-center",
                             "last-overlay-area-center"));
         };
     }

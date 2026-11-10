@@ -183,6 +183,18 @@ public class MacosOverlay implements Overlay {
     }
 
     @Override
+    public Rectangle mouseWindowRectangle(int x, int y) {
+        int self = (int) ProcessHandle.current().pid();
+        for (MacosWindowList.OnScreenWindow window : MacosWindowList.onScreenWindows()) {
+            if (window.processId() == self)
+                continue;
+            if (window.bounds().contains(x, y))
+                return window.bounds();
+        }
+        return activeWindowRectangle();
+    }
+
+    @Override
     public void setIndicator(IndicatorConfiguration indicator,
                              Map<IndicatorLayerCopyKey, IndicatorConfiguration> indicatorByCopyKey,
                              Set<String> layerNamesToAnchor,

@@ -7,6 +7,7 @@ public enum AreaCenter {
     TARGET,
     LAST_SELECTED_HINT,
     ACTIVE_WINDOW_CENTER,
+    MOUSE_WINDOW_CENTER,
     LAST_OVERLAY_AREA_CENTER;
 
     public boolean isMouseOrTarget() {

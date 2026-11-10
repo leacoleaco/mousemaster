@@ -484,8 +484,19 @@ public class WindowsUiAutomation implements UiAutomation {
      */
     @Override
     public Future<List<UiElement>> startFindActiveWindowUiElements() {
+        return startFindWindowUiElements(User32.INSTANCE.GetForegroundWindow());
+    }
+
+    @Override
+    public Future<List<UiElement>> startFindMouseWindowUiElements(int x, int y) {
+        HWND hwnd = WindowsOverlay.topLevelWindowAt(x, y);
+        if (hwnd == null)
+            hwnd = User32.INSTANCE.GetForegroundWindow();
+        return startFindWindowUiElements(hwnd);
+    }
+
+    private Future<List<UiElement>> startFindWindowUiElements(HWND hwnd) {
         ensureInitialized();
-        HWND hwnd = User32.INSTANCE.GetForegroundWindow();
         long hwndKey = hwnd != null ? Pointer.nativeValue(hwnd.getPointer()) : 0;
         return queryExecutor.submit(() -> {
             if (hwndKey == 0 || cachedCondition == null ||
