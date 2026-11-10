@@ -162,6 +162,7 @@ public class ConfigurationParser {
                 new Property<>("start-move-target", Map.of()),
                 new Property<>("stop-move-target", Map.of()),
                 new Property<>("press", Map.of()),
+                new Property<>("copy-text", Map.of()),
                 new Property<>("release", Map.of()),
                 new Property<>("toggle", Map.of()),
                 new Property<>("start-wheel", Map.of()),
@@ -2137,6 +2138,30 @@ public class ConfigurationParser {
             case "deselect-all" -> mode.comboMap.deselectAll.parseReferenceOr(propertyKey, propertyValue,
                     commandsByCombo -> setCommand(mode.comboMap.deselectAll.builder, propertyValue, new DeselectAllHintKeys(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                     childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "copy-text" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.copyText.parseReferenceOr(propertyKey, propertyValue,
+                            ignored -> {
+                                throw new IllegalArgumentException(
+                                        "copy-text requires a kind: copy-text.<word|line|all>");
+                            },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "copy-text requires a kind: copy-text.<word|line|all>");
+                else {
+                    Command.CopyText.Kind kind = switch (keyMatcher.group(group4)) {
+                        case "word" -> Command.CopyText.Kind.WORD;
+                        case "line" -> Command.CopyText.Kind.LINE;
+                        case "all" -> Command.CopyText.Kind.ALL;
+                        default -> throw new IllegalArgumentException(
+                                "Unknown copy-text kind: " + keyMatcher.group(group4));
+                    };
+                    setCommand(mode.comboMap.copyText.builder, propertyValue,
+                            new Command.CopyText(kind), propertyKey, defaultComboMoveDuration,
+                            keyAliases, appAliases, keyResolver, allVariableNames);
+                }
+            }
             case "filter-ui-hints" -> {
                 if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
@@ -3002,7 +3027,7 @@ public class ConfigurationParser {
         int lead = cfg.leadingDebounceMillis;
         String targetMode = cfg.targetModeName;
         modeReferences.add(checkModeReference(targetMode));
-        // One combo per key, so a double-tap is that key twice. Left Ctrl then Left Alt
+        // One combo per key, so a double-tap is that key twice. Left Ctrl then another key
         // does not count.
         List<String> comboParts = new ArrayList<>();
         for (Key key : keyAlias.keys()) {
@@ -5004,6 +5029,7 @@ public class ConfigurationParser {
         Property<Map<Combo, List<Command>>> deselect;
         Property<Map<Combo, List<Command>>> deselectAll;
         Property<Map<Combo, List<Command>>> filterUiHints;
+        Property<Map<Combo, List<Command>>> copyText;
 
         public ComboMapConfigurationBuilder(String modeName,
                                             Map<PropertyKey, Property<?>> propertyByKey) {
@@ -5043,6 +5069,7 @@ public class ConfigurationParser {
             deselect = new ComboMapProperty("deselect", modeName, propertyByKey);
             deselectAll = new ComboMapProperty("deselect-all", modeName, propertyByKey);
             filterUiHints = new ComboMapProperty("filter-ui-hints", modeName, propertyByKey);
+            copyText = new ComboMapProperty("copy-text", modeName, propertyByKey);
         }
 
           private static class ComboMapProperty extends Property<Map<Combo, List<Command>>> {
@@ -5098,6 +5125,7 @@ public class ConfigurationParser {
             add(commandsByCombo, deselect.builder);
             add(commandsByCombo, deselectAll.builder);
             add(commandsByCombo, filterUiHints.builder);
+            add(commandsByCombo, copyText.builder);
             add(commandsByCombo, to.builder);
             add(commandsByCombo, startMove.builder);
             add(commandsByCombo, stopMove.builder);

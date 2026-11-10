@@ -142,4 +142,12 @@ public sealed interface Command {
     record UnsetVariable(String variableName) implements Command {}
     record ResetVariables() implements Command {}
 
+    /**
+     * Select text at the pointer and copy it.
+     * WORD double-clicks, LINE triple-clicks, ALL focuses the target then selects everything.
+     */
+    record CopyText(Kind kind) implements Command {
+        public enum Kind { WORD, LINE, ALL }
+    }
+
 }

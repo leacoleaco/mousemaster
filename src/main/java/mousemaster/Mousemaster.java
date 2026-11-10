@@ -115,8 +115,10 @@ public class Mousemaster {
             platform.pumpEvents();
             timeBeforeOp = System.nanoTime();
             pumpEventsNanos += timeBeforeOp - timeAfterOp;
-            if (!paused)
+            if (!paused) {
                 mouseManager.update(delta);
+                commandRunner.update(delta);
+            }
             hintManager.update(delta);
             timeAfterOp = System.nanoTime();
             long mouseControllerDuration = (long) ((timeAfterOp - timeBeforeOp) / 1e6);

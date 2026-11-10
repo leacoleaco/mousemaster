@@ -33,6 +33,10 @@ public class MouseManager implements ModeListener, MousePositionListener {
         this.mouseController = mouseController;
     }
 
+    public void haltMovement() {
+        mover.halt();
+    }
+
     public void reset() {
         mover.reset();
         leftPressing = middlePressing = rightPressing = false;

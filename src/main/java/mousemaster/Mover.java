@@ -46,6 +46,20 @@ public class Mover {
         jumpDuration = 0;
     }
 
+    /** Stop moving and coasting so a multi-click stays inside the double-click rectangle. */
+    public void halt() {
+        xMoveForwardStack.clear();
+        yMoveForwardStack.clear();
+        deltaDistanceX = deltaDistanceY = 0;
+        moveDuration = 0;
+        decelerating = false;
+        decelerationDuration = 0;
+        decelerateXActive = false;
+        decelerateYActive = false;
+        jumping = false;
+        jumpDuration = 0;
+    }
+
     boolean moving() {
         return !xMoveForwardStack.isEmpty() || !yMoveForwardStack.isEmpty() ||
                decelerating;

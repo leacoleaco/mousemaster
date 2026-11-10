@@ -108,6 +108,30 @@ class ActionIndicatorTest {
         apply(comboWatcher, mouse);
         assertFalse(layer(comboWatcher).enabled());
         assertEquals("", layer(comboWatcher).text());
+
+        IndicatorLayerConfiguration copied = copied(comboWatcher);
+        assertFalse(copied.enabled());
+        assertTrue(copied.text().contains("已复制"));
+        assertEquals(IndicatorPosition.PointIndicatorPosition.MOUSE, copied.position());
+        assertEquals(-40d, copied.y(), 0.01);
+        assertTrue(copied.follow());
+
+        AnimationPlayer animations =
+                new AnimationPlayer(configuration.animationConfigurationByName());
+        animations.start("copiedhintanimation");
+        apply(comboWatcher, mouse, animations);
+        assertTrue(copied(comboWatcher).enabled());
+        assertTrue(copied(comboWatcher).text().contains("已复制"));
+        assertFalse(layer(comboWatcher).enabled());
+
+        comboWatcher.modeChanged(modeMap.get("zoom-mode"));
+        assertTrue(copied(comboWatcher).enabled());
+        animations.stop("copiedhintanimation");
+        apply(comboWatcher, mouse, animations);
+        assertFalse(copied(comboWatcher).enabled());
+        animations.start("copiedhintanimation");
+        apply(comboWatcher, mouse, animations);
+        assertTrue(copied(comboWatcher).enabled());
     }
 
     /** Runs the coast out, so a later sample is not still the move that was just released. */
@@ -117,6 +141,11 @@ class ActionIndicatorTest {
     }
 
     private static void apply(ComboWatcher comboWatcher, MouseManager mouse) {
+        apply(comboWatcher, mouse, new AnimationPlayer(Map.of()));
+    }
+
+    private static void apply(ComboWatcher comboWatcher, MouseManager mouse,
+                              AnimationPlayer animations) {
         // The app drops a button's one-frame press flag before the indicator is drawn.
         mouse.update(0.016);
         comboWatcher.updateBuiltInVirtualKeys(new MouseState(mouse), new KeyboardState(null) {
@@ -124,7 +153,7 @@ class ActionIndicatorTest {
             public boolean pressingUnhandledKeyInCurrentMode() {
                 return false;
             }
-        }, new AnimationPlayer(Map.of()));
+        }, animations);
     }
 
     private static IndicatorLayerConfiguration layer(ComboWatcher comboWatcher) {
@@ -133,5 +162,9 @@ class ActionIndicatorTest {
 
     private static IndicatorLayerConfiguration scroll(ComboWatcher comboWatcher) {
         return comboWatcher.getMutatedMode().indicator().layerByName().get("scroll-indicator");
+    }
+
+    private static IndicatorLayerConfiguration copied(ComboWatcher comboWatcher) {
+        return comboWatcher.getMutatedMode().indicator().layerByName().get("copied-indicator");
     }
 }

@@ -1,5 +1,8 @@
 package mousemaster;
 
+import java.time.Duration;
+import java.util.List;
+
 import static mousemaster.Command.*;
 
 public class CommandRunner {
@@ -8,6 +11,7 @@ public class CommandRunner {
     private final MouseManager mouseManager;
     private final HintManager hintManager;
     private final Platform platform;
+    private final CopyTextPlayer copyTextPlayer;
     private MacroPlayer macroPlayer;
     private AnimationPlayer animationPlayer;
 
@@ -16,6 +20,38 @@ public class CommandRunner {
         this.mouseManager = mouseManager;
         this.hintManager = hintManager;
         this.platform = platform;
+        this.copyTextPlayer = new CopyTextPlayer(new CopyTextPlayer.Output() {
+            @Override
+            public void releaseLeft() {
+                mouseManager.releaseLeft();
+            }
+
+            @Override
+            public void haltMovement() {
+                mouseManager.haltMovement();
+            }
+
+            @Override
+            public void pressLeft() {
+                mouseManager.pressLeft();
+            }
+
+            @Override
+            public void selectAll() {
+                sendChord(Key.ofCharacter("a"));
+            }
+
+            @Override
+            public void copy() {
+                sendChord(Key.ofCharacter("c"));
+                if (animationPlayer != null)
+                    animationPlayer.start("copiedhintanimation");
+            }
+        });
+    }
+
+    public void update(double delta) {
+        copyTextPlayer.update(delta);
     }
 
     public void setModeController(ModeController modeController) {
@@ -145,7 +181,22 @@ public class CommandRunner {
             case DeselectHintKey deselectHintKey -> hintManager.deselectHintKey();
             case DeselectAllHintKeys deselectAllHintKeys -> hintManager.deselectAllHintKeys();
             case FilterUiHints filterUiHints -> hintManager.filterUiHints(filterUiHints.role());
+            case CopyText copyText -> copyTextPlayer.start(copyText.kind());
             // @formatter:on
         }
+    }
+
+    /** Ctrl+key on Windows, Command+key on macOS. Injected, so the hook does not eat it. */
+    private void sendChord(Key key) {
+        if (macroPlayer == null)
+            return;
+        Key modifier = Os.macos ? Key.leftwin : Key.leftctrl;
+        macroPlayer.submit(new ResolvedMacro("copy-text",
+                new ResolvedMacroSequence(List.of(new ResolvedMacroParallel(List.of(
+                        new ResolvedKeyMacroMove(modifier, true, MacroMoveDestination.OS),
+                        new ResolvedKeyMacroMove(key, true, MacroMoveDestination.OS),
+                        new ResolvedKeyMacroMove(key, false, MacroMoveDestination.OS),
+                        new ResolvedKeyMacroMove(modifier, false, MacroMoveDestination.OS)
+                ), Duration.ZERO)))));
     }
 }
