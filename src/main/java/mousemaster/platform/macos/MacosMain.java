@@ -1,6 +1,7 @@
 package mousemaster.platform.macos;
 
 import mousemaster.ApplicationOptions;
+import mousemaster.BuildInfo;
 import mousemaster.Licenses;
 import mousemaster.Mousemaster;
 import mousemaster.MousemasterApplication;
@@ -9,10 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Properties;
 
 public class MacosMain {
 
@@ -43,16 +42,8 @@ public class MacosMain {
             MousemasterApplication.setLogLevel(options.logLevel());
         if (options.logToFile())
             MousemasterApplication.enableLogToFile();
-        String version;
-        String commitId;
-        try (InputStream versionInputStream = MacosMain.class.getClassLoader()
-                                                             .getResourceAsStream(
-                                                                     "application.properties")) {
-            Properties versionProp = new Properties();
-            versionProp.load(versionInputStream);
-            version = versionProp.getProperty("version");
-            commitId = versionProp.getProperty("commitId");
-        }
+        String version = BuildInfo.version();
+        String commitId = BuildInfo.commitId();
         if (options.showVersion()) {
             System.out.println("mousemaster v" + version + " (" + commitId + ")");
             return;

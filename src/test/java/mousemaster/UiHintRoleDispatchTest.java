@@ -26,7 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * In the shipped configuration, what choosing a UI hint does depends on the role of its
- * element: a click, a click that leaves to idle, the key mode of the control, or nothing.
+ * element: only pointed at, a click that leaves to idle, the key mode of the control,
+ * or nothing.
  */
 class UiHintRoleDispatchTest {
 
@@ -208,13 +209,14 @@ class UiHintRoleDispatchTest {
     }
 
     @Test
-    void aClickHintIsClickedAndNormalModeIsBack() {
+    void aClickHintIsPointedAtWithoutAClick() {
         choose(CHECK_BOX);
         assertEquals(List.of(new Command.SwitchMode("ui-hint-selected-mode"),
-                        new Command.SwitchMode("click-hint-mode"), new Command.PressLeft(),
-                        new Command.ReleaseLeft(), new Command.SwitchMode("normal-mode")),
+                        new Command.SwitchMode("click-hint-mode"),
+                        new Command.SwitchMode("normal-mode")),
                 ran(Command.SwitchMode.class, Command.PressLeft.class,
                         Command.ReleaseLeft.class));
+        assertEquals(List.of(), ran(Command.PressLeft.class, Command.ReleaseLeft.class));
         assertEquals("normal-mode", currentModeName);
     }
 
@@ -222,7 +224,7 @@ class UiHintRoleDispatchTest {
     void aButtonIsPointedAtWithoutAClick() {
         choose(BUTTON);
         assertEquals(List.of(new Command.SwitchMode("ui-hint-selected-mode"),
-                        new Command.SwitchMode("point-button-mode"),
+                        new Command.SwitchMode("click-hint-mode"),
                         new Command.SwitchMode("normal-mode")),
                 ran(Command.SwitchMode.class, Command.PressLeft.class,
                         Command.ReleaseLeft.class));
@@ -233,15 +235,14 @@ class UiHintRoleDispatchTest {
     }
 
     @Test
-    void aHintOfAControlTheApplicationSaysReactsToAClickIsClicked() {
+    void aHintOfAControlTheApplicationSaysReactsToAClickIsOnlyPointedAt() {
         choose(CLICKABLE_IMAGE);
-        assertEquals(List.of(new Command.PressLeft(), new Command.ReleaseLeft()),
-                ran(Command.PressLeft.class, Command.ReleaseLeft.class));
+        assertEquals(List.of(), ran(Command.PressLeft.class, Command.ReleaseLeft.class));
         assertEquals("normal-mode", currentModeName);
     }
 
     @Test
-    void aClickHintIsClickedWhileItsLastKeyIsStillHeld() {
+    void aClickHintIsPointedAtWhileItsLastKeyIsStillHeld() {
         Hint hint = hintManager.hintMesh().hints().stream()
                                .filter(candidate -> CHECK_BOX.rectangle().equals(
                                        candidate.elementRectangle()))
@@ -253,8 +254,7 @@ class UiHintRoleDispatchTest {
         }
         press(keys.getLast());
         ticks(10);
-        assertEquals(List.of(new Command.PressLeft(), new Command.ReleaseLeft()),
-                ran(Command.PressLeft.class, Command.ReleaseLeft.class));
+        assertEquals(List.of(), ran(Command.PressLeft.class, Command.ReleaseLeft.class));
         assertEquals("normal-mode", currentModeName);
     }
 
@@ -369,8 +369,7 @@ class UiHintRoleDispatchTest {
         tick();
         ranCommands.clear();
         choose(CHECK_BOX);
-        assertEquals(List.of(new Command.PressLeft(), new Command.ReleaseLeft()),
-                ran(Command.PressLeft.class, Command.ReleaseLeft.class));
+        assertEquals(List.of(), ran(Command.PressLeft.class, Command.ReleaseLeft.class));
         assertEquals("normal-mode", currentModeName);
     }
 

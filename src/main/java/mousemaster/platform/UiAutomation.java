@@ -44,7 +44,7 @@ public interface UiAutomation {
         }
 
         /**
-         * What selecting the hint of an element is for. {@link #CLICK} is clicked,
+         * What selecting the hint of an element is for. {@link #CLICK} is only pointed at,
          * {@link #INPUT} is clicked and then typed into, {@link #WIDGET} is operated with
          * keys of its own (a scroll bar), {@link #OTHER} is only pointed at. A null role
          * was not classified at all.
@@ -78,8 +78,8 @@ public interface UiAutomation {
 
             /**
              * The role of a control. A type that is only pointed at going by its type (an
-             * image, a group, a text) is clicked when the application says it reacts to a
-             * click: {@code clickable} is whether it can be invoked, toggled, selected,
+             * image, a group, a text) is classified as click when the application says it
+             * reacts to a click: {@code clickable} is whether it can be invoked, toggled, selected,
              * or expanded. A container stays pointed at: a click in the middle of a
              * tree lands on whichever item happens to be there.
              */

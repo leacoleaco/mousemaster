@@ -23,8 +23,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Windows 通知区域图标。配置只从 properties 文件读取；右键菜单可暂停、重新加载、
- * 打开配置和日志，以及开机自启。
+ * Windows 通知区域图标。配置只从 properties 文件读取；右键菜单显示构建版本，并可暂停、
+ * 重新加载、打开配置和日志，以及开机自启。
  */
 public final class MousemasterTray implements ModeListener {
 
@@ -56,6 +56,8 @@ public final class MousemasterTray implements ModeListener {
             menu = new QMenu();
             modeAction = menu.addAction("当前模式：" + currentModeName);
             modeAction.setEnabled(false);
+            QAction versionAction = menu.addAction("版本：" + BuildInfo.version());
+            versionAction.setEnabled(false);
             menu.addSeparator();
             pauseAction = menu.addAction("暂停");
             pauseAction.setCheckable(true);

@@ -2,6 +2,7 @@ package mousemaster.platform.windows;
 
 import com.sun.jna.Native;
 import mousemaster.ApplicationOptions;
+import mousemaster.BuildInfo;
 import mousemaster.Licenses;
 import mousemaster.Mousemaster;
 import mousemaster.MousemasterApplication;
@@ -10,8 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.Properties;
 
 public class WindowsMain {
 
@@ -32,16 +31,8 @@ public class WindowsMain {
             MousemasterApplication.setLogLevel(options.logLevel());
         if (options.logToFile())
             MousemasterApplication.enableLogToFile();
-        String version;
-        String commitId;
-        try (InputStream versionInputStream = WindowsMain.class.getClassLoader()
-                                                               .getResourceAsStream(
-                                                                       "application.properties")) {
-            Properties versionProp = new Properties();
-            versionProp.load(versionInputStream);
-            version = versionProp.getProperty("version");
-            commitId = versionProp.getProperty("commitId");
-        }
+        String version = BuildInfo.version();
+        String commitId = BuildInfo.commitId();
         if (options.showVersion()) {
             System.out.println("mousemaster v" + version + " (" + commitId + ")");
             return;
