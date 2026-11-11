@@ -302,6 +302,12 @@ class HandMoveComboTest {
         assertTrue(press("g").mustBeEaten());
         assertTrue(ran(new Command.ActivateSelectedWindow("center-on-active-window-mode")));
         release("g");
+        ranCommands.clear();
+        assertTrue(press("enter").mustBeEaten());
+        assertTrue(ran(new Command.ActivateSelectedWindow("center-on-active-window-mode")));
+        EatAndRegurgitates releaseEnter = release("enter");
+        assertTrue(releaseEnter.mustBeEaten());
+        assertTrue(releaseEnter.regurgitates().isEmpty());
         assertTrue(press("esc").mustBeEaten());
         assertTrue(ran(new Command.SwitchMode("normal-mode")));
     }

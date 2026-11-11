@@ -33,3 +33,5 @@ build/
 .vscode/
 
 notes.txt
+
+*.log
