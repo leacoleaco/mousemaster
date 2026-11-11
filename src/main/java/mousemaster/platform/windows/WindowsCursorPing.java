@@ -14,22 +14,19 @@ import io.qt.core.Qt;
 import io.qt.gui.QColor;
 import io.qt.gui.QImage;
 import io.qt.gui.QPainter;
-import io.qt.gui.QPainterPath;
 import io.qt.gui.QPen;
-import mousemaster.Rectangle;
 import mousemaster.Screen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
-import java.util.Set;
 
 /**
- * Full-screen dim with a white ring at the cursor. Shown when entering normal mode
- * from idle, held for half a second, then hidden so the screen returns as it was.
+ * A white ring at the cursor. Shown when entering normal mode from idle, held for
+ * half a second, then hidden. The rest of the screen stays as it was.
  * <p>
  * Drawn with UpdateLayeredWindow, the same path as the indicator. A Qt window does not
- * get a full-screen translucent frame onto the desktop.
+ * get a translucent frame onto the desktop. The window is only as large as the ring.
  */
 public final class WindowsCursorPing {
 
@@ -39,7 +36,6 @@ public final class WindowsCursorPing {
     /** Logical pixels; multiplied by the screen scale. */
     private static final double CIRCLE_RADIUS = 64;
     private static final double STROKE_WIDTH = 4;
-    private static final int DIM_ALPHA = 156;
 
     private static WinUser.WindowProc windowProc;
     private static WinDef.HWND hwnd;
@@ -86,29 +82,20 @@ public final class WindowsCursorPing {
         point.x = screenX;
         point.y = screenY;
         Screen screen = WindowsScreen.findActiveScreen(point);
-        Set<Screen> screens = WindowsScreen.findScreens();
-        int minX = Integer.MAX_VALUE;
-        int minY = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE;
-        int maxY = Integer.MIN_VALUE;
-        for (Screen s : screens) {
-            Rectangle r = s.rectangle();
-            minX = Math.min(minX, r.x());
-            minY = Math.min(minY, r.y());
-            maxX = Math.max(maxX, r.x() + r.width());
-            maxY = Math.max(maxY, r.y() + r.height());
-        }
-        int width = Math.max(1, maxX - minX);
-        int height = Math.max(1, maxY - minY);
         double scale = screen.scale() * zoomPercent;
         int radius = Math.max(1, (int) Math.round(CIRCLE_RADIUS * scale));
         int penWidth = Math.max(2, (int) Math.round(STROKE_WIDTH * scale));
+        // The stroke sits outside the radius, and antialiasing needs a little room.
+        int margin = penWidth * 2 + 4;
+        int size = (radius + margin) * 2;
+        int left = screenX - size / 2;
+        int top = screenY - size / 2;
         ensureWindow();
         if (hwnd == null)
             return;
-        ensureSurface(width, height);
-        draw(screenX - minX, screenY - minY, radius, penWidth, width, height);
-        if (!present(minX, minY, width, height))
+        ensureSurface(size, size);
+        draw(size / 2, size / 2, radius, penWidth, size, size);
+        if (!present(left, top, size, size))
             return;
         elapsed = 0;
         animating = true;
@@ -191,7 +178,7 @@ public final class WindowsCursorPing {
         image = new QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied);
     }
 
-    /** Dims the whole desktop and leaves a clear circle, outlined in white, at the cursor. */
+    /** White ring at the cursor. A dark edge keeps it visible on a light page. */
     private static void draw(int centerX, int centerY, int radius, int penWidth,
                              int width, int height) {
         QPainter painter = new QPainter(image);
@@ -201,25 +188,22 @@ public final class WindowsCursorPing {
         clear.dispose();
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver);
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, true);
-        QPainterPath dim = new QPainterPath();
-        dim.setFillRule(Qt.FillRule.OddEvenFill);
-        dim.addRect(0, 0, width, height);
-        double diameter = radius * 2.0;
-        dim.addEllipse(centerX - radius, centerY - radius, diameter, diameter);
-        QColor dimColor = new QColor(0, 0, 0, DIM_ALPHA);
-        painter.setPen(Qt.PenStyle.NoPen);
-        painter.setBrush(dimColor);
-        painter.drawPath(dim);
-        dim.dispose();
-        dimColor.dispose();
-        QColor white = new QColor(255, 255, 255);
-        QPen pen = new QPen(white);
-        pen.setWidth(penWidth);
-        painter.setPen(pen);
         painter.setBrush(Qt.BrushStyle.NoBrush);
         double strokeRadius = radius + penWidth / 2.0;
         QRectF ring = new QRectF(centerX - strokeRadius, centerY - strokeRadius,
                 strokeRadius * 2.0, strokeRadius * 2.0);
+        int outlineWidth = penWidth + Math.max(2, penWidth / 2);
+        QColor black = new QColor(0, 0, 0);
+        QPen outline = new QPen(black);
+        outline.setWidth(outlineWidth);
+        painter.setPen(outline);
+        painter.drawEllipse(ring);
+        outline.dispose();
+        black.dispose();
+        QColor white = new QColor(255, 255, 255);
+        QPen pen = new QPen(white);
+        pen.setWidth(penWidth);
+        painter.setPen(pen);
         painter.drawEllipse(ring);
         ring.dispose();
         pen.dispose();
