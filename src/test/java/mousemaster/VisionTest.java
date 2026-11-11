@@ -60,6 +60,12 @@ public class VisionTest {
 
     private static List<UiElement> elements(BufferedImage image, int scale, int density,
                                             double minSize) {
+        return elements(image, scale, density, minSize, 0, List.of());
+    }
+
+    private static List<UiElement> elements(BufferedImage image, int scale, int density,
+                                            double minSize, int refine,
+                                            List<Rectangle> occupied) {
         byte[] rgb = new byte[width * height * 3];
         for (int y = 0, i = 0; y < height; y++)
             for (int x = 0; x < width; x++) {
@@ -70,7 +76,7 @@ public class VisionTest {
             }
         return new Vision(null).findElements(
                 new DesktopCapture(new Rectangle(0, 0, width * scale, height * scale), rgb,
-                        width, height), scale, density, minSize);
+                        width, height), scale, density, minSize, refine, occupied);
     }
 
     private static long within(List<UiElement> elements, int x, int y, int right,
@@ -355,5 +361,183 @@ public class VisionTest {
             assertEquals(0, within(elements, 44, 0, 52, height),
                     "density " + density + ", the border");
         }
+    }
+
+    @Test
+    public void aControlInsideAShownRegionIsNotTheSameTag() {
+        Rectangle panel = new Rectangle(0, 0, 200, 80);
+        Rectangle button = new Rectangle(150, 20, 30, 30);
+        assertFalse(Vision.coversShownTag(button, List.of(panel), 1),
+                "a button away from the panel's tag is a place the first look missed");
+        Rectangle onTheTag = new Rectangle(85, 25, 30, 30);
+        assertTrue(Vision.coversShownTag(onTheTag, List.of(panel), 1));
+        Rectangle shifted = new Rectangle(99, 80, 40, 40);
+        assertTrue(Vision.coversShownTag(shifted, List.of(new Rectangle(80, 80, 40, 40)), 1),
+                "the same control found again, a little to the side");
+    }
+
+    @Test
+    public void straightLinesMarkBothDirectionsAndAShownOneDropsOut() {
+        BufferedImage image = screen(Color.WHITE);
+        int ink = 0x222222;
+        for (int x = 20; x < 140; x++)
+            image.setRGB(x, 80, ink);
+        for (int y = 30; y < 160; y++)
+            image.setRGB(300, y, ink);
+        for (int x = 20; x < 90; x++)
+            image.setRGB(x, 40, ink);
+        List<UiElement> lines = elements(image, 1, defaultDensity, 0, Vision.straightLines,
+                List.of());
+        assertTrue(within(lines, 60, 70, 100, 95) >= 1, "the middle of the horizontal rule");
+        assertTrue(within(lines, 290, 70, 310, 120) >= 1, "the middle of the vertical rule");
+        assertEquals(0, within(lines, 10, 30, 100, 50), "70 pixels is not a line");
+        // The length is in screen pixels: twice as many when the screen is at 200%.
+        List<UiElement> zoomed = elements(image, 2, defaultDensity, 0, Vision.straightLines,
+                List.of());
+        assertTrue(within(zoomed, 20, 60, 200, 100) >= 1, "140 screen pixels is a line");
+        Rectangle shown = lines.stream()
+                .filter(element -> element.centerY() < 100 && element.centerX() < 200)
+                .findFirst()
+                .orElseThrow()
+                .rectangle();
+        List<UiElement> again = elements(image, 1, defaultDensity, 0, Vision.straightLines,
+                List.of(shown));
+        assertEquals(0, within(again, 60, 70, 100, 95), "the line already shown is gone");
+        assertTrue(within(again, 290, 70, 310, 120) >= 1, "the other line stays");
+    }
+
+    @Test
+    public void aRuleThatOtherRulesCrossIsStillOneLine() {
+        BufferedImage image = screen(Color.WHITE);
+        int ink = 0x222222;
+        for (int x = 20; x < 260; x++)
+            image.setRGB(x, 80, ink);
+        // Each piece between two crossings is under 80 pixels, and so is each crossing rule.
+        for (int x : new int[]{70, 130, 190})
+            for (int y = 50; y < 110; y++)
+                image.setRGB(x, y, ink);
+        List<UiElement> lines = elements(image, 1, defaultDensity, 0, Vision.straightLines,
+                List.of());
+        String found = lines.stream().map(UiElement::rectangle).toList().toString();
+        assertEquals(1, lines.size(), found);
+        assertEquals(1, within(lines, 130, 75, 150, 85), "the middle of the whole rule: " + found);
+    }
+
+    @Test
+    public void aSoftColourBoundaryIsAStraightLine() {
+        BufferedImage image = screen(Color.WHITE);
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++) {
+                int level = x < 160 ? 0xff : x > 165 ? 0x87 : 0xff - (x - 159) * 20;
+                image.setRGB(x, y, level << 16 | level << 8 | level);
+            }
+        List<UiElement> lines = elements(image, 1, defaultDensity, 0, Vision.straightLines,
+                List.of());
+        assertTrue(within(lines, 145, 120, 185, 180) >= 1,
+                "the ramp between two colours: " +
+                lines.stream().map(UiElement::rectangle).toList());
+    }
+
+    @Test
+    public void twoPanelsOfADarkThemeMeetInAStraightLine() {
+        BufferedImage image = screen(new Color(0x181818));
+        for (int y = 0; y < height; y++)
+            for (int x = 200; x < width; x++)
+                image.setRGB(x, y, 0x1f1f1f);
+        List<UiElement> lines = elements(image, 1, defaultDensity, 0, Vision.straightLines,
+                List.of());
+        assertEquals(1, lines.size(),
+                "one boundary: " + lines.stream().map(UiElement::rectangle).toList());
+        assertEquals(1, within(lines, 190, 130, 210, 170), "the middle of where they meet");
+    }
+
+    @Test
+    public void textIsNotAStraightLine() {
+        BufferedImage image = screen(Color.WHITE);
+        Graphics2D pen = pen(image);
+        pen.setColor(new Color(0x222222));
+        pen.drawString("The quick brown fox jumps over the lazy dog", 30, 100);
+        pen.drawString("EXPLORER   OUTLINE   TIMELINE   ___", 30, 180);
+        pen.dispose();
+        List<UiElement> lines = elements(image, 1, defaultDensity, 0, Vision.straightLines,
+                List.of());
+        assertEquals(0, within(lines, 0, 80, width, 110),
+                "letters break the run: " + lines.stream().map(UiElement::rectangle).toList());
+    }
+
+    @Test
+    public void aBlankIsTheLargestRectangleClearOfWhatIsDrawn() {
+        BufferedImage image = screen(Color.WHITE);
+        // Stripes, as text is: nothing in the block is one colour.
+        for (int y = 0; y < 100; y++)
+            if (y / 3 % 2 == 0)
+                for (int x = 0; x < 100; x++)
+                    image.setRGB(x, y, 0x222222);
+        List<UiElement> blanks = elements(image, 1, defaultDensity, 0, Vision.blankAreas,
+                List.of());
+        String found = blanks.stream().map(UiElement::rectangle).toList().toString();
+        assertEquals(2, blanks.size(), found);
+        assertEquals(1, within(blanks, 232, 128, 272, 168), "beside the block: " + found);
+        assertEquals(1, within(blanks, 32, 176, 72, 216), "what is left below it: " + found);
+        assertEquals(0, within(blanks, 0, 0, 104, 104), "nothing on the block: " + found);
+    }
+
+    @Test
+    public void aBlankHasAShortSideOf40PixelsAndALongSide() {
+        BufferedImage image = screen(Color.WHITE);
+        // Stripes everywhere, as text is, so only what is painted flat below is blank.
+        for (int y = 0; y < height; y++)
+            if (y / 3 % 2 == 0)
+                for (int x = 0; x < width; x++)
+                    image.setRGB(x, y, 0x222222);
+        int flat = 0xE8E8E8;
+        Graphics2D pen = image.createGraphics();
+        pen.setColor(new Color(flat));
+        pen.fillRect(30, 22, 200, 46);
+        pen.fillRect(30, 102, 200, 28);
+        pen.fillRect(290, 30, 46, 200);
+        pen.fillRect(30, 182, 60, 60);
+        pen.dispose();
+        List<UiElement> blanks = elements(image, 1, defaultDensity, 0, Vision.blankAreas,
+                List.of());
+        String found = blanks.stream().map(UiElement::rectangle).toList().toString();
+        assertEquals(2, blanks.size(), found);
+        assertEquals(1, within(blanks, 120, 40, 140, 50), "a strip 46 pixels tall: " + found);
+        assertEquals(1, within(blanks, 308, 120, 318, 140), "a strip 46 pixels wide: " + found);
+        assertEquals(0, within(blanks, 30, 102, 230, 130), "28 pixels is too thin: " + found);
+        assertEquals(0, within(blanks, 30, 182, 90, 242), "a square has no long side: " + found);
+        // The sides are in screen pixels: at 200% the thin strip is 56 of them.
+        List<UiElement> zoomed = elements(image, 2, defaultDensity, 0, Vision.blankAreas,
+                List.of());
+        assertEquals(1, within(zoomed, 60, 204, 460, 260), "56 screen pixels tall: " +
+                zoomed.stream().map(UiElement::rectangle).toList());
+    }
+
+    @Test
+    public void blankAreaMarksALargeRegularBlockAndSkipsAStrip() {
+        BufferedImage image = screen(Color.WHITE);
+        int panel = 0x3A5F8A;
+        for (int y = 20; y < 140; y++)
+            for (int x = 30; x < 230; x++)
+                image.setRGB(x, y, panel);
+        for (int y = 200; y < 216; y++)
+            for (int x = 20; x < 240; x++)
+                image.setRGB(x, y, 0x222222);
+        for (int y = 240; y < 270; y++)
+            for (int x = 340; x < 370; x++)
+                image.setRGB(x, y, 0x222222);
+        List<UiElement> blanks = elements(image, 1, defaultDensity, 0, Vision.blankAreas,
+                List.of());
+        assertTrue(within(blanks, 100, 50, 160, 110) >= 1, "the centre of the panel");
+        assertEquals(0, within(blanks, 20, 200, 240, 216), "a thin strip is not a blank");
+        assertEquals(0, within(blanks, 340, 240, 370, 270), "a small block is not a blank");
+        Rectangle shown = blanks.stream()
+                .filter(element -> element.centerX() < 200 && element.centerY() < 150)
+                .findFirst()
+                .orElseThrow()
+                .rectangle();
+        List<UiElement> again = elements(image, 1, defaultDensity, 0, Vision.blankAreas,
+                List.of(shown));
+        assertEquals(0, within(again, 100, 50, 160, 110), "the blank already shown is gone");
     }
 }

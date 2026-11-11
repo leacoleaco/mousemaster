@@ -70,6 +70,13 @@ public class HintManager implements ModeListener, MousePositionListener {
 
     private PendingUiHintQuery pendingUiHintQuery;
     private List<UiElement> lastUiElements = List.of();
+    /**
+     * Vision tags already shown in this visit. A later press of the same key must not
+     * put a new tag on one of them.
+     */
+    private final List<Rectangle> visionOccupied = new ArrayList<>();
+    /** Tags on screen for the current vision pass. Moved into {@link #visionOccupied} on the next press. */
+    private List<Rectangle> visionShown = List.of();
     /** Null shows every scanned element. Set by {@link #filterUiHints}. */
     private UiElement.Role uiHintRoleFilter;
     private Point uiElementQueryOrderPoint;
@@ -621,6 +628,7 @@ public class HintManager implements ModeListener, MousePositionListener {
         boolean hintWasJustSelected = hintJustSelected;
         boolean sameMode =
                 currentMode != null && newMode.name().equals(currentMode.name());
+        updateVisionOccupied(newMode);
         if (!sameMode) {
             lastOverlayArea = overlayArea();
             uiHintRoleFilter = null;
@@ -782,8 +790,10 @@ public class HintManager implements ModeListener, MousePositionListener {
                 return;
             }
             else {
+                List<UiElement> shown = filteredUiElements(lastUiElements);
+                noteVisionShown(newMode, shown);
                 newHintMesh = buildHintMesh(hintMeshConfiguration, newMode.zoom(), newZoom,
-                        newScreenFilter, filteredUiElements(lastUiElements), uiElementQueryArea,
+                        newScreenFilter, shown, uiElementQueryArea,
                         uiElementQueryOrderPoint, screenManager.activeScreen());
             }
         }
@@ -960,6 +970,7 @@ public class HintManager implements ModeListener, MousePositionListener {
             return;
         }
         lastUiElements = uiElements;
+        noteVisionShown(currentMode, filteredUiElements(uiElements));
         // The query found other elements, which get other hints.
         if (hintMesh != null)
             hintMesh = hintMesh.builder().selectedKeySequence(List.of()).build();
@@ -1009,6 +1020,36 @@ public class HintManager implements ModeListener, MousePositionListener {
                 areaCenter.x(), areaCenter.y()));
     }
 
+    /**
+     * A later vision pass keeps the tags it replaces, so the next feature can avoid them.
+     * Leaving the vision hints, or going back to an earlier pass, starts over. The third
+     * press returns to the first, which is the region look.
+     */
+    private void updateVisionOccupied(Mode newMode) {
+        boolean nextVision = isVision(newMode);
+        boolean previousVision = isVision(currentMode);
+        int nextRefine = nextVision ? newMode.hintMesh().type().refine() : 0;
+        int previousRefine = previousVision ? currentMode.hintMesh().type().refine() : -1;
+        if (nextVision && previousVision && nextRefine > previousRefine) {
+            visionOccupied.addAll(visionShown);
+            visionShown = List.of();
+        }
+        else if (!nextVision || !previousVision || nextRefine < previousRefine) {
+            visionOccupied.clear();
+            visionShown = List.of();
+        }
+    }
+
+    private void noteVisionShown(Mode mode, List<UiElement> elements) {
+        if (isVision(mode))
+            visionShown = elements.stream().map(UiElement::rectangle).toList();
+    }
+
+    private static boolean isVision(Mode mode) {
+        return mode != null && mode.hintMesh().enabled() &&
+               mode.hintMesh().type().type() == HintMeshTypeType.UI_VISION;
+    }
+
     private static boolean sameUiElementQuery(HintMeshType type, HintMeshType currentType) {
         if (type.type() != currentType.type() || !type.area().equals(currentType.area()))
             return false;
@@ -1016,7 +1057,8 @@ public class HintManager implements ModeListener, MousePositionListener {
             return true;
         return type.type() == HintMeshTypeType.UI_VISION &&
                type.density() == currentType.density() &&
-               type.minSize() == currentType.minSize();
+               type.minSize() == currentType.minSize() &&
+               type.refine() == currentType.refine();
     }
 
     private static boolean uiHintAreaIsLastSelectedHintCell(HintMeshType type) {
@@ -1030,7 +1072,8 @@ public class HintManager implements ModeListener, MousePositionListener {
         uiElementQueryArea = areaOverride != null ? areaOverride : areaRectangle(area);
         if (type.type() == HintMeshTypeType.UI_VISION)
             return vision.startFindElements(screenManager.screens(), uiElementQueryArea,
-                    type.density(), type.minSize());
+                    type.density(), type.minSize(), type.refine(),
+                    type.refine() > 0 ? List.copyOf(visionOccupied) : List.of());
         if (area.size().source() == AreaSizeSource.MOUSE_WINDOW &&
             coversItsSource(area) &&
             uiElementQueryArea.equals(overlay.mouseWindowRectangle(mouseX, mouseY)))

@@ -4,6 +4,15 @@
       "type": "boolean"
     },
     {
+      "type": "ch.qos.logback.classic.AsyncAppender",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "ch.qos.logback.classic.encoder.PatternLayoutEncoder",
       "methods": [
         {
@@ -89,15 +98,6 @@
     },
     {
       "type": "ch.qos.logback.classic.util.DefaultJoranConfigurator",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "ch.qos.logback.classic.AsyncAppender",
       "methods": [
         {
           "name": "<init>",
@@ -1443,6 +1443,12 @@
       ]
     },
     {
+      "type": "io.qt.QtObject$1"
+    },
+    {
+      "type": "io.qt.QtObject$WhenMappings"
+    },
+    {
       "type": "io.qt.QtObjectInterface",
       "jniAccessible": true,
       "methods": [
@@ -1680,6 +1686,12 @@
       ]
     },
     {
+      "type": "io.qt.Utility$Object$1"
+    },
+    {
+      "type": "io.qt.Utility$Object$WhenMappings"
+    },
+    {
       "type": "io.qt.core.AbstractContainer",
       "jniAccessible": true,
       "fields": [
@@ -1826,6 +1838,21 @@
       ]
     },
     {
+      "type": "io.qt.core.QMetaMethod$1",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "$SwitchMap$io$qt$core$QMetaMethod$MethodType"
+        }
+      ]
+    },
+    {
+      "type": "io.qt.core.QMetaMethod$2"
+    },
+    {
+      "type": "io.qt.core.QMetaMethod$WhenMappings"
+    },
+    {
       "type": "io.qt.core.QMetaObject",
       "jniAccessible": true,
       "fields": [
@@ -1854,6 +1881,16 @@
           "parameterTypes": [
             "java.lang.Class"
           ]
+        }
+      ]
+    },
+    {
+      "type": "io.qt.core.QMetaObject$Slot0",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "invoke",
+          "parameterTypes": []
         }
       ]
     },
@@ -2288,7 +2325,15 @@
     },
     {
       "type": "io.qt.core.QPointF",
-      "jniAccessible": true
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "io.qt.QtObject$QPrivateConstructor"
+          ]
+        }
+      ]
     },
     {
       "type": "io.qt.core.QRect",
@@ -2345,7 +2390,15 @@
     },
     {
       "type": "io.qt.core.QSizeF",
-      "jniAccessible": true
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "io.qt.QtObject$QPrivateConstructor"
+          ]
+        }
+      ]
     },
     {
       "type": "io.qt.core.QString",
@@ -2449,15 +2502,39 @@
     },
     {
       "type": "io.qt.core.Qt$PenCapStyle",
-      "jniAccessible": true
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "resolve",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
     },
     {
       "type": "io.qt.core.Qt$PenJoinStyle",
-      "jniAccessible": true
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "resolve",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
     },
     {
       "type": "io.qt.core.Qt$PenStyle",
-      "jniAccessible": true
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "resolve",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
     },
     {
       "type": "io.qt.core.Qt$WindowFlags",
@@ -2479,6 +2556,36 @@
         {
           "name": "get",
           "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "io.qt.gui.QAbstractTextDocumentLayout",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "documentSizeChanged"
+        },
+        {
+          "name": "pageCountChanged"
+        },
+        {
+          "name": "update"
+        },
+        {
+          "name": "updateBlock"
+        }
+      ]
+    },
+    {
+      "type": "io.qt.gui.QAbstractTextDocumentLayout$ConcreteWrapper",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "io.qt.QtObject$QPrivateConstructor"
+          ]
         }
       ]
     },
@@ -2535,12 +2642,61 @@
       "jniAccessible": true
     },
     {
+      "type": "io.qt.gui.QAction",
+      "jniAccessible": true,
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true,
+      "allDeclaredFields": true,
+      "allPublicFields": true,
+      "fields": [
+        {
+          "name": "changed"
+        },
+        {
+          "name": "checkableChanged"
+        },
+        {
+          "name": "enabledChanged"
+        },
+        {
+          "name": "hovered"
+        },
+        {
+          "name": "toggled"
+        },
+        {
+          "name": "triggered"
+        },
+        {
+          "name": "visibleChanged"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "io.qt.QtObject$QPrivateConstructor"
+          ]
+        }
+      ]
+    },
+    {
       "type": "io.qt.gui.QBitmap",
       "jniAccessible": true
     },
     {
       "type": "io.qt.gui.QBrush",
-      "jniAccessible": true
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "io.qt.QtObject$QPrivateConstructor"
+          ]
+        }
+      ]
     },
     {
       "type": "io.qt.gui.QColor",
@@ -2629,6 +2785,22 @@
           "name": "screenRemoved"
         }
       ]
+    },
+    {
+      "type": "io.qt.gui.QIcon",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "io.qt.QtObject$QPrivateConstructor"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "io.qt.gui.QIconEngine",
+      "jniAccessible": true
     },
     {
       "type": "io.qt.gui.QImage",
@@ -2751,8 +2923,26 @@
       ]
     },
     {
+      "type": "io.qt.gui.QPixmap$1"
+    },
+    {
+      "type": "io.qt.gui.QPixmap$WhenMappings"
+    },
+    {
       "type": "io.qt.gui.QPolygon",
       "jniAccessible": true
+    },
+    {
+      "type": "io.qt.gui.QPolygonF",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "io.qt.QtObject$QPrivateConstructor"
+          ]
+        }
+      ]
     },
     {
       "type": "io.qt.gui.QRegion",
@@ -2826,24 +3016,6 @@
     {
       "type": "io.qt.gui.QSurface",
       "jniAccessible": true
-    },
-    {
-      "type": "io.qt.gui.QAbstractTextDocumentLayout",
-      "jniAccessible": true,
-      "fields": [
-        {
-          "name": "documentSizeChanged"
-        },
-        {
-          "name": "pageCountChanged"
-        },
-        {
-          "name": "update"
-        },
-        {
-          "name": "updateBlock"
-        }
-      ]
     },
     {
       "type": "io.qt.gui.QTextDocument",
@@ -3552,6 +3724,12 @@
       ]
     },
     {
+      "type": "io.qt.internal.NativeUtility$Object$1"
+    },
+    {
+      "type": "io.qt.internal.NativeUtility$Object$WhenMappings"
+    },
+    {
       "type": "io.qt.internal.NativeUtility$QueuedCleaner",
       "allDeclaredFields": true
     },
@@ -3999,6 +4177,48 @@
     {
       "type": "io.qt.widgets.QLayoutItem",
       "jniAccessible": true
+    },
+    {
+      "type": "io.qt.widgets.QMenu",
+      "jniAccessible": true,
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true,
+      "allDeclaredFields": true,
+      "allPublicFields": true,
+      "fields": [
+        {
+          "name": "aboutToHide"
+        },
+        {
+          "name": "aboutToShow"
+        },
+        {
+          "name": "hovered"
+        },
+        {
+          "name": "triggered"
+        }
+      ]
+    },
+    {
+      "type": "io.qt.widgets.QSystemTrayIcon",
+      "jniAccessible": true,
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true,
+      "allDeclaredFields": true,
+      "allPublicFields": true,
+      "fields": [
+        {
+          "name": "activated"
+        },
+        {
+          "name": "messageClicked"
+        }
+      ]
     },
     {
       "type": "io.qt.widgets.QWidget",
@@ -5372,6 +5592,28 @@
       ]
     },
     {
+      "type": "java.lang.reflect.Field",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getDeclaringClass",
+          "parameterTypes": []
+        },
+        {
+          "name": "getModifiers",
+          "parameterTypes": []
+        },
+        {
+          "name": "getName",
+          "parameterTypes": []
+        },
+        {
+          "name": "getType",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "java.lang.reflect.Method",
       "jniAccessible": true,
       "methods": [
@@ -5522,6 +5764,10 @@
           "parameterTypes": []
         },
         {
+          "name": "base",
+          "parameterTypes": []
+        },
+        {
           "name": "capacity",
           "parameterTypes": []
         },
@@ -5659,6 +5905,27 @@
         {
           "name": "arrayOffset",
           "parameterTypes": []
+        },
+        {
+          "name": "asReadOnlyBuffer",
+          "parameterTypes": []
+        },
+        {
+          "name": "get",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "order",
+          "parameterTypes": []
+        },
+        {
+          "name": "put",
+          "parameterTypes": [
+            "int",
+            "char"
+          ]
         }
       ]
     },
@@ -5790,6 +6057,27 @@
         {
           "name": "arrayOffset",
           "parameterTypes": []
+        },
+        {
+          "name": "asReadOnlyBuffer",
+          "parameterTypes": []
+        },
+        {
+          "name": "get",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "order",
+          "parameterTypes": []
+        },
+        {
+          "name": "put",
+          "parameterTypes": [
+            "int",
+            "double"
+          ]
         }
       ]
     },
@@ -5804,6 +6092,27 @@
         {
           "name": "arrayOffset",
           "parameterTypes": []
+        },
+        {
+          "name": "asReadOnlyBuffer",
+          "parameterTypes": []
+        },
+        {
+          "name": "get",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "order",
+          "parameterTypes": []
+        },
+        {
+          "name": "put",
+          "parameterTypes": [
+            "int",
+            "float"
+          ]
         }
       ]
     },
@@ -5818,6 +6127,27 @@
         {
           "name": "arrayOffset",
           "parameterTypes": []
+        },
+        {
+          "name": "asReadOnlyBuffer",
+          "parameterTypes": []
+        },
+        {
+          "name": "get",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "order",
+          "parameterTypes": []
+        },
+        {
+          "name": "put",
+          "parameterTypes": [
+            "int",
+            "int"
+          ]
         }
       ]
     },
@@ -5832,6 +6162,27 @@
         {
           "name": "arrayOffset",
           "parameterTypes": []
+        },
+        {
+          "name": "asReadOnlyBuffer",
+          "parameterTypes": []
+        },
+        {
+          "name": "get",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "order",
+          "parameterTypes": []
+        },
+        {
+          "name": "put",
+          "parameterTypes": [
+            "int",
+            "long"
+          ]
         }
       ]
     },
@@ -5846,6 +6197,27 @@
         {
           "name": "arrayOffset",
           "parameterTypes": []
+        },
+        {
+          "name": "asReadOnlyBuffer",
+          "parameterTypes": []
+        },
+        {
+          "name": "get",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "order",
+          "parameterTypes": []
+        },
+        {
+          "name": "put",
+          "parameterTypes": [
+            "int",
+            "short"
+          ]
         }
       ]
     },
@@ -6080,28 +6452,73 @@
       "type": "jdk.internal.misc.Unsafe"
     },
     {
-      "type": "mousemaster.Decoration",
+      "type": "mousemaster.Area",
       "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
-            "int",
-            "int",
-            "java.util.List",
-            "java.util.List",
-            "mousemaster.GradientColor",
-            "double",
-            "double",
-            "double",
-            "mousemaster.Color",
-            "double",
-            "double",
-            "boolean",
-            "double",
-            "double",
-            "mousemaster.HintFontStyle"
+            "mousemaster.AreaSize",
+            "mousemaster.AreaCenter"
           ]
         },
+        {
+          "name": "center",
+          "parameterTypes": []
+        },
+        {
+          "name": "size",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "mousemaster.AreaSize",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "mousemaster.AreaSizeSource",
+            "double",
+            "double",
+            "double",
+            "double",
+            "double",
+            "double"
+          ]
+        },
+        {
+          "name": "bottomInset",
+          "parameterTypes": []
+        },
+        {
+          "name": "heightPercent",
+          "parameterTypes": []
+        },
+        {
+          "name": "leftInset",
+          "parameterTypes": []
+        },
+        {
+          "name": "rightInset",
+          "parameterTypes": []
+        },
+        {
+          "name": "source",
+          "parameterTypes": []
+        },
+        {
+          "name": "topInset",
+          "parameterTypes": []
+        },
+        {
+          "name": "widthPercent",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "mousemaster.Decoration",
+      "methods": [
         {
           "name": "<init>",
           "parameterTypes": [
@@ -6143,6 +6560,10 @@
           "parameterTypes": []
         },
         {
+          "name": "boxColor",
+          "parameterTypes": []
+        },
+        {
           "name": "boxFramed",
           "parameterTypes": []
         },
@@ -6151,15 +6572,11 @@
           "parameterTypes": []
         },
         {
-          "name": "boxVerticalPadding",
-          "parameterTypes": []
-        },
-        {
-          "name": "boxColor",
-          "parameterTypes": []
-        },
-        {
           "name": "boxOpacity",
+          "parameterTypes": []
+        },
+        {
+          "name": "boxVerticalPadding",
           "parameterTypes": []
         },
         {
@@ -6280,7 +6697,7 @@
           ]
         },
         {
-          "name": "type",
+          "name": "cellHeight",
           "parameterTypes": []
         },
         {
@@ -6288,7 +6705,7 @@
           "parameterTypes": []
         },
         {
-          "name": "cellHeight",
+          "name": "type",
           "parameterTypes": []
         }
       ]
@@ -6315,80 +6732,15 @@
           "parameterTypes": []
         },
         {
+          "name": "savedFontStyle",
+          "parameterTypes": []
+        },
+        {
           "name": "selectedFontStyle",
           "parameterTypes": []
         },
         {
           "name": "spacingPercent",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedFontStyle",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "mousemaster.Area",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": [
-            "mousemaster.AreaSize",
-            "mousemaster.AreaCenter"
-          ]
-        },
-        {
-          "name": "center",
-          "parameterTypes": []
-        },
-        {
-          "name": "size",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "mousemaster.AreaSize",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": [
-            "mousemaster.AreaSizeSource",
-            "double",
-            "double",
-            "double",
-            "double",
-            "double",
-            "double"
-          ]
-        },
-        {
-          "name": "bottomInset",
-          "parameterTypes": []
-        },
-        {
-          "name": "heightPercent",
-          "parameterTypes": []
-        },
-        {
-          "name": "leftInset",
-          "parameterTypes": []
-        },
-        {
-          "name": "rightInset",
-          "parameterTypes": []
-        },
-        {
-          "name": "source",
-          "parameterTypes": []
-        },
-        {
-          "name": "topInset",
-          "parameterTypes": []
-        },
-        {
-          "name": "widthPercent",
           "parameterTypes": []
         }
       ]
@@ -6498,11 +6850,15 @@
           "parameterTypes": []
         },
         {
-          "name": "targetFollowsOverlayCenter",
+          "name": "savedPositionHistory",
           "parameterTypes": []
         },
         {
           "name": "styleByFilter",
+          "parameterTypes": []
+        },
+        {
+          "name": "targetFollowsOverlayCenter",
           "parameterTypes": []
         },
         {
@@ -6511,10 +6867,6 @@
         },
         {
           "name": "visible",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedPositionHistory",
           "parameterTypes": []
         },
         {
@@ -6552,60 +6904,6 @@
             "mousemaster.HintFontStyle",
             "boolean",
             "mousemaster.HintFontStyle",
-            "mousemaster.GradientColor",
-            "double",
-            "double",
-            "double",
-            "mousemaster.Color",
-            "double",
-            "double",
-            "boolean",
-            "mousemaster.Shadow",
-            "boolean",
-            "double",
-            "double",
-            "mousemaster.Color",
-            "double",
-            "boolean",
-            "mousemaster.GradientColor",
-            "double",
-            "double",
-            "double",
-            "mousemaster.Color",
-            "double",
-            "double",
-            "double",
-            "double",
-            "mousemaster.GradientColor",
-            "java.lang.Double",
-            "mousemaster.Color",
-            "java.lang.Double",
-            "mousemaster.GradientColor",
-            "java.lang.Double",
-            "mousemaster.Color",
-            "java.lang.Double",
-            "double",
-            "double",
-            "double",
-            "double",
-            "java.util.List",
-            "mousemaster.Transition",
-            "mousemaster.Transition",
-            "mousemaster.Color",
-            "double",
-            "double",
-            "mousemaster.Color",
-            "double",
-            "double",
-            "java.util.List"
-          ]
-        },
-        {
-          "name": "<init>",
-          "parameterTypes": [
-            "mousemaster.HintFontStyle",
-            "boolean",
-            "mousemaster.HintFontStyle",
             "java.lang.String",
             "double",
             "double",
@@ -6681,11 +6979,65 @@
           ]
         },
         {
-          "name": "backgroundColor",
+          "name": "<init>",
+          "parameterTypes": [
+            "mousemaster.HintFontStyle",
+            "boolean",
+            "mousemaster.HintFontStyle",
+            "mousemaster.GradientColor",
+            "double",
+            "double",
+            "double",
+            "mousemaster.Color",
+            "double",
+            "double",
+            "boolean",
+            "mousemaster.Shadow",
+            "boolean",
+            "double",
+            "double",
+            "mousemaster.Color",
+            "double",
+            "boolean",
+            "mousemaster.GradientColor",
+            "double",
+            "double",
+            "double",
+            "mousemaster.Color",
+            "double",
+            "double",
+            "double",
+            "double",
+            "mousemaster.GradientColor",
+            "java.lang.Double",
+            "mousemaster.Color",
+            "java.lang.Double",
+            "mousemaster.GradientColor",
+            "java.lang.Double",
+            "mousemaster.Color",
+            "java.lang.Double",
+            "double",
+            "double",
+            "double",
+            "double",
+            "java.util.List",
+            "mousemaster.Transition",
+            "mousemaster.Transition",
+            "mousemaster.Color",
+            "double",
+            "double",
+            "mousemaster.Color",
+            "double",
+            "double",
+            "java.util.List"
+          ]
+        },
+        {
+          "name": "backgroundBorderColor",
           "parameterTypes": []
         },
         {
-          "name": "backgroundOpacity",
+          "name": "backgroundBorderOpacity",
           "parameterTypes": []
         },
         {
@@ -6697,11 +7049,11 @@
           "parameterTypes": []
         },
         {
-          "name": "backgroundBorderColor",
+          "name": "backgroundColor",
           "parameterTypes": []
         },
         {
-          "name": "backgroundBorderOpacity",
+          "name": "backgroundOpacity",
           "parameterTypes": []
         },
         {
@@ -6737,6 +7089,10 @@
           "parameterTypes": []
         },
         {
+          "name": "boxHorizontalPadding",
+          "parameterTypes": []
+        },
+        {
           "name": "boxOpacity",
           "parameterTypes": []
         },
@@ -6745,19 +7101,19 @@
           "parameterTypes": []
         },
         {
-          "name": "boxWidthPercent",
-          "parameterTypes": []
-        },
-        {
-          "name": "boxHorizontalPadding",
-          "parameterTypes": []
-        },
-        {
           "name": "boxVerticalPadding",
           "parameterTypes": []
         },
         {
+          "name": "boxWidthPercent",
+          "parameterTypes": []
+        },
+        {
           "name": "decorations",
+          "parameterTypes": []
+        },
+        {
+          "name": "fade",
           "parameterTypes": []
         },
         {
@@ -6801,6 +7157,42 @@
           "parameterTypes": []
         },
         {
+          "name": "savedBoxBorderColor",
+          "parameterTypes": []
+        },
+        {
+          "name": "savedBoxBorderOpacity",
+          "parameterTypes": []
+        },
+        {
+          "name": "savedBoxColor",
+          "parameterTypes": []
+        },
+        {
+          "name": "savedBoxOpacity",
+          "parameterTypes": []
+        },
+        {
+          "name": "savedUiElementBoxBorderColor",
+          "parameterTypes": []
+        },
+        {
+          "name": "savedUiElementBoxBorderOpacity",
+          "parameterTypes": []
+        },
+        {
+          "name": "savedUiElementBoxColor",
+          "parameterTypes": []
+        },
+        {
+          "name": "savedUiElementBoxOpacity",
+          "parameterTypes": []
+        },
+        {
+          "name": "transition",
+          "parameterTypes": []
+        },
+        {
           "name": "uiElementBoxBorderColor",
           "parameterTypes": []
         },
@@ -6835,46 +7227,6 @@
         {
           "name": "uiElementBoxVerticalPadding",
           "parameterTypes": []
-        },
-        {
-          "name": "savedBoxColor",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedBoxOpacity",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedBoxBorderColor",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedBoxBorderOpacity",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedUiElementBoxColor",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedUiElementBoxOpacity",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedUiElementBoxBorderColor",
-          "parameterTypes": []
-        },
-        {
-          "name": "savedUiElementBoxBorderOpacity",
-          "parameterTypes": []
-        },
-        {
-          "name": "transition",
-          "parameterTypes": []
-        },
-        {
-          "name": "fade",
-          "parameterTypes": []
         }
       ]
     },
@@ -6894,19 +7246,7 @@
           ]
         },
         {
-          "name": "type",
-          "parameterTypes": []
-        },
-        {
           "name": "area",
-          "parameterTypes": []
-        },
-        {
-          "name": "gridLayoutByFilter",
-          "parameterTypes": []
-        },
-        {
-          "name": "order",
           "parameterTypes": []
         },
         {
@@ -6914,11 +7254,23 @@
           "parameterTypes": []
         },
         {
+          "name": "gridLayoutByFilter",
+          "parameterTypes": []
+        },
+        {
           "name": "minSize",
           "parameterTypes": []
         },
         {
+          "name": "order",
+          "parameterTypes": []
+        },
+        {
           "name": "positionHistoryName",
+          "parameterTypes": []
+        },
+        {
+          "name": "type",
           "parameterTypes": []
         }
       ]
@@ -6975,6 +7327,35 @@
             "double",
             "mousemaster.FontWeight",
             "java.lang.String",
+            "java.util.List",
+            "mousemaster.Area",
+            "boolean"
+          ]
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "boolean",
+            "int",
+            "mousemaster.IndicatorShape",
+            "double",
+            "double",
+            "double",
+            "java.util.List",
+            "double",
+            "double",
+            "double",
+            "double",
+            "double",
+            "mousemaster.Color",
+            "double",
+            "mousemaster.IndicatorStroke",
+            "mousemaster.Shadow",
+            "java.lang.String",
+            "java.lang.String",
+            "double",
+            "mousemaster.FontWeight",
+            "java.lang.String",
             "mousemaster.IndicatorPosition",
             "mousemaster.PositionAnchor",
             "mousemaster.IndicatorPosition",
@@ -6985,6 +7366,10 @@
         },
         {
           "name": "angle",
+          "parameterTypes": []
+        },
+        {
+          "name": "area",
           "parameterTypes": []
         },
         {
@@ -7001,6 +7386,14 @@
         },
         {
           "name": "enabled",
+          "parameterTypes": []
+        },
+        {
+          "name": "endPosition",
+          "parameterTypes": []
+        },
+        {
+          "name": "endPositionAnchor",
           "parameterTypes": []
         },
         {
@@ -7040,11 +7433,11 @@
           "parameterTypes": []
         },
         {
-          "name": "endPosition",
+          "name": "positions",
           "parameterTypes": []
         },
         {
-          "name": "endPositionAnchor",
+          "name": "rotation",
           "parameterTypes": []
         },
         {
@@ -7056,23 +7449,19 @@
           "parameterTypes": []
         },
         {
-          "name": "text",
-          "parameterTypes": []
-        },
-        {
-          "name": "textStyleSheet",
-          "parameterTypes": []
-        },
-        {
-          "name": "rotation",
-          "parameterTypes": []
-        },
-        {
           "name": "size",
           "parameterTypes": []
         },
         {
           "name": "stroke",
+          "parameterTypes": []
+        },
+        {
+          "name": "text",
+          "parameterTypes": []
+        },
+        {
+          "name": "textStyleSheet",
           "parameterTypes": []
         },
         {
@@ -7085,10 +7474,6 @@
         },
         {
           "name": "z",
-          "parameterTypes": []
-        },
-        {
-          "name": "area",
           "parameterTypes": []
         }
       ]
@@ -7343,6 +7728,66 @@
       ]
     },
     {
+      "type": "mousemaster.Mousemaster",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "reloadConfiguration",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "mousemaster.Mousemaster$1"
+    },
+    {
+      "type": "mousemaster.Mousemaster$WhenMappings"
+    },
+    {
+      "type": "mousemaster.MousemasterTray",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "onConsoleInTaskbarClicked",
+          "parameterTypes": []
+        },
+        {
+          "name": "onMenuAboutToShow",
+          "parameterTypes": []
+        },
+        {
+          "name": "onPauseClicked",
+          "parameterTypes": []
+        },
+        {
+          "name": "onStartupClicked",
+          "parameterTypes": []
+        },
+        {
+          "name": "openConfigurationFile",
+          "parameterTypes": []
+        },
+        {
+          "name": "openLogDirectory",
+          "parameterTypes": []
+        },
+        {
+          "name": "quit",
+          "parameterTypes": []
+        },
+        {
+          "name": "warnIfNotAdministrator",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "mousemaster.MousemasterTray$1"
+    },
+    {
+      "type": "mousemaster.MousemasterTray$WhenMappings"
+    },
+    {
       "type": "mousemaster.MovementConfiguration",
       "methods": [
         {
@@ -7545,19 +7990,19 @@
           "name": "<init>",
           "parameterTypes": [
             "double",
-            "mousemaster.ZoomAreaSize",
             "mousemaster.AreaCenter",
-            "mousemaster.Transition"
+            "boolean",
+            "mousemaster.Easing",
+            "double"
           ]
         },
         {
           "name": "<init>",
           "parameterTypes": [
             "double",
+            "mousemaster.ZoomAreaSize",
             "mousemaster.AreaCenter",
-            "boolean",
-            "mousemaster.Easing",
-            "double"
+            "mousemaster.Transition"
           ]
         },
         {
@@ -7895,6 +8340,16 @@
           "parameterTypes": [
             "io.qt.gui.QPainter"
           ]
+        },
+        {
+          "name": "setShadowBrush",
+          "parameterTypes": [
+            "io.qt.gui.QBrush"
+          ]
+        },
+        {
+          "name": "shadowBrush",
+          "parameterTypes": []
         }
       ]
     },
@@ -8075,6 +8530,16 @@
           ]
         },
         {
+          "name": "setBackground",
+          "parameterTypes": [
+            "io.qt.gui.QColor",
+            "io.qt.core.QRect",
+            "int",
+            "io.qt.gui.QColor",
+            "int"
+          ]
+        },
+        {
           "name": "widthInPixels",
           "parameterTypes": []
         },
@@ -8189,6 +8654,16 @@
           "name": "setClearColor",
           "parameterTypes": [
             "io.qt.gui.QColor"
+          ]
+        },
+        {
+          "name": "setClearColor",
+          "parameterTypes": [
+            "io.qt.gui.QColor",
+            "mousemaster.Rectangle",
+            "int",
+            "io.qt.gui.QColor",
+            "int"
           ]
         },
         {
@@ -8439,27 +8914,6 @@
       "type": "mousemaster.renderer.IndicatorRenderer$IndicatorLabelWidget$WhenMappings"
     },
     {
-      "type": "mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect",
-      "allDeclaredFields": true,
-      "jniAccessible": true,
-      "methods": [
-        {
-          "name": "setColors",
-          "parameterTypes": [
-            "io.qt.gui.QColor",
-            "io.qt.gui.QColor",
-            "io.qt.gui.QColor"
-          ]
-        }
-      ]
-    },
-    {
-      "type": "mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect$1"
-    },
-    {
-      "type": "mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect$WhenMappings"
-    },
-    {
       "type": "mousemaster.renderer.IndicatorRenderer$IndicatorLayerWidget",
       "allDeclaredFields": true,
       "jniAccessible": true,
@@ -8574,6 +9028,33 @@
       "type": "mousemaster.renderer.IndicatorRenderer$IndicatorLayerWidget$WhenMappings"
     },
     {
+      "type": "mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect",
+      "allDeclaredFields": true,
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "draw",
+          "parameterTypes": [
+            "io.qt.gui.QPainter"
+          ]
+        },
+        {
+          "name": "setColors",
+          "parameterTypes": [
+            "io.qt.gui.QColor",
+            "io.qt.gui.QColor",
+            "io.qt.gui.QColor"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect$1"
+    },
+    {
+      "type": "mousemaster.renderer.IndicatorRenderer$IndicatorShadowEffect$WhenMappings"
+    },
+    {
       "type": "mousemaster.renderer.QtJambi_LibraryUtilities"
     },
     {
@@ -8640,6 +9121,15 @@
           "parameterTypes": []
         }
       ]
+    },
+    {
+      "type": "sun.util.resources.cldr.TimeZoneNames"
+    },
+    {
+      "type": "sun.util.resources.cldr.TimeZoneNames_en"
+    },
+    {
+      "type": "sun.util.resources.cldr.TimeZoneNames_en_US"
     },
     {
       "type": "void"
@@ -8752,6 +9242,13 @@
     {
       "type": {
         "proxy": [
+          "mousemaster.platform.macos.ObjectiveC$ReturningDouble"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
           "mousemaster.platform.macos.ObjectiveC$ReturningInt"
         ]
       }
@@ -8760,13 +9257,6 @@
       "type": {
         "proxy": [
           "mousemaster.platform.macos.ObjectiveC$ReturningRect"
-        ]
-      }
-    },
-    {
-      "type": {
-        "proxy": [
-          "mousemaster.platform.macos.ObjectiveC$ReturningDouble"
         ]
       }
     },
@@ -8858,6 +9348,22 @@
       "type": {
         "lambda": {
           "declaringClass": "io.qt.internal.NativeUtility$AssociativeReference",
+          "interfaces": [
+            "io.qt.core.QMetaObject$Slot0"
+          ]
+        }
+      },
+      "methods": [
+        {
+          "name": "writeReplace",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": {
+        "lambda": {
+          "declaringClass": "mousemaster.MousemasterTray",
           "interfaces": [
             "io.qt.core.QMetaObject$Slot0"
           ]

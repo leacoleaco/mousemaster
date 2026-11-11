@@ -207,7 +207,14 @@ public interface UiAutomation {
 
     static boolean isTooCloseToExistingUiElements(List<UiElement> elements, double x,
                                                   double y, double scale) {
-        double threshold = MIN_DISTANCE_BETWEEN_HINTS_UNZOOMED * scale;
+        return isTooCloseToExistingUiElements(elements, x, y, scale,
+                MIN_DISTANCE_BETWEEN_HINTS_UNZOOMED);
+    }
+
+    static boolean isTooCloseToExistingUiElements(List<UiElement> elements, double x,
+                                                  double y, double scale,
+                                                  double distanceUnzoomed) {
+        double threshold = distanceUnzoomed * scale;
         double thresholdSquared = threshold * threshold;
         for (UiElement e : elements) {
             double dx = e.centerX() - x;

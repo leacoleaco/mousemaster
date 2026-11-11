@@ -329,6 +329,7 @@ public class ConfigurationParser {
         hintMeshTypeBuilder.uiOrder(UiHintOrder.TOP_TO_BOTTOM);
         hintMeshTypeBuilder.visionDensity(6);
         hintMeshTypeBuilder.visionMinSize(0d);
+        hintMeshTypeBuilder.visionRefine(0);
         return hintMesh;
     }
 
@@ -3497,6 +3498,7 @@ public class ConfigurationParser {
             case "ui-order" -> ModePropertyHandler.of(prefix.append("type", "order"), v -> parseUiHintOrder("overlay.ui-order", v), v -> hintMeshBuilder.type().uiOrder(v));
             case "vision-density" -> ModePropertyHandler.of(prefix.append("type", "density"), v -> parseUnsignedInteger(v, 1, Vision.densities), v -> hintMeshBuilder.type().visionDensity(v));
             case "vision-min-size" -> ModePropertyHandler.of(prefix.append("type", "minSize"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.type().visionMinSize(v));
+            case "vision-refine" -> ModePropertyHandler.of(prefix.append("type", "refine"), v -> parseUnsignedInteger(v, 0, Vision.lastRefine), v -> hintMeshBuilder.type().visionRefine(v));
             // Area = size + center. Mutations set the record component directly
             // (the mutator keeps the sibling component), so no Function is needed.
             case "area" -> ModePropertyHandler.of(prefix.append("type", "area", "size", "source"), v -> parseAreaSizeSource("overlay.area", v), v -> hintMeshBuilder.type().area().source(v));
@@ -4484,6 +4486,8 @@ public class ConfigurationParser {
                     builder.type().visionDensity(parent.type().visionDensity());
                 if (builder.type().visionMinSize() == null)
                     builder.type().visionMinSize(parent.type().visionMinSize());
+                if (builder.type().visionRefine() == null)
+                    builder.type().visionRefine(parent.type().visionRefine());
                 if (builder.type().positionHistoryName() == null)
                     builder.type().positionHistoryName(parent.type().positionHistoryName());
                 for (var parentEntry : parent.type()

@@ -8,7 +8,7 @@ import java.util.function.Function;
 public record HintMeshType(HintMeshTypeType type, Area area,
                            ScreenFilterMap<HintGridLayout> gridLayoutByFilter,
                            UiHintOrder order, int density, double minSize,
-                           String positionHistoryName) {
+                           String positionHistoryName, int refine) {
 
     public HintGridLayout layout(ScreenFilter filter) {
         HintGridLayout layout = gridLayoutByFilter.get(filter);
@@ -32,7 +32,7 @@ public record HintMeshType(HintMeshTypeType type, Area area,
             return new HintMeshType(type, hintMeshType.area, hintMeshType.gridLayoutByFilter,
                     hintMeshType.order, hintMeshType.density, hintMeshType.minSize,
                     positionHistoryName == null ? hintMeshType.positionHistoryName :
-                            positionHistoryName);
+                            positionHistoryName, hintMeshType.refine());
         }
 
     }
@@ -45,6 +45,7 @@ public record HintMeshType(HintMeshTypeType type, Area area,
         private UiHintOrder uiOrder;
         private Integer visionDensity;
         private Double visionMinSize;
+        private Integer visionRefine;
         private String positionHistoryName;
         private final ScreenFilterMapBuilder<HintGridLayoutBuilder, HintGridLayout>
                 gridLayoutByFilter;
@@ -76,6 +77,15 @@ public record HintMeshType(HintMeshTypeType type, Area area,
 
         public HintMeshTypeBuilder visionMinSize(Double visionMinSize) {
             this.visionMinSize = visionMinSize;
+            return this;
+        }
+
+        public Integer visionRefine() {
+            return visionRefine;
+        }
+
+        public HintMeshTypeBuilder visionRefine(Integer visionRefine) {
+            this.visionRefine = visionRefine;
             return this;
         }
 
@@ -114,7 +124,8 @@ public record HintMeshType(HintMeshTypeType type, Area area,
         public HintMeshType build() {
             return new HintMeshType(type, area.build(),
                     gridLayoutByFilter.build(HintGridLayoutBuilder::build), uiOrder,
-                    visionDensity, visionMinSize, positionHistoryName);
+                    visionDensity, visionMinSize, positionHistoryName,
+                    visionRefine == null ? 0 : visionRefine);
         }
     }
 

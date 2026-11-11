@@ -15,10 +15,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
@@ -54,6 +56,39 @@ public class Vision {
     private static final int inkGap = 3;
     /** Plain text left out, one for each edge margin, then one for the ink. */
     static final int densities = edgeSteps + 2;
+    /** Second press: midpoints of long horizontal and vertical straight boundaries. */
+    static final int straightLines = 1;
+    /** Third press: centres of large, regular areas of one colour. The next press starts again. */
+    static final int blankAreas = 2;
+    static final int lastRefine = blankAreas;
+    /** Screen pixels. A straight line shorter than this is not kept. */
+    private static final int longLineScreenPixels = 80;
+    /** Levels of 255 between the two sides of a boundary. A dark theme parts two panels
+     *  by about 7. */
+    private static final int boundaryContrast = 5;
+    /** Levels either side may move from one pixel of a boundary to the next. */
+    private static final int sideTolerance = 10;
+    /** Detection pixels a line may be missing where another line of its colour crosses. */
+    private static final int lineGap = 3;
+    /** Detection pixels. A line made of stretches shorter than this is text or a picture. */
+    private static final int steadyStretch = 16;
+    /** Screen pixels to a side of the cells a blank area is made of, about. */
+    private static final int blankCellScreenPixels = 4;
+    /** Levels a cell may span and still be one colour. */
+    private static final int blankCellRange = 5;
+    /** Levels between two touching cells of one area. */
+    private static final int blankJoin = 5;
+    /** Screen pixels. The short side of a blank rectangle is at least the first, and its
+     *  long side at least the second. */
+    private static final int blankShortScreenPixels = 40;
+    private static final int blankLongScreenPixels = 80;
+    /** Unzoomed pixels between two feature tags, and from a feature tag to one already
+     *  shown. The limit is what eleven keys label with two letters. */
+    private static final double featureSpacing = UiAutomation.MIN_DISTANCE_BETWEEN_HINTS_UNZOOMED;
+    private static final double featureShownRadius = 8;
+    private static final int featureLimit = 120;
+    /** Unzoomed pixels. A new tag whose centre is this close sits on the one already shown. */
+    private static final double shownTagRadiusUnzoomed = 18;
     private static final String dumpPath = System.getProperty("vision.dump");
 
     private final Overlay overlay;
@@ -71,6 +106,19 @@ public class Vision {
     public Future<List<UiElement>> startFindElements(Set<Screen> screens,
                                                      Rectangle area, int density,
                                                      double minSize) {
+        return startFindElements(screens, area, density, minSize, 0, List.of());
+    }
+
+    /**
+     * {@code refine} 0 is the ordinary region look. {@link #straightLines} and
+     * {@link #blankAreas} are the other two features, and they leave out anything that
+     * would sit on {@code occupied}. The press after {@link #lastRefine} starts again at 0.
+     */
+    public Future<List<UiElement>> startFindElements(Set<Screen> screens,
+                                                     Rectangle area, int density,
+                                                     double minSize, int refine,
+                                                     List<Rectangle> occupied) {
+        List<Rectangle> avoided = List.copyOf(occupied);
         List<Supplier<List<UiElement>>> detections = new ArrayList<>();
         for (Screen screen : screens) {
             Rectangle part = area.intersection(screen.rectangle());
@@ -87,7 +135,8 @@ public class Vision {
                 logger.warn("Desktop capture failed, no vision hints on that screen", e);
                 continue;
             }
-            detections.add(() -> findElements(capture, screen.scale(), density, minSize));
+            detections.add(() -> findElements(capture, screen.scale(), density, minSize,
+                    refine, avoided));
         }
         if (detections.isEmpty())
             return CompletableFuture.completedFuture(List.of());
@@ -98,7 +147,9 @@ public class Vision {
                 elements.addAll(detection.get());
             logger.debug("Vision found " + elements.size() + " elements on " +
                          detections.size() + " screen(s) in " +
-                         (System.nanoTime() - begin) / 1_000_000 + "ms");
+                         (System.nanoTime() - begin) / 1_000_000 + "ms" +
+                         (refine == 0 ? "" :
+                                 ", refine " + refine + ", avoiding " + avoided.size()));
             return elements;
         });
     }
@@ -109,41 +160,58 @@ public class Vision {
 
     List<UiElement> findElements(DesktopCapture capture, double scale, int density,
                                  double minSize) {
+        return findElements(capture, scale, density, minSize, 0, List.of());
+    }
+
+    /**
+     * {@code refine} 0 is the region look. A higher value is a different feature, and drops
+     * anything that would cover a tag in {@code occupied}.
+     */
+    List<UiElement> findElements(DesktopCapture capture, double scale, int density,
+                                 double minSize, int refine, List<Rectangle> occupied) {
+        if (refine > 0)
+            return featureElements(capture, scale, refine, occupied);
         int width = capture.scaledWidth();
         int height = capture.scaledHeight();
+        int lookedDensity = density;
+        int gap = inkGap;
+        int minInkPixels = minimumElementPixels;
+        int minArea = minimumBoundedArea;
+        double spacing = UiAutomation.MIN_DISTANCE_BETWEEN_HINTS_UNZOOMED;
         // Plain text left out, then the edge margin narrows, then the ink no region holds.
-        int step = Math.clamp(density - 2, 0, edgeSteps - 1);
-        int edgeMargin = density == 1 ? firstDensityEdgeMargin : widestEdgeMargin - step;
-        CompletableFuture<List<Rectangle>> ink = density == densities
+        int step = Math.clamp(lookedDensity - 2, 0, edgeSteps - 1);
+        int edgeMargin = lookedDensity == 1 ? firstDensityEdgeMargin : widestEdgeMargin - step;
+        CompletableFuture<List<Rectangle>> ink = lookedDensity == densities
                 ? CompletableFuture.supplyAsync(
-                        () -> inkBoxes(capture.scaledRgb(), width, height, inkGap))
+                        () -> inkBoxes(capture.scaledRgb(), width, height, gap, minInkPixels))
                 : CompletableFuture.completedFuture(List.of());
         List<List<Rectangle>> byMidpoint =
                 IntStream.range(0, EdgeDetector.contrastMidpoints.length)
                          .parallel()
                          .mapToObj(midpoint -> boundedRegions(capture.scaledRgb(),
                                  width, height, scale,
-                                 edgeMargin, verticalEdgeMargin, midpoint))
+                                 edgeMargin, verticalEdgeMargin, midpoint, minArea))
                          .toList();
         List<Rectangle> boxes = new ArrayList<>(byMidpoint.getFirst());
         // A lighter midpoint answers only where the first one found nothing.
         for (int midpoint = 1; midpoint < byMidpoint.size(); midpoint++)
             addUncontained(boxes, byMidpoint.get(midpoint));
-        if (density == 1)
+        if (lookedDensity == 1)
             boxes = boxes.parallelStream()
                          .filter(box -> isGaplessOrBordered(capture.scaledRgb(), width,
                                  height, box))
                          .collect(Collectors.toCollection(ArrayList::new));
-        addUncontained(boxes, ink.join());
+        List<Rectangle> inkBoxes = new ArrayList<>(ink.join());
+        Rectangle bounds = capture.bounds();
+        double screenScaleX = (double) bounds.width() / width;
+        double screenScaleY = (double) bounds.height() / height;
+        addUncontained(boxes, inkBoxes);
         if (dumpPath != null)
             dump(capture.scaledRgb(),
                     InkDetector.ink(capture.scaledRgb(), width, height), boxes, width,
                     height);
         // Greedy suppression keeps whichever element comes first, so order by area.
         boxes.sort(Comparator.comparingLong(box -> -area(box)));
-        Rectangle bounds = capture.bounds();
-        double screenScaleX = (double) bounds.width() / width;
-        double screenScaleY = (double) bounds.height() / height;
         List<UiElement> elements = new ArrayList<>(boxes.size());
         List<UiElement> trimmedElements = new ArrayList<>(boxes.size());
         for (Rectangle box : boxes) {
@@ -151,14 +219,379 @@ public class Vision {
                 < minSize * scale)
                 continue;
             UiElement element = element(box, bounds, screenScaleX, screenScaleY);
+            UiElement trimmedElement = element(trimmed(capture.scaledRgb(), width, height, box),
+                    bounds, screenScaleX, screenScaleY);
             if (!UiAutomation.isTooCloseToExistingUiElements(elements, element.centerX(),
-                    element.centerY(), scale)) {
+                    element.centerY(), scale, spacing)) {
                 elements.add(element);
-                trimmedElements.add(element(trimmed(capture.scaledRgb(), width, height, box),
-                        bounds, screenScaleX, screenScaleY));
+                trimmedElements.add(trimmedElement);
             }
         }
         return trimmedElements;
+    }
+
+    /**
+     * The second press marks straight colour boundaries, horizontal and vertical.
+     * The third marks blank rectangles. The longest or largest come first, spread
+     * apart, and none sits on a tag already shown.
+     */
+    private static List<UiElement> featureElements(DesktopCapture capture, double scale,
+                                                  int refine, List<Rectangle> occupied) {
+        int width = capture.scaledWidth();
+        int height = capture.scaledHeight();
+        byte[] rgb = capture.scaledRgb();
+        Rectangle bounds = capture.bounds();
+        double screenScaleX = (double) bounds.width() / width;
+        double screenScaleY = (double) bounds.height() / height;
+        List<Mark> marks = new ArrayList<>();
+        if (refine == straightLines) {
+            marks.addAll(straightBoundaries(rgb, width, height, true,
+                    detectionPixels(longLineScreenPixels, screenScaleX)));
+            marks.addAll(straightBoundaries(rgb, width, height, false,
+                    detectionPixels(longLineScreenPixels, screenScaleY)));
+        }
+        else {
+            double screenScale = Math.max(screenScaleX, screenScaleY);
+            int cell = Math.max(1, (int) Math.round(blankCellScreenPixels / screenScale));
+            marks.addAll(blankCenters(rgb, width, height, cell,
+                    wholeCells(blankShortScreenPixels, cell * screenScale),
+                    wholeCells(blankLongScreenPixels, cell * screenScale)));
+        }
+        marks.sort(Comparator.comparingInt(Mark::score).reversed());
+        List<UiElement> elements = new ArrayList<>();
+        for (Mark mark : marks) {
+            UiElement element = element(new Rectangle(mark.x(), mark.y(), 1, 1), bounds,
+                    screenScaleX, screenScaleY);
+            if (coversShownTag(element.rectangle(), occupied, scale, featureShownRadius))
+                continue;
+            if (!UiAutomation.isTooCloseToExistingUiElements(elements, element.centerX(),
+                    element.centerY(), scale, featureSpacing))
+                elements.add(element);
+            if (elements.size() == featureLimit)
+                break;
+        }
+        return elements;
+    }
+
+    private record Mark(int x, int y, int score) {}
+
+    /** A length given in screen pixels, in the pixels detection works in. */
+    private static int detectionPixels(int screenPixels, double screenPixelsPerPixel) {
+        return Math.max(1, (int) Math.ceil(screenPixels / screenPixelsPerPixel));
+    }
+
+    /**
+     * How many whole cells a blank of that many screen pixels is sure to hold: one less
+     * than span it, because it need not start where a cell does.
+     */
+    private static int wholeCells(int screenPixels, double screenPixelsPerCell) {
+        return Math.max(1, (int) Math.ceil(screenPixels / screenPixelsPerCell) - 1);
+    }
+
+    /**
+     * Midpoints of straight colour boundaries. A stretch is a run of pixels along one row
+     * or column where the two sides differ and each side keeps its colour: a drawn stroke
+     * is two such boundaries, and the meeting of two panels is one. A line is the
+     * stretches that follow one another, so a rule that other rules cross, or that runs
+     * under panels of several colours, is still one line. A line and each of its stretches
+     * that is long enough gets its midpoint. Text and pictures are short stretches only.
+     */
+    private static List<Mark> straightBoundaries(byte[] rgb, int width, int height,
+                                                boolean horizontal, int longLinePixels) {
+        int alongCount = horizontal ? width : height;
+        int acrossCount = horizontal ? height : width;
+        List<Mark> marks = new ArrayList<>();
+        for (int across = 1; across < acrossCount; across++) {
+            int start = -1;
+            int near = 0, far = 0;
+            boolean crisp = true;
+            int lineStart = -1, lineEnd = -1, stretches = 0, steady = 0, lineMarks = 0;
+            for (int along = 0; along <= alongCount; along++) {
+                boolean boundary = false, direct = false;
+                int nextNear = 0, nextFar = 0;
+                if (along < alongCount) {
+                    nextNear = pixel(rgb, width, along, across - 1, horizontal);
+                    nextFar = pixel(rgb, width, along, across, horizontal);
+                    direct = distance(nextNear, nextFar) >= boundaryContrast;
+                    boundary = direct;
+                    if (!boundary && across + 1 < acrossCount) {
+                        // The downscale can spread one step over two pixels.
+                        nextFar = pixel(rgb, width, along, across + 1, horizontal);
+                        boundary = distance(nextNear, nextFar) >= boundaryContrast;
+                    }
+                }
+                if (start >= 0 && !(boundary
+                                    && distance(near, nextNear) <= sideTolerance
+                                    && distance(far, nextFar) <= sideTolerance)) {
+                    int length = along - start;
+                    // Of the boundaries one edge makes, the crisp one is where it is.
+                    if (length >= longLinePixels)
+                        marks.add(lineMark(start, length, across, crisp ? 1 : 0, horizontal));
+                    if (length >= steadyStretch)
+                        steady += length;
+                    lineEnd = along - 1;
+                    start = -1;
+                }
+                if (boundary && start < 0) {
+                    start = along;
+                    crisp = true;
+                    if (lineStart < 0) {
+                        lineStart = along;
+                        stretches = 0;
+                        steady = 0;
+                        lineMarks = marks.size();
+                    }
+                    stretches++;
+                }
+                else if (!boundary && lineStart >= 0
+                         && (along - lineEnd > lineGap || along == alongCount)) {
+                    int length = lineEnd - lineStart + 1;
+                    if (stretches > 1 && length >= longLinePixels
+                        && steady * 5 >= length * 4) {
+                        Mark line = lineMark(lineStart, length, across, 0, horizontal);
+                        // A stretch whose midpoint is the line's own says nothing more.
+                        marks.subList(lineMarks, marks.size()).removeIf(stretch ->
+                                Math.abs(stretch.x() - line.x()) + Math.abs(stretch.y() - line.y())
+                                < longLinePixels / 2);
+                        marks.add(line);
+                    }
+                    lineStart = -1;
+                }
+                crisp &= direct;
+                near = nextNear;
+                far = nextFar;
+            }
+        }
+        return marks;
+    }
+
+    private static Mark lineMark(int start, int length, int across, int crisp,
+                                 boolean horizontal) {
+        int middle = start + length / 2;
+        int score = 2 * length + crisp;
+        return horizontal ? new Mark(middle, across, score) : new Mark(across, middle, score);
+    }
+
+    private static int pixel(byte[] rgb, int width, int along, int across,
+                             boolean horizontal) {
+        return horizontal ? color(rgb, width, along, across) : color(rgb, width, across, along);
+    }
+
+    /**
+     * Centres of blank rectangles. The frame is cut into cells, a cell is blank when
+     * all of it is one colour, and blank cells of a near colour that touch are one area.
+     * The largest rectangle that fits in an area is taken, then the largest that fits in
+     * what is left, until none has a short side of {@code shortCells} and a long side of
+     * {@code longCells}. So every blank strip that wide is reached, whole or in parts.
+     * When there are more than can be shown, the largest are the ones returned.
+     */
+    private static List<Mark> blankCenters(byte[] rgb, int width, int height, int blankCell,
+                                           int shortCells, int longCells) {
+        int columns = width / blankCell;
+        int rows = height / blankCell;
+        List<Mark> marks = new ArrayList<>();
+        if (columns == 0 || rows == 0)
+            return marks;
+        int[] areas = blankAreas(rgb, width, blankCell, columns, rows);
+        BlankQueue candidates = new BlankQueue(shortCells, longCells);
+        blankRectangles(areas, columns, rows, candidates);
+        List<Rectangle> taken = new ArrayList<>();
+        while (taken.size() < featureLimit && !candidates.largestFirst().isEmpty()) {
+            Rectangle candidate = candidates.largestFirst().poll();
+            Rectangle cut = null;
+            for (Rectangle before : taken)
+                if (before.x() < candidate.x() + candidate.width()
+                    && candidate.x() < before.x() + before.width()
+                    && before.y() < candidate.y() + candidate.height()
+                    && candidate.y() < before.y() + before.height()) {
+                    cut = before;
+                    break;
+                }
+            if (cut == null) {
+                taken.add(candidate);
+                continue;
+            }
+            // Whatever still fits in it lies wholly to one side of the rectangle taken.
+            int right = candidate.x() + candidate.width();
+            int bottom = candidate.y() + candidate.height();
+            addBlank(candidates, candidate.x(), candidate.y(), cut.x() - candidate.x(),
+                    candidate.height());
+            addBlank(candidates, cut.x() + cut.width(), candidate.y(),
+                    right - cut.x() - cut.width(), candidate.height());
+            addBlank(candidates, candidate.x(), candidate.y(), candidate.width(),
+                    cut.y() - candidate.y());
+            addBlank(candidates, candidate.x(), cut.y() + cut.height(), candidate.width(),
+                    bottom - cut.y() - cut.height());
+        }
+        for (Rectangle blank : taken)
+            marks.add(new Mark((2 * blank.x() + blank.width()) * blankCell / 2,
+                    (2 * blank.y() + blank.height()) * blankCell / 2,
+                    blank.width() * blank.height()));
+        return marks;
+    }
+
+    private static void addBlank(BlankQueue blanks, int x, int y, int wide, int tall) {
+        if (Math.min(tall, wide) < blanks.shortCells || Math.max(tall, wide) < blanks.longCells)
+            return;
+        Rectangle blank = new Rectangle(x, y, wide, tall);
+        // Many rectangles leave the same remainder when one is taken out of them.
+        if (blanks.queued.add(blank))
+            blanks.largestFirst.add(blank);
+    }
+
+    private record BlankQueue(PriorityQueue<Rectangle> largestFirst, Set<Rectangle> queued,
+                              int shortCells, int longCells) {
+        BlankQueue(int shortCells, int longCells) {
+            this(new PriorityQueue<>(Comparator.<Rectangle>comparingLong(box -> -area(box))
+                                               .thenComparingInt(Rectangle::y)
+                                               .thenComparingInt(Rectangle::x)
+                                               .thenComparingInt(Rectangle::width)),
+                    new HashSet<>(), shortCells, longCells);
+        }
+    }
+
+    /**
+     * The area each cell belongs to, or -1 where the cell is not one colour.
+     */
+    private static int[] blankAreas(byte[] rgb, int width, int blankCell, int columns,
+                                    int rows) {
+        int[] colors = new int[columns * rows];
+        boolean[] blank = new boolean[columns * rows];
+        for (int row = 0; row < rows; row++)
+            for (int column = 0; column < columns; column++) {
+                int lowRed = 255, lowGreen = 255, lowBlue = 255;
+                int highRed = 0, highGreen = 0, highBlue = 0;
+                for (int y = row * blankCell; y < (row + 1) * blankCell; y++)
+                    for (int x = column * blankCell; x < (column + 1) * blankCell; x++) {
+                        int color = color(rgb, width, x, y);
+                        int red = color >> 16, green = color >> 8 & 0xff, blue = color & 0xff;
+                        lowRed = Math.min(lowRed, red);
+                        highRed = Math.max(highRed, red);
+                        lowGreen = Math.min(lowGreen, green);
+                        highGreen = Math.max(highGreen, green);
+                        lowBlue = Math.min(lowBlue, blue);
+                        highBlue = Math.max(highBlue, blue);
+                    }
+                int cell = row * columns + column;
+                blank[cell] = highRed - lowRed <= blankCellRange
+                              && highGreen - lowGreen <= blankCellRange
+                              && highBlue - lowBlue <= blankCellRange;
+                colors[cell] = (lowRed + highRed) / 2 << 16 | (lowGreen + highGreen) / 2 << 8 |
+                               (lowBlue + highBlue) / 2;
+            }
+        int[] areas = new int[columns * rows];
+        Arrays.fill(areas, -1);
+        int[] queue = new int[columns * rows];
+        int area = 0;
+        for (int first = 0; first < areas.length; first++) {
+            if (!blank[first] || areas[first] >= 0)
+                continue;
+            int head = 0, tail = 0;
+            queue[tail++] = first;
+            areas[first] = area;
+            while (head < tail) {
+                int cell = queue[head++];
+                int column = cell % columns;
+                int[] neighbors = {column > 0 ? cell - 1 : -1,
+                                   column < columns - 1 ? cell + 1 : -1,
+                                   cell - columns, cell + columns};
+                for (int neighbor : neighbors) {
+                    if (neighbor < 0 || neighbor >= areas.length || !blank[neighbor]
+                        || areas[neighbor] >= 0
+                        || distance(colors[cell], colors[neighbor]) > blankJoin)
+                        continue;
+                    areas[neighbor] = area;
+                    queue[tail++] = neighbor;
+                }
+            }
+            area++;
+        }
+        return areas;
+    }
+
+    /**
+     * Into {@code blanks}, every rectangle of cells that lies inside one area, is large
+     * enough and cannot be grown to any side: the rectangles under a histogram of how far
+     * each column of the area reaches up from this row, taken row by row, less those
+     * that go on into the row below.
+     */
+    private static void blankRectangles(int[] areas, int columns, int rows,
+                                        BlankQueue blanks) {
+        int[] heights = new int[columns];
+        int[] stack = new int[columns + 1];
+        // Up to each column, how many of this row's cells go on into the row below.
+        int[] goingOn = new int[columns + 1];
+        for (int row = 0; row < rows; row++) {
+            for (int column = 0; column < columns; column++) {
+                int area = areas[row * columns + column];
+                heights[column] = area < 0 ? 0
+                        : row > 0 && areas[(row - 1) * columns + column] == area
+                                ? heights[column] + 1 : 1;
+                goingOn[column + 1] = goingOn[column] + (area >= 0 && row + 1 < rows
+                        && areas[(row + 1) * columns + column] == area ? 1 : 0);
+            }
+            int size = 0;
+            int segment = 0;
+            for (int column = 0; column <= columns; column++) {
+                // Another area ends every rectangle still open.
+                boolean continues = column > 0 && column < columns
+                                    && areas[row * columns + column]
+                                       == areas[row * columns + column - 1];
+                int floor = continues ? heights[column] : -1;
+                while (size > 0 && heights[stack[size - 1]] > floor) {
+                    int tall = heights[stack[--size]];
+                    int left = size == 0 ? segment : stack[size - 1] + 1;
+                    if (goingOn[column] - goingOn[left] < column - left)
+                        addBlank(blanks, left, row - tall + 1, column - left, tall);
+                }
+                if (!continues)
+                    segment = column;
+                if (column == columns)
+                    break;
+                // Columns of one height are one step, which ends at the last of them.
+                if (size > 0 && heights[stack[size - 1]] == heights[column])
+                    stack[size - 1] = column;
+                else
+                    stack[size++] = column;
+            }
+        }
+    }
+
+    /**
+     * Whether {@code candidate} would put its tag on one already shown: the centres are
+     * within a tag of each other, or each centre lies inside the other box (the same
+     * control found again, shifted). A smaller control inside a larger one stays, which
+     * is the place the earlier look did not mark.
+     */
+    static boolean coversShownTag(Rectangle candidate, List<Rectangle> shown, double scale) {
+        return coversShownTag(candidate, shown, scale, shownTagRadiusUnzoomed);
+    }
+
+    /** {@code radiusUnzoomed} is how near two centres are when the tags are one place. */
+    static boolean coversShownTag(Rectangle candidate, List<Rectangle> shown, double scale,
+                                  double radiusUnzoomed) {
+        if (shown.isEmpty())
+            return false;
+        double radius = radiusUnzoomed * scale;
+        double radiusSquared = radius * radius;
+        double x = candidate.center().x();
+        double y = candidate.center().y();
+        for (Rectangle old : shown) {
+            double dx = old.center().x() - x;
+            double dy = old.center().y() - y;
+            if (dx * dx + dy * dy <= radiusSquared)
+                return true;
+            // On the boundary is the cut between two blocks, not the same control again.
+            if (strictlyContains(old, x, y) &&
+                strictlyContains(candidate, old.center().x(), old.center().y()))
+                return true;
+        }
+        return false;
+    }
+
+    private static boolean strictlyContains(Rectangle box, double pointX, double pointY) {
+        return pointX > box.x() && pointX < box.x() + box.width() &&
+               pointY > box.y() && pointY < box.y() + box.height();
     }
 
     private static UiElement element(Rectangle box, Rectangle bounds, double screenScaleX,
@@ -197,7 +630,7 @@ public class Vision {
 
     /** What the ink splits into once cut apart: one hint each. */
     private static List<Rectangle> inkBoxes(byte[] rgb, int width, int height,
-                                           int minimumGapColumns) {
+                                           int minimumGapColumns, int minimumPixels) {
         int downsampledWidth = (width + downsampleFactor - 1) / downsampleFactor;
         int downsampledHeight = (height + downsampleFactor - 1) / downsampleFactor;
         long[] ink = InkDetector.ink(rgb, width, height);
@@ -206,9 +639,9 @@ public class Vision {
                 downsampledWidth, downsampledHeight);
         SummedAreaTable inkTable = new SummedAreaTable(ink, width, height);
         double maximumElementArea = maximumElementAreaRatio * width * height;
-        return ConnectedComponentFinder.boundingBoxes(mask, downsampledWidth,
+        return                 ConnectedComponentFinder.boundingBoxes(mask, downsampledWidth,
                         downsampledHeight,
-                        minimumElementPixels / (downsampleFactor * downsampleFactor))
+                        minimumPixels / (downsampleFactor * downsampleFactor))
                 .parallelStream()
                 .flatMap(box -> {
                     List<Rectangle> parts = new ArrayList<>();
@@ -223,7 +656,8 @@ public class Vision {
     /** What an edge draws a boundary around: one hint for what the ink inside splits up. */
     private static List<Rectangle> boundedRegions(byte[] rgb, int width, int height,
                                                   double scale, int edgeDilation,
-                                                  int verticalDilation, int midpoint) {
+                                                  int verticalDilation, int midpoint,
+                                                  int minimumArea) {
         long[] edges = EdgeDetector.edges(rgb, width, height, edgeDilation,
                 verticalDilation, midpoint);
         List<Rectangle> bounded = new ArrayList<>();
@@ -238,14 +672,14 @@ public class Vision {
             if (midpoint > 0 && area(inside) > maximumLightElementPixels)
                 continue;
             if (!isTargetShaped((int) (inside.width() * scale),
-                    (int) (inside.height() * scale)))
+                    (int) (inside.height() * scale), minimumArea))
                 continue;
             int background = cornerBackground(rgb, width, height, inside);
             if (background < 0)
                 continue;
             for (Rectangle part : inkParts(rgb, width, inside, background))
                 if (isTargetShaped((int) (part.width() * scale),
-                        (int) (part.height() * scale)))
+                        (int) (part.height() * scale), minimumArea))
                     bounded.add(part);
         }
         return bounded;
@@ -407,9 +841,9 @@ public class Vision {
         return distance;
     }
 
-    private static boolean isTargetShaped(int width, int height) {
+    private static boolean isTargetShaped(int width, int height, int minimumArea) {
         return width >= minimumBoundedSide && height >= minimumBoundedSide
-               && (long) width * height >= minimumBoundedArea;
+               && (long) width * height >= minimumArea;
     }
 
     /** A box straddling unrelated content has corners of its own at every outset: -1. */
