@@ -46,7 +46,7 @@ class WindowMenuTest {
         assertTrue(html.contains("valign=\"middle\""));
         assertTrue(html.contains("src=\"window-icon-1-0\""));
         assertTrue(html.contains("width=\"32\""));
-        assertTrue(html.contains("e 上"));
+        assertTrue(html.contains("e k 上"));
         assertTrue(html.contains("Esc 返回"));
         assertEquals(1, menu.withEntries(List.of(
                 new WindowEntry("当前", "current.exe", "window-icon-2-0"),

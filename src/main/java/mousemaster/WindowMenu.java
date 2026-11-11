@@ -71,7 +71,7 @@ public final class WindowMenu {
         StringBuilder html = new StringBuilder();
         html.append("<table cellspacing=0 cellpadding=0>");
         html.append("<tr><td class=title>窗口</td></tr>");
-        html.append("<tr><td class=hint>e 上&nbsp;&nbsp;d 下&nbsp;&nbsp;g / 空格 跳转&nbsp;&nbsp;Esc 返回</td></tr>");
+        html.append("<tr><td class=hint>e k 上&nbsp;&nbsp;d j 下&nbsp;&nbsp;g / 空格 跳转&nbsp;&nbsp;Esc 返回</td></tr>");
         if (entries.isEmpty()) {
             html.append("<tr><td class=empty>没有可切换的窗口</td></tr></table>");
             return html.toString();

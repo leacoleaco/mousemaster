@@ -26,8 +26,14 @@ class HandMoveComboTest {
     private ComboWatcher comboWatcher;
     private ModeMap modeMap;
     private Instant now = Instant.parse("2020-01-01T00:00:00Z");
+    private boolean followModeSwitches;
 
     private void load() throws Exception {
+        load(false);
+    }
+
+    private void load(boolean followModeSwitches) throws Exception {
+        this.followModeSwitches = followModeSwitches;
         Configuration configuration = ConfigurationParser.parse(
                 PropertiesReader.readPropertiesFile(Files.newBufferedReader(
                         Path.of("configuration/mousemaster.properties"))),
@@ -49,6 +55,18 @@ class HandMoveComboTest {
             @Override
             public void run(Command command, Key eventKey) {
                 ranCommands.add(command);
+                if (!followModeSwitches)
+                    return;
+                String modeName = switch (command) {
+                    case Command.SwitchMode switchMode -> switchMode.modeName();
+                    case Command.ActivateSelectedWindow activate -> activate.modeAfter();
+                    default -> null;
+                };
+                if (modeName == null)
+                    return;
+                Mode mode = modeMap.get(modeName);
+                if (mode != null)
+                    comboWatcher.modeChanged(mode);
             }
         };
         comboWatcher = new ComboWatcher(commandRunner, null,
@@ -271,17 +289,36 @@ class HandMoveComboTest {
         assertTrue(ran(new Command.SelectWindow(-1)));
         assertTrue(press("d").mustBeEaten());
         assertTrue(ran(new Command.SelectWindow(1)));
+        ranCommands.clear();
+        assertTrue(press("k").mustBeEaten());
+        assertTrue(ran(new Command.SelectWindow(-1)));
+        assertTrue(press("j").mustBeEaten());
+        assertTrue(ran(new Command.SelectWindow(1)));
+        release("k");
+        release("j");
+        release("e");
+        release("d");
+        ranCommands.clear();
         assertTrue(press("g").mustBeEaten());
         assertTrue(ran(new Command.ActivateSelectedWindow("center-on-active-window-mode")));
         release("g");
+        assertTrue(press("esc").mustBeEaten());
+        assertTrue(ran(new Command.SwitchMode("normal-mode")));
+    }
+
+    @Test
+    void spaceInTheWindowListStaysInNormalMode() throws Exception {
+        load(true);
+        comboWatcher.modeChanged(modeMap.get("window-switch-mode"));
         ranCommands.clear();
         assertTrue(press("space").mustBeEaten());
-        assertTrue(ran(new Command.ActivateSelectedWindow("center-on-active-window-mode")));
+        assertTrue(ran(new Command.ActivateSelectedWindow("window-switch-space-mode")));
+        ranCommands.clear();
         EatAndRegurgitates releaseSpace = release("space");
         assertTrue(releaseSpace.mustBeEaten());
         assertTrue(releaseSpace.regurgitates().isEmpty());
-        assertTrue(press("esc").mustBeEaten());
         assertTrue(ran(new Command.SwitchMode("normal-mode")));
+        assertFalse(ran(new Command.SwitchMode("idle-mode")));
     }
 
     @Test

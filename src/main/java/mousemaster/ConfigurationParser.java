@@ -686,6 +686,13 @@ public class ConfigurationParser {
                                     .map(SwitchMode.class::cast)
                                     .map(SwitchMode::modeName)
                                     .forEach(referencedModes::add);
+            mode.comboMap.activateWindow.builder.values()
+                                                .stream()
+                                                .flatMap(Collection::stream)
+                                                .filter(ActivateSelectedWindow.class::isInstance)
+                                                .map(ActivateSelectedWindow.class::cast)
+                                                .map(ActivateSelectedWindow::modeAfter)
+                                                .forEach(referencedModes::add);
             if (mode.modeAfterUnhandledKeyPress.builder.get() != null)
                 referencedModes.add(mode.modeAfterUnhandledKeyPress.builder.get());
             if (mode.hintMesh.builder.modeAfterSelection() != null)
