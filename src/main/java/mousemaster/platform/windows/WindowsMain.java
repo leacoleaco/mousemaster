@@ -23,6 +23,10 @@ public class WindowsMain {
 
     public static void main(String[] args) throws InterruptedException, IOException {
         ApplicationOptions options = ApplicationOptions.parse(args);
+        if (options.showVersion() || options.showLicenses())
+            WindowsConsole.ensureForMessages();
+        else
+            WindowsConsole.prepare(options.configurationPath());
         MousemasterApplication.setTempDirectory(options.tempDirectory());
         if (options.logLevel() != null)
             MousemasterApplication.setLogLevel(options.logLevel());

@@ -14,6 +14,7 @@ import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.Iterator;
@@ -89,6 +90,21 @@ public class MousemasterApplication {
 
     public static Path logFile() {
         return Path.of("mousemaster.log").toAbsolutePath();
+    }
+
+    /**
+     * Points the console appender at a new stream. {@code AllocConsole} does not
+     * retarget the stream logback captured at startup.
+     */
+    public static void setConsoleLogStream(OutputStream stream) {
+        LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+        Logger rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME);
+        Appender<ILoggingEvent> async = rootLogger.getAppender("ASYNC_CONSOLE");
+        if (!(async instanceof AsyncAppender asyncAppender))
+            return;
+        Appender<ILoggingEvent> console = asyncAppender.getAppender("CONSOLE");
+        if (console instanceof OutputStreamAppender<ILoggingEvent> output)
+            output.setOutputStream(stream);
     }
 
     public static void enableLogToFile() {

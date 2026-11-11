@@ -43,7 +43,6 @@ public class Mousemaster {
         this.platform = platform;
         this.preWarmHints = preWarmHints;
         this.activeKeyboardLayout = platform.activeKeyboardLayout();
-        platform.console().hide();
         QtManager.initialize();
         try {
             loadConfiguration(true, false);

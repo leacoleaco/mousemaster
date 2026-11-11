@@ -8,13 +8,17 @@ import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Startup-folder shortcut, matching {@code windows/launcher/install-shortcuts.ps1}:
- * {@code Mousemaster.lnk} aimed at {@code Mousemaster.exe}, window style minimized,
- * without the RunAsAdmin flag the desktop shortcut uses.
+ * Login launch of {@code Mousemaster.exe}.
+ * <p>
+ * A Startup-folder shortcut cannot satisfy {@code requireAdministrator}: Windows
+ * skips it at logon instead of showing UAC. An elevated process therefore
+ * registers a logon scheduled task that runs at the highest privileges. A
+ * non-elevated java launch still uses {@code Mousemaster.lnk}.
  */
 public final class WindowsStartupShortcut {
 
     private static final String LINK_NAME = "Mousemaster.lnk";
+    private static final String TASK_NAME = "Mousemaster";
 
     private WindowsStartupShortcut() {
     }
@@ -28,8 +32,16 @@ public final class WindowsStartupShortcut {
     }
 
     public static boolean isEnabled() {
+        return hasStartupFolderLink() || hasElevatedTask();
+    }
+
+    public static boolean hasStartupFolderLink() {
         Path link = linkPath();
         return link != null && Files.isRegularFile(link);
+    }
+
+    public static boolean hasElevatedTask() {
+        return elevatedTaskExists();
     }
 
     public static void setEnabled(boolean enabled, Path configurationPath) throws IOException {
@@ -38,11 +50,18 @@ public final class WindowsStartupShortcut {
             throw new IOException("找不到启动文件夹");
         if (!enabled) {
             Files.deleteIfExists(link);
+            deleteElevatedTask();
             return;
         }
         Path executable = executableFor(configurationPath);
         if (executable == null)
             throw new IOException("找不到 Mousemaster.exe，无法创建开机自启快捷方式");
+        if (WindowsProcessElevation.isElevated()) {
+            createElevatedLogonTask(executable);
+            Files.deleteIfExists(link);
+            return;
+        }
+        deleteElevatedTask();
         Files.createDirectories(link.getParent());
         createShortcut(link, executable);
     }
@@ -78,6 +97,63 @@ public final class WindowsStartupShortcut {
                 + "$shortcut.Description = 'Mousemaster'; "
                 + "$shortcut.IconLocation = " + ps(executable + ",0") + "; "
                 + "$shortcut.Save()";
+        runPowershell(script);
+    }
+
+    private static void createElevatedLogonTask(Path executable) throws IOException {
+        Path workingDirectory = executable.getParent() == null
+                ? Path.of("").toAbsolutePath()
+                : executable.getParent();
+        String script = "$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name; "
+                + "$action = New-ScheduledTaskAction -Execute " + ps(executable)
+                + " -WorkingDirectory " + ps(workingDirectory) + "; "
+                + "$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user; "
+                + "$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest; "
+                + "$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; "
+                + "Register-ScheduledTask -TaskName " + ps(TASK_NAME)
+                + " -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null";
+        runPowershell(script);
+    }
+
+    private static boolean elevatedTaskExists() {
+        ProcessBuilder builder = new ProcessBuilder("schtasks.exe", "/Query", "/TN", TASK_NAME);
+        builder.redirectErrorStream(true);
+        try {
+            Process process = builder.start();
+            try (InputStream in = process.getInputStream()) {
+                in.readAllBytes();
+            }
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private static void deleteElevatedTask() {
+        ProcessBuilder builder = new ProcessBuilder(
+                "schtasks.exe", "/Delete", "/TN", TASK_NAME, "/F");
+        builder.redirectErrorStream(true);
+        try {
+            Process process = builder.start();
+            try (InputStream in = process.getInputStream()) {
+                in.readAllBytes();
+            }
+            if (!process.waitFor(10, TimeUnit.SECONDS))
+                process.destroyForcibly();
+        } catch (IOException ignored) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static void runPowershell(String script) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(
                 "powershell.exe",
                 "-NoProfile",
@@ -94,11 +170,11 @@ public final class WindowsStartupShortcut {
         try {
             if (!process.waitFor(15, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                throw new IOException("创建开机自启快捷方式超时");
+                throw new IOException("创建开机自启项超时");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("创建开机自启快捷方式被中断", e);
+            throw new IOException("创建开机自启项被中断", e);
         }
         if (process.exitValue() != 0) {
             String message = new String(output, StandardCharsets.UTF_8).strip();

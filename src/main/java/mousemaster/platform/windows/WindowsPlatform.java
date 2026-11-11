@@ -87,8 +87,6 @@ public class WindowsPlatform implements Platform {
     private volatile boolean killProcessRequested;
     private volatile boolean hooksSuspended;
     private boolean restartProcessRequested;
-    private final boolean startedWithAConsole =
-            Kernel32.INSTANCE.GetConsoleWindow() != null;
     private double consoleCheckTimer;
     /** When true, physical Caps Lock is swallowed and the OS toggle is cleared. */
     private boolean suppressCapsLockOsPassthrough;
@@ -259,12 +257,10 @@ public class WindowsPlatform implements Platform {
     }
 
     /**
-     * When running as a graalvm native image, we need to set the DPI awareness
-     * (otherwise mouse coordinates are wrong on scaled displays).
-     * It is recommended to do it with a manifest file instead but I am unsure
-     * how to include it in the native image.
-     * When running as a java app (non-native image), the DPI awareness seems to
-     * already be set, and SetProcessDpiAwarenessContext() returns error code 5.
+     * When running as a graalvm native image, DPI awareness has to be set or mouse
+     * coordinates are wrong on scaled displays. The packaged exe's manifest sets
+     * PerMonitorV2; this call covers the java launch, which has no such manifest.
+     * Once it is already set, SetProcessDpiAwarenessContext() returns error code 5.
      */
     private void setDpiAwareness() {
         boolean setProcessDpiAwarenessContextResult =
@@ -272,7 +268,8 @@ public class WindowsPlatform implements Platform {
                         Pointer.createConstant(
                                 ExtendedUser32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)));
         int dpiAwarenessErrorCode = Kernel32.INSTANCE.GetLastError();
-        if (!setProcessDpiAwarenessContextResult)
+        // Error 5 means the manifest already set PerMonitorV2.
+        if (!setProcessDpiAwarenessContextResult && dpiAwarenessErrorCode != 5)
             logger.info("Unable to SetProcessDpiAwarenessContext: error code = " +
                         dpiAwarenessErrorCode);
     }
@@ -355,7 +352,7 @@ public class WindowsPlatform implements Platform {
     }
 
     private void killProcessIfConsoleIsGone(double delta) {
-        if (!startedWithAConsole)
+        if (!WindowsConsole.closeShouldExit())
             return;
         consoleCheckTimer -= delta;
         if (consoleCheckTimer > 0)

@@ -19,6 +19,9 @@ public interface ExtendedKernel32 extends StdCallLibrary {
 
     boolean SetConsoleCtrlHandler(PhandlerRoutine handlerRoutine, boolean add);
 
+    /** Number of processes attached to this console, or the required length if the array is short. */
+    int GetConsoleProcessList(int[] processIds, int processCount);
+
     interface PhandlerRoutine extends StdCallCallback {
         boolean callback(int dwCtrlType);
     }

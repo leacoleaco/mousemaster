@@ -102,8 +102,13 @@ public final class MousemasterTray implements ModeListener {
             logger.info("System tray icon active; preferences at {}", prefs.path());
             if (keepConsole())
                 logger.info("Console stays visible (-Dmousemaster.keepConsole); close it to exit");
-            if (Os.windows)
+            if (Os.windows) {
+                if (WindowsProcessElevation.isElevated()
+                        && WindowsStartupShortcut.hasStartupFolderLink()
+                        && !WindowsStartupShortcut.hasElevatedTask())
+                    logger.info("开机自启快捷方式无法拉起需要管理员权限的程序，请在托盘菜单里重新勾选一次「开机自启」");
                 QTimer.singleShot(400, this::warnIfNotAdministrator);
+            }
         } catch (Exception e) {
             logger.error("Failed to initialize system tray", e);
         }
