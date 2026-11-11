@@ -1,10 +1,8 @@
 package mousemaster;
 
 import io.qt.core.QTimer;
-import io.qt.core.QUrl;
 import io.qt.gui.QAction;
 import io.qt.gui.QColor;
-import io.qt.gui.QDesktopServices;
 import io.qt.gui.QIcon;
 import io.qt.gui.QPainter;
 import io.qt.gui.QPen;
@@ -20,11 +18,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Windows 通知区域图标。配置只从 properties 文件读取；右键菜单显示构建版本，并可暂停、
- * 重新加载、打开配置和日志，以及开机自启。
+ * 重新加载配置，以及开机自启。
  */
 public final class MousemasterTray implements ModeListener {
 
@@ -63,8 +60,6 @@ public final class MousemasterTray implements ModeListener {
             pauseAction.setCheckable(true);
             pauseAction.triggered.connect(this::onPauseClicked);
             menu.addAction("重新加载配置").triggered.connect(app::reloadConfiguration);
-            menu.addAction("打开配置文件").triggered.connect(this::openConfigurationFile);
-            menu.addAction("打开日志目录").triggered.connect(this::openLogDirectory);
             if (Os.windows) {
                 startupAction = menu.addAction("开机自启");
                 startupAction.setCheckable(true);
@@ -321,27 +316,6 @@ public final class MousemasterTray implements ModeListener {
             showBalloon("开机自启", e.getMessage() == null ? "无法更新开机启动项" : e.getMessage(),
                     QSystemTrayIcon.MessageIcon.Warning);
         }
-    }
-
-    private void openConfigurationFile() {
-        openPath(app.configurationPath(), "打开配置文件");
-    }
-
-    private void openLogDirectory() {
-        Path logFile = MousemasterApplication.logFile();
-        Path directory = logFile.getParent();
-        openPath(directory == null ? Path.of("").toAbsolutePath() : directory, "打开日志目录");
-    }
-
-    private void openPath(Path path, String title) {
-        if (path == null || !Files.exists(path)) {
-            showBalloon(title, "找不到：" + path, QSystemTrayIcon.MessageIcon.Warning);
-            return;
-        }
-        boolean opened = QDesktopServices.openUrl(
-                QUrl.fromLocalFile(path.toAbsolutePath().toString()));
-        if (!opened)
-            showBalloon(title, "无法打开：" + path, QSystemTrayIcon.MessageIcon.Warning);
     }
 
     private void refreshStatus() {

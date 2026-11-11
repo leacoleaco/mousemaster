@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
+import ch.qos.logback.classic.filter.ThresholdFilter;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.FileAppender;
@@ -88,8 +89,33 @@ public class MousemasterApplication {
         platform.killProcess(1);
     }
 
+    /**
+     * Beside {@code mousemaster.exe} when that is the running program, so a hidden
+     * console still leaves the log next to the file the user launched. A java launch
+     * keeps the working directory.
+     */
     public static Path logFile() {
-        return Path.of("mousemaster.log").toAbsolutePath();
+        Path directory = ProcessHandle.current().info().command()
+                                       .map(Path::of)
+                                       .filter(path -> {
+                                           Path name = path.getFileName();
+                                           return name != null &&
+                                                  name.toString().equalsIgnoreCase("mousemaster.exe");
+                                       })
+                                       .map(Path::getParent)
+                                       .orElse(null);
+        if (directory == null)
+            directory = Path.of("").toAbsolutePath();
+        return directory.resolve("mousemaster.log");
+    }
+
+    /** ERROR records are always written to {@link #logFile()}. */
+    public static void ensureErrorLog() {
+        try {
+            ensureFileAppender(true);
+        } catch (RuntimeException e) {
+            logger.warn("Could not open error log {}", logFile(), e);
+        }
     }
 
     /**
@@ -108,10 +134,28 @@ public class MousemasterApplication {
     }
 
     public static void enableLogToFile() {
+        ensureFileAppender(false);
+    }
+
+    /** Stops the full log. ERROR records keep going to {@link #logFile()}. */
+    public static void disableLogToFile() {
+        FileAppender<ILoggingEvent> fileAppender = fileAppender();
+        if (fileAppender == null)
+            return;
+        fileAppender.clearAllFilters();
+        fileAppender.addFilter(errorFilter());
+    }
+
+    private static void ensureFileAppender(boolean errorsOnly) {
         LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
         Logger rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME);
-        if (rootLogger.getAppender("ASYNC_FILE") != null)
+        FileAppender<ILoggingEvent> existing = fileAppender();
+        if (existing != null) {
+            existing.clearAllFilters();
+            if (errorsOnly)
+                existing.addFilter(errorFilter());
             return;
+        }
         PatternLayoutEncoder encoder = new PatternLayoutEncoder();
         encoder.setContext(context);
         startWithCurrentPattern(encoder);
@@ -121,6 +165,8 @@ public class MousemasterApplication {
         fileAppender.setFile(logFile().toString());
         fileAppender.setEncoder(encoder);
         fileAppender.setAppend(true);
+        if (errorsOnly)
+            fileAppender.addFilter(errorFilter());
         fileAppender.start();
         AsyncAppender asyncAppender = new AsyncAppender();
         asyncAppender.setName("ASYNC_FILE");
@@ -132,14 +178,23 @@ public class MousemasterApplication {
         rootLogger.addAppender(asyncAppender);
     }
 
-    public static void disableLogToFile() {
+    private static FileAppender<ILoggingEvent> fileAppender() {
         LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
         Logger rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME);
-        Appender<ILoggingEvent> asyncAppender = rootLogger.getAppender("ASYNC_FILE");
-        if (asyncAppender != null) {
-            rootLogger.detachAppender(asyncAppender);
-            asyncAppender.stop();
-        }
+        Appender<ILoggingEvent> async = rootLogger.getAppender("ASYNC_FILE");
+        if (!(async instanceof AsyncAppender asyncAppender))
+            return null;
+        Appender<ILoggingEvent> file = asyncAppender.getAppender("FILE");
+        if (file instanceof FileAppender<ILoggingEvent> fileAppender)
+            return fileAppender;
+        return null;
+    }
+
+    private static ThresholdFilter errorFilter() {
+        ThresholdFilter filter = new ThresholdFilter();
+        filter.setLevel(Level.ERROR.levelStr);
+        filter.start();
+        return filter;
     }
 
     public static void setLogLevel(String level) {

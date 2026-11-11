@@ -29,6 +29,7 @@ public class WindowsMain {
         MousemasterApplication.setTempDirectory(options.tempDirectory());
         if (options.logLevel() != null)
             MousemasterApplication.setLogLevel(options.logLevel());
+        MousemasterApplication.ensureErrorLog();
         if (options.logToFile())
             MousemasterApplication.enableLogToFile();
         String version = BuildInfo.version();
