@@ -152,4 +152,13 @@ public sealed interface Command {
         public enum Kind { WORD, LINE, ALL }
     }
 
+    /** Move the highlight in the Alt-Tab-ordered window menu. Negative is up. */
+    record SelectWindow(int delta) implements Command {}
+
+    /**
+     * Focus the highlighted window. On success, switch to {@code modeAfter}
+     * (the shipped configuration centers the pointer on that window, then returns).
+     */
+    record ActivateSelectedWindow(String modeAfter) implements Command {}
+
 }

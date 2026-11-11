@@ -11,6 +11,7 @@ import mousemaster.KeyRegurgitator;
 
 import mousemaster.platform.KeyboardController;
 import mousemaster.platform.Overlay;
+import mousemaster.platform.SwitchableWindows;
 import mousemaster.Vision;
 import mousemaster.platform.UiAutomation;
 import mousemaster.KeyEvent.PressKeyEvent;
@@ -463,6 +464,16 @@ public class WindowsPlatform implements Platform {
     @Override
     public Overlay overlay() {
         return overlay;
+    }
+
+    @Override
+    public SwitchableWindows switchableWindows() {
+        return WindowsSwitchableWindows.capture();
+    }
+
+    @Override
+    public boolean inKeyboardHook() {
+        return inKeyboardHookCallback;
     }
 
     @Override

@@ -17,6 +17,7 @@ public class CommandRunner {
     private final CopyTextPlayer copyTextPlayer;
     private MacroPlayer macroPlayer;
     private AnimationPlayer animationPlayer;
+    private WindowSwitcher windowSwitcher;
 
     public CommandRunner(MouseManager mouseManager, HintManager hintManager,
                          Platform platform) {
@@ -82,6 +83,10 @@ public class CommandRunner {
 
     public void setAnimationPlayer(AnimationPlayer animationPlayer) {
         this.animationPlayer = animationPlayer;
+    }
+
+    public void setWindowSwitcher(WindowSwitcher windowSwitcher) {
+        this.windowSwitcher = windowSwitcher;
     }
 
     public boolean runningAtomicCommand() {
@@ -200,6 +205,14 @@ public class CommandRunner {
             case DeselectAllHintKeys deselectAllHintKeys -> hintManager.deselectAllHintKeys();
             case FilterUiHints filterUiHints -> hintManager.filterUiHints(filterUiHints.role());
             case CopyText copyText -> copyTextPlayer.start(copyText.kind());
+            case SelectWindow selectWindow -> {
+                if (windowSwitcher != null)
+                    windowSwitcher.move(selectWindow.delta());
+            }
+            case ActivateSelectedWindow activateSelectedWindow -> {
+                if (windowSwitcher != null && windowSwitcher.activateSelected())
+                    modeController.switchMode(activateSelectedWindow.modeAfter());
+            }
             // @formatter:on
         }
     }

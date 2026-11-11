@@ -30,6 +30,7 @@ public class IndicatorManager implements ModeListener {
     private Map<Area, Rectangle> rectangleByArea = Map.of();
     private Map<Point, HintRectangles> hintRectanglesByPoint = Map.of();
     private double frameWait;
+    private WindowSwitcher windowSwitcher;
 
     public IndicatorManager(Overlay overlay, AnimationPlayer animationPlayer,
                             HintManager hintManager, Supplier<App> activeApp) {
@@ -37,6 +38,10 @@ public class IndicatorManager implements ModeListener {
         this.animationPlayer = animationPlayer;
         this.hintManager = hintManager;
         this.activeApp = activeApp;
+    }
+
+    public void setWindowSwitcher(WindowSwitcher windowSwitcher) {
+        this.windowSwitcher = windowSwitcher;
     }
 
     public boolean animating() {
@@ -191,8 +196,33 @@ public class IndicatorManager implements ModeListener {
         layerByName.replaceAll((layerName, layer) ->
                 layer.enabled() && shapeCount(layer) == 0 ?
                         layer.builder().enabled(false).build() : layer);
+        return withWindowMenu(new IndicatorConfiguration(indicator.renderAsCursor(),
+                indicator.excludeFromCapture(), layerByName));
+    }
+
+    /** The menu's rows are not part of the configuration. They are filled in when it is drawn. */
+    private IndicatorConfiguration withWindowMenu(IndicatorConfiguration indicator) {
+        if (windowSwitcher == null)
+            return indicator;
+        boolean changed = false;
+        Map<String, IndicatorLayerConfiguration> layers = new LinkedHashMap<>();
+        for (Map.Entry<String, IndicatorLayerConfiguration> entry : indicator.layerByName()
+                                                                             .entrySet()) {
+            IndicatorLayerConfiguration layer = entry.getValue();
+            String text = layer.text();
+            if (text != null && text.contains(WindowMenu.PLACEHOLDER)) {
+                String expanded = text.replace(WindowMenu.PLACEHOLDER, windowSwitcher.html());
+                if (!expanded.equals(text)) {
+                    layer = layer.builder().text(expanded).build();
+                    changed = true;
+                }
+            }
+            layers.put(entry.getKey(), layer);
+        }
+        if (!changed)
+            return indicator;
         return new IndicatorConfiguration(indicator.renderAsCursor(),
-                indicator.excludeFromCapture(), layerByName);
+                indicator.excludeFromCapture(), layers);
     }
 
     private int shapeCount(IndicatorLayerConfiguration layer) {

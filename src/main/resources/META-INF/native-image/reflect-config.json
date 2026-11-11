@@ -1,5 +1,8 @@
 [
 {
+  "name":"[Lcom.sun.jna.platform.win32.WinDef$HICON;"
+},
+{
   "name":"[Lcom.sun.jna.platform.win32.WinDef$POINT;"
 },
 {
@@ -198,7 +201,7 @@
 },
 {
   "name":"com.sun.jna.platform.win32.WinDef$HICON",
-  "methods":[{"name":"<init>","parameterTypes":[] }]
+  "methods":[{"name":"<init>","parameterTypes":[] },{"name":"<init>","parameterTypes":["com.sun.jna.Pointer"] }]
 },
 {
   "name":"com.sun.jna.platform.win32.WinDef$HINSTANCE",

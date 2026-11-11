@@ -4,6 +4,7 @@ import mousemaster.*;
 
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
+import com.sun.jna.WString;
 import com.sun.jna.Structure;
 import com.sun.jna.platform.win32.*;
 import com.sun.jna.ptr.IntByReference;
@@ -19,6 +20,7 @@ public interface ExtendedUser32 extends User32 {
 
     int WS_EX_NOACTIVATE = 0x08000000;
     int WS_EX_TOOLWINDOW = 0x00000080;
+    int WS_EX_APPWINDOW = 0x00040000;
     int WS_EX_LAYERED = 0x00080000;
     int WS_EX_TRANSPARENT = 0x00000020;
 
@@ -132,6 +134,13 @@ public interface ExtendedUser32 extends User32 {
 
     boolean DestroyIcon(WinDef.HICON hIcon);
 
+    /**
+     * The executable's icon at the requested pixel size. The caller owns each returned
+     * icon and destroys it. {@code piconid} may be null.
+     */
+    int PrivateExtractIconsW(WString szFileName, int nIconIndex, int cxIcon, int cyIcon,
+                             WinDef.HICON[] phicon, Pointer piconid, int nIcons, int flags);
+
     int IMAGE_CURSOR = 2;
 
     boolean SetSystemCursor(HANDLE hcur, UINT id);
@@ -158,6 +167,14 @@ public interface ExtendedUser32 extends User32 {
      * Determines whether the specified window is minimized (iconic).
      */
     boolean IsIconic(WinDef.HWND hWnd);
+
+    /** Undocumented, and what Alt-Tab itself uses to activate a window. */
+    void SwitchToThisWindow(HWND hwnd, boolean restoreIfMinimized);
+
+    /** -1 (ASFW_ANY) lets this process call SetForegroundWindow. */
+    boolean AllowSetForegroundWindow(int processId);
+
+    HWND GetLastActivePopup(HWND hwnd);
 
     boolean EnumThreadWindows(int dwThreadId, WinUser.WNDENUMPROC lpfn, Pointer lParam);
 

@@ -163,6 +163,8 @@ public class ConfigurationParser {
                 new Property<>("stop-move-target", Map.of()),
                 new Property<>("press", Map.of()),
                 new Property<>("copy-text", Map.of()),
+                new Property<>("select-window", Map.of()),
+                new Property<>("activate-window", Map.of()),
                 new Property<>("release", Map.of()),
                 new Property<>("toggle", Map.of()),
                 new Property<>("start-wheel", Map.of()),
@@ -2139,6 +2141,50 @@ public class ConfigurationParser {
             case "deselect-all" -> mode.comboMap.deselectAll.parseReferenceOr(propertyKey, propertyValue,
                     commandsByCombo -> setCommand(mode.comboMap.deselectAll.builder, propertyValue, new DeselectAllHintKeys(), propertyKey, defaultComboMoveDuration, keyAliases, appAliases, keyResolver, allVariableNames),
                     childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "select-window" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.selectWindow.parseReferenceOr(propertyKey, propertyValue,
+                            ignored -> {
+                                throw new IllegalArgumentException(
+                                        "select-window requires a direction: select-window.<previous|next>");
+                            },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "select-window requires a direction: select-window.<previous|next>");
+                else {
+                    int delta = switch (keyMatcher.group(group4)) {
+                        case "previous" -> -1;
+                        case "next" -> 1;
+                        default -> throw new IllegalArgumentException(
+                                "Unknown select-window direction: " + keyMatcher.group(group4) +
+                                " (expected previous or next)");
+                    };
+                    setCommand(mode.comboMap.selectWindow.builder, propertyValue,
+                            new SelectWindow(delta), propertyKey, defaultComboMoveDuration,
+                            keyAliases, appAliases, keyResolver, allVariableNames);
+                }
+            }
+            case "activate-window" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.activateWindow.parseReferenceOr(propertyKey, propertyValue,
+                            ignored -> {
+                                throw new IllegalArgumentException(
+                                        "activate-window requires the mode to enter after the jump: activate-window.<mode>");
+                            },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "activate-window requires the mode to enter after the jump: activate-window.<mode>");
+                else {
+                    String modeAfter = keyMatcher.group(group4);
+                    modeReferences.add(checkModeReference(modeAfter));
+                    setCommand(mode.comboMap.activateWindow.builder, propertyValue,
+                            new ActivateSelectedWindow(modeAfter), propertyKey,
+                            defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
+                            allVariableNames);
+                }
+            }
             case "copy-text" -> {
                 if (keyMatcher.group(group3) == null)
                     mode.comboMap.copyText.parseReferenceOr(propertyKey, propertyValue,
@@ -5076,6 +5122,8 @@ public class ConfigurationParser {
         Property<Map<Combo, List<Command>>> deselectAll;
         Property<Map<Combo, List<Command>>> filterUiHints;
         Property<Map<Combo, List<Command>>> copyText;
+        Property<Map<Combo, List<Command>>> selectWindow;
+        Property<Map<Combo, List<Command>>> activateWindow;
 
         public ComboMapConfigurationBuilder(String modeName,
                                             Map<PropertyKey, Property<?>> propertyByKey) {
@@ -5116,6 +5164,8 @@ public class ConfigurationParser {
             deselectAll = new ComboMapProperty("deselect-all", modeName, propertyByKey);
             filterUiHints = new ComboMapProperty("filter-ui-hints", modeName, propertyByKey);
             copyText = new ComboMapProperty("copy-text", modeName, propertyByKey);
+            selectWindow = new ComboMapProperty("select-window", modeName, propertyByKey);
+            activateWindow = new ComboMapProperty("activate-window", modeName, propertyByKey);
         }
 
           private static class ComboMapProperty extends Property<Map<Combo, List<Command>>> {
@@ -5172,6 +5222,8 @@ public class ConfigurationParser {
             add(commandsByCombo, deselectAll.builder);
             add(commandsByCombo, filterUiHints.builder);
             add(commandsByCombo, copyText.builder);
+            add(commandsByCombo, selectWindow.builder);
+            add(commandsByCombo, activateWindow.builder);
             add(commandsByCombo, to.builder);
             add(commandsByCombo, startMove.builder);
             add(commandsByCombo, stopMove.builder);

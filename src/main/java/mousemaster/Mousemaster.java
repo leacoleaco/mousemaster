@@ -323,16 +323,20 @@ public class Mousemaster {
         keyboardManager.setMacroPlayer(macroPlayer);
         KeyboardState keyboardState = new KeyboardState(keyboardManager);
         animationPlayer = new AnimationPlayer(configuration.animationConfigurationByName());
+        WindowSwitcher windowSwitcher = new WindowSwitcher(platform);
         indicatorManager = new IndicatorManager(platform.overlay(), animationPlayer, hintManager,
                 comboWatcher::lastActiveApp);
+        indicatorManager.setWindowSwitcher(windowSwitcher);
         zoomManager = new ZoomManager(screenManager, hintManager, platform.overlay());
         // ComboWatcher is the sole broadcaster to ModeListeners: it broadcasts
         // on mode switch (delegated from ModeController) and on mode mutation.
         // ZoomManager must be notified after HintManager because it calls
         // lastSelectedHintPoint() which is updated by HintManager#modeChanged. IndicatorManager
-        // draws with the state of both.
+        // draws with the state of both. The window switcher is before the indicator so the
+        // menu text exists on the first frame of window-switch-mode.
         modeListeners = new ArrayList<>(
-                List.of(platform, mouseManager, hintManager, zoomManager, indicatorManager));
+                List.of(platform, mouseManager, hintManager, zoomManager, windowSwitcher,
+                        indicatorManager));
         if (tray != null && tray.isActive())
             modeListeners.add(tray);
         comboWatcher.setModeListeners(modeListeners);
@@ -345,6 +349,7 @@ public class Mousemaster {
                         comboWatcher, animationPlayer);
         commandRunner.setModeController(modeController);
         commandRunner.setMacroPlayer(macroPlayer);
+        commandRunner.setWindowSwitcher(windowSwitcher);
         commandRunner.setAnimationPlayer(animationPlayer);
         hintManager.setModeController(modeController);
         modeController.switchMode(Mode.IDLE_MODE_NAME);

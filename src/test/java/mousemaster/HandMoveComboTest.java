@@ -139,13 +139,16 @@ class HandMoveComboTest {
         release("a");
 
         ranCommands.clear();
-        assertFalse(press("s").mustBeEaten());
+        assertTrue(press("s").mustBeEaten());
+        assertTrue(ran(new Command.SwitchMode("window-switch-mode")));
         assertFalse(ran(new Command.StartMoveLeft()));
         release("s");
+        load();
         press("a");
         ranCommands.clear();
         assertTrue(press("s").mustBeEaten());
         assertTrue(ran(new Command.StartMoveLeft()));
+        assertFalse(ran(new Command.SwitchMode("window-switch-mode")));
         release("s");
         release("a");
 
@@ -222,6 +225,63 @@ class HandMoveComboTest {
         assertFalse(press("e").mustBeEaten());
         assertFalse(ran(new Command.StartMoveUp()));
         assertFalse(ran(new Command.StartWheelUp()));
+    }
+
+    @Test
+    void sAloneListsWindowsAndBAloneOpensTheSystemMenu() throws Exception {
+        load();
+        assertTrue(press("s").mustBeEaten());
+        assertTrue(ran(new Command.SwitchMode("window-switch-mode")));
+        assertFalse(ran(new Command.StartMoveLeft()));
+
+        load();
+        assertTrue(press("b").mustBeEaten());
+        int systemMenu = -1;
+        int leaveMouseMode = -1;
+        for (int i = 0; i < ranCommands.size(); i++) {
+            Command command = ranCommands.get(i);
+            if (command instanceof Command.MacroCommand macro &&
+                macro.macro().name().equals("systemmenu"))
+                systemMenu = i;
+            if (command.equals(new Command.SwitchMode("idle-mode")))
+                leaveMouseMode = i;
+        }
+        assertTrue(systemMenu >= 0);
+        assertTrue(leaveMouseMode > systemMenu);
+        comboWatcher.modeChanged(modeMap.get("idle-mode"));
+        EatAndRegurgitates releaseB = release("b");
+        assertTrue(releaseB.mustBeEaten());
+        assertTrue(releaseB.regurgitates().isEmpty());
+
+        load();
+        press("k");
+        ranCommands.clear();
+        press("b");
+        assertFalse(ranCommands.stream().anyMatch(command ->
+                command instanceof Command.MacroCommand macro &&
+                macro.macro().name().equals("systemmenu")));
+    }
+
+    @Test
+    void windowMenuMovesWithEAndDAndJumpsWithG() throws Exception {
+        load();
+        comboWatcher.modeChanged(modeMap.get("window-switch-mode"));
+        ranCommands.clear();
+        assertTrue(press("e").mustBeEaten());
+        assertTrue(ran(new Command.SelectWindow(-1)));
+        assertTrue(press("d").mustBeEaten());
+        assertTrue(ran(new Command.SelectWindow(1)));
+        assertTrue(press("g").mustBeEaten());
+        assertTrue(ran(new Command.ActivateSelectedWindow("center-on-active-window-mode")));
+        release("g");
+        ranCommands.clear();
+        assertTrue(press("space").mustBeEaten());
+        assertTrue(ran(new Command.ActivateSelectedWindow("center-on-active-window-mode")));
+        EatAndRegurgitates releaseSpace = release("space");
+        assertTrue(releaseSpace.mustBeEaten());
+        assertTrue(releaseSpace.regurgitates().isEmpty());
+        assertTrue(press("esc").mustBeEaten());
+        assertTrue(ran(new Command.SwitchMode("normal-mode")));
     }
 
     @Test

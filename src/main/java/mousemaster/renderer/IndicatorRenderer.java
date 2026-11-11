@@ -323,6 +323,7 @@ public final class IndicatorRenderer {
             document.setDefaultFont(font);
             font.dispose();
             document.setDefaultStyleSheet(key.textStyleSheet());
+            WindowIconImages.install(document, key.text());
             document.setHtml(key.text());
             document.setTextWidth(1 << 24);
             document.setTextWidth(document.idealWidth());

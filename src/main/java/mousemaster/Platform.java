@@ -4,6 +4,7 @@ import mousemaster.platform.ActiveAppFinder;
 import mousemaster.platform.Console;
 import mousemaster.platform.KeyboardController;
 import mousemaster.platform.Overlay;
+import mousemaster.platform.SwitchableWindows;
 import mousemaster.platform.UiAutomation;
 
 import java.util.List;
@@ -62,6 +63,16 @@ public interface Platform extends ModeListener {
     Set<Screen> screens();
 
     Overlay overlay();
+
+    /** Windows in Alt-Tab order. Platforms without that list return an empty catalog. */
+    default SwitchableWindows switchableWindows() {
+        return SwitchableWindows.NONE;
+    }
+
+    /** True while a low-level keyboard hook is on the stack. Icon work waits until it returns. */
+    default boolean inKeyboardHook() {
+        return false;
+    }
 
     UiAutomation uiAutomation();
 

@@ -629,8 +629,17 @@
         {
           "name": "<init>",
           "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.sun.jna.Pointer"
+          ]
         }
       ]
+    },
+    {
+      "type": "com.sun.jna.platform.win32.WinDef$HICON[]"
     },
     {
       "type": "com.sun.jna.platform.win32.WinDef$HINSTANCE",
