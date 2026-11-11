@@ -144,7 +144,9 @@ public sealed interface Command {
 
     /**
      * Select text at the pointer and copy it.
-     * WORD double-clicks, LINE triple-clicks, ALL focuses the target then selects everything.
+     * A text pattern reads the word, the line, or the whole document when the control
+     * has one. Otherwise WORD double-clicks, LINE triple-clicks, and ALL focuses the
+     * target then selects everything.
      */
     record CopyText(Kind kind) implements Command {
         public enum Kind { WORD, LINE, ALL }

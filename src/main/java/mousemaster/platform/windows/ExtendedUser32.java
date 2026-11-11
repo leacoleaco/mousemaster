@@ -24,6 +24,16 @@ public interface ExtendedUser32 extends User32 {
 
     int WS_EX_STATICEDGE = 0x00020000;
 
+    int CF_UNICODETEXT = 13;
+
+    boolean OpenClipboard(HWND owner);
+
+    boolean EmptyClipboard();
+
+    Pointer SetClipboardData(int format, Pointer memory);
+
+    boolean CloseClipboard();
+
     int MOUSEEVENTF_MOVE = 0x0001;
     int MOUSEEVENTF_LEFTDOWN = 0x0002;
     int MOUSEEVENTF_LEFTUP = 0x0004;

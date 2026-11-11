@@ -7,9 +7,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plays the mouse clicks that select text under the pointer, then asks for the
- * keyboard chord that copies it. Clicks are spaced so Windows treats them as a
- * double-click or triple-click, and the pointer is held still for that whole time.
+ * Copies the text under the pointer. A control that exposes its text is read
+ * directly. Anywhere that does not, this plays the clicks that select it, then
+ * asks for the keyboard chord that copies it. Clicks are spaced so Windows treats
+ * them as a double-click or triple-click, and the pointer is held still for that
+ * whole time.
  */
 public final class CopyTextPlayer {
 
@@ -31,13 +33,24 @@ public final class CopyTextPlayer {
 
         void selectAll();
 
+        /**
+         * Read the text under the pointer and put it on the clipboard.
+         * Returns false when there is nothing there to read, so the clicks take over.
+         */
+        boolean copyText(Command.CopyText.Kind kind);
+
+        /** Ctrl+C, or Command+C. The text was selected with clicks. */
         void copy();
+
+        /** The text is already on the clipboard. Show the same confirmation as {@link #copy()}. */
+        void showCopied();
     }
 
     private enum Action { PRESS, RELEASE, SELECT_ALL, COPY }
 
     private final Output output;
     private final List<Action> actions = new ArrayList<>();
+    private Command.CopyText.Kind pending;
     private int next;
     private double remaining;
 
@@ -49,25 +62,25 @@ public final class CopyTextPlayer {
         // A previous sequence may still be holding the button.
         output.releaseLeft();
         output.haltMovement();
+        // Read on the next update. This runs from the keyboard hook, and a text
+        // query there would stall the hook.
+        pending = kind;
         actions.clear();
-        int clicks = switch (kind) {
-            case WORD -> 2;
-            case LINE -> 3;
-            case ALL -> 1;
-        };
-        for (int click = 0; click < clicks; click++) {
-            actions.add(Action.PRESS);
-            actions.add(Action.RELEASE);
-        }
-        if (kind == Command.CopyText.Kind.ALL)
-            actions.add(Action.SELECT_ALL);
-        actions.add(Action.COPY);
         next = 0;
         remaining = 0;
         logger.debug("Copy text at pointer: " + kind);
     }
 
     public void update(double delta) {
+        if (pending != null) {
+            Command.CopyText.Kind kind = pending;
+            pending = null;
+            if (copyDirectly(kind)) {
+                output.showCopied();
+                return;
+            }
+            scheduleClicks(kind);
+        }
         if (next >= actions.size())
             return;
         remaining -= delta;
@@ -83,6 +96,33 @@ public final class CopyTextPlayer {
                 return;
             remaining += delayUntilNext(action, actions.get(next));
         }
+    }
+
+    private boolean copyDirectly(Command.CopyText.Kind kind) {
+        try {
+            return output.copyText(kind);
+        }
+        catch (RuntimeException e) {
+            logger.warn("Reading the text under the pointer failed, selecting it with clicks", e);
+            return false;
+        }
+    }
+
+    private void scheduleClicks(Command.CopyText.Kind kind) {
+        int clicks = switch (kind) {
+            case WORD -> 2;
+            case LINE -> 3;
+            case ALL -> 1;
+        };
+        for (int click = 0; click < clicks; click++) {
+            actions.add(Action.PRESS);
+            actions.add(Action.RELEASE);
+        }
+        if (kind == Command.CopyText.Kind.ALL)
+            actions.add(Action.SELECT_ALL);
+        actions.add(Action.COPY);
+        next = 0;
+        remaining = 0;
     }
 
     private static double delayUntilNext(Action done, Action next) {

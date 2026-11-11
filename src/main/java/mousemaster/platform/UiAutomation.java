@@ -24,6 +24,25 @@ public interface UiAutomation {
      */
     Future<List<UiElement>> startFindUiElementsInArea(Rectangle area);
 
+    /** How much of the text at the pointer to copy. */
+    enum TextExtent {
+        /** The word around the pointer. */
+        WORD,
+        /** The line around the pointer. */
+        LINE,
+        /** The whole document that contains the pointer. */
+        ALL
+    }
+
+    /**
+     * Copy that much of the text at the pointer onto the clipboard.
+     * Returns false when the pointer is not over text the platform can read,
+     * so the caller selects it with clicks and copies with the keyboard.
+     */
+    default boolean copyText(TextExtent extent) {
+        return false;
+    }
+
     record UiElement(Rectangle rectangle, Role role, Control control) {
 
         public UiElement(Rectangle rectangle, Role role) {

@@ -9,6 +9,7 @@ import com.sun.jna.platform.win32.WinDef.HWND;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
 import mousemaster.platform.UiAutomation;
+import mousemaster.platform.UiAutomation.TextExtent;
 import mousemaster.platform.UiAutomation.UiElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +53,16 @@ public class WindowsUiAutomation implements UiAutomation {
 
     private static final int TreeScope_Children = 2;
     private static final int TreeScope_Descendants = 4;
+
+    private static final int UIA_TextPatternId = 10014;
+    /** How many parents to climb looking for a control that exposes its text. */
+    private static final int TEXT_PATTERN_PARENT_LIMIT = 32;
+    private static final int TEXT_UNIT_CHARACTER = 0;
+    private static final int TEXT_UNIT_WORD = 2;
+    private static final int TEXT_UNIT_LINE = 3;
+    private static final int TEXT_PATTERN_RANGE_ENDPOINT_END = 1;
+    /** The control cannot select text. A failed query is treated the same way. */
+    private static final int SUPPORTED_TEXT_SELECTION_NONE = 0;
 
     // VARIANT constants
     private static final short VT_BOOL = 0x000B;
@@ -549,6 +560,145 @@ public class WindowsUiAutomation implements UiAutomation {
         });
     }
 
+    /**
+     * Read the text at the pointer from the control's text pattern, select it when the
+     * control allows a selection, and put the plain text on the clipboard. A control
+     * with no text pattern, and this process's own windows, return false so the caller
+     * can select with clicks instead.
+     */
+    @Override
+    public boolean copyText(TextExtent extent) {
+        try {
+            ensureInitialized();
+            if (automation == null)
+                return false;
+            WinDef.POINT point = new WinDef.POINT();
+            if (!User32.INSTANCE.GetCursorPos(point))
+                return false;
+            boolean copied = copyTextAt(point.x, point.y, extent);
+            if (copied)
+                logger.info("Copied the {} at {},{} from the text pattern",
+                        extent.name().toLowerCase(), point.x, point.y);
+            else
+                logger.debug("No text pattern at {},{}, selecting the {} with clicks",
+                        point.x, point.y, extent.name().toLowerCase());
+            return copied;
+        }
+        catch (RuntimeException e) {
+            logger.warn("Reading the text under the pointer failed, selecting it with clicks", e);
+            return false;
+        }
+    }
+
+    private static boolean copyTextAt(int x, int y, TextExtent extent) {
+        UIAutomation uia = new UIAutomation(automation);
+        UIAutomationElement element = uia.elementFromPoint(x, y);
+        if (element == null)
+            return false;
+        int self = Kernel32.INSTANCE.GetCurrentProcessId();
+        if (element.processId() == self) {
+            element.Release();
+            return false;
+        }
+        UIAutomationTreeWalker walker = uia.rawViewWalker();
+        try {
+            for (int depth = 0; element != null && depth < TEXT_PATTERN_PARENT_LIMIT; depth++) {
+                if (element.processId() != self && copyElementText(element, x, y, extent))
+                    return true;
+                if (walker == null)
+                    return false;
+                UIAutomationElement parent = walker.parent(element);
+                element.Release();
+                element = parent;
+            }
+            return false;
+        }
+        finally {
+            if (element != null)
+                element.Release();
+            if (walker != null)
+                walker.Release();
+        }
+    }
+
+    private static boolean copyElementText(UIAutomationElement element, int x, int y,
+                                           TextExtent extent) {
+        UIAutomationTextPattern pattern = element.textPattern();
+        if (pattern == null)
+            return false;
+        UIAutomationTextRange range = null;
+        try {
+            range = extent == TextExtent.ALL ? pattern.documentRange() :
+                    pattern.rangeFromPoint(x, y);
+            if (range == null)
+                return false;
+            if (extent != TextExtent.ALL && !range.expandToEnclosingUnit(textUnit(extent)))
+                return false;
+            if (extent == TextExtent.WORD)
+                range.trimTrailingWhitespace();
+            String text = range.text();
+            if (extent == TextExtent.WORD)
+                text = stripTrailingWhitespace(text);
+            if (text == null || text.isEmpty())
+                return false;
+            if (pattern.supportedTextSelection() != SUPPORTED_TEXT_SELECTION_NONE) {
+                element.setFocus();
+                range.select();
+            }
+            return copyToClipboard(text);
+        }
+        finally {
+            if (range != null)
+                range.Release();
+            pattern.Release();
+        }
+    }
+
+    private static int textUnit(TextExtent extent) {
+        return extent == TextExtent.WORD ? TEXT_UNIT_WORD : TEXT_UNIT_LINE;
+    }
+
+    /** The word unit includes the space after the word. A word that is only space is empty. */
+    private static String stripTrailingWhitespace(String text) {
+        if (text == null)
+            return null;
+        int end = text.length();
+        while (end > 0 && Character.isWhitespace(text.charAt(end - 1)))
+            end--;
+        return text.substring(0, end);
+    }
+
+    private static boolean copyToClipboard(String text) {
+        long bytes = (text.length() + 1L) * 2L;
+        Pointer memory = ExtendedKernel32.INSTANCE.GlobalAlloc(
+                ExtendedKernel32.GMEM_MOVEABLE, bytes);
+        if (memory == null)
+            return false;
+        boolean accepted = false;
+        boolean opened = false;
+        try {
+            Pointer locked = ExtendedKernel32.INSTANCE.GlobalLock(memory);
+            if (locked == null)
+                return false;
+            locked.setWideString(0, text);
+            ExtendedKernel32.INSTANCE.GlobalUnlock(memory);
+            opened = ExtendedUser32.INSTANCE.OpenClipboard(null);
+            if (!opened)
+                return false;
+            if (!ExtendedUser32.INSTANCE.EmptyClipboard())
+                return false;
+            accepted = ExtendedUser32.INSTANCE.SetClipboardData(
+                    ExtendedUser32.CF_UNICODETEXT, memory) != null;
+            return accepted;
+        }
+        finally {
+            if (opened)
+                ExtendedUser32.INSTANCE.CloseClipboard();
+            if (!accepted)
+                Kernel32.INSTANCE.GlobalFree(memory);
+        }
+    }
+
     private static void initializeBackgroundCom() {
         if (backgroundComInitialized)
             return;
@@ -562,6 +712,30 @@ public class WindowsUiAutomation implements UiAutomation {
 
         UIAutomation(Pointer p) {
             super(p);
+        }
+
+        // IUIAutomation::ElementFromPoint — vtable index 7.
+        // POINT is one 64-bit argument, x in the low half and y in the high half.
+        UIAutomationElement elementFromPoint(int x, int y) {
+            PointerByReference element = new PointerByReference();
+            long point = Integer.toUnsignedLong(x) | (Integer.toUnsignedLong(y) << 32);
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(7,
+                    new Object[]{getPointer(), point, element},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || element.getValue() == null)
+                return null;
+            return new UIAutomationElement(element.getValue());
+        }
+
+        // IUIAutomation::get_RawViewWalker — vtable index 16
+        UIAutomationTreeWalker rawViewWalker() {
+            PointerByReference walker = new PointerByReference();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(16,
+                    new Object[]{getPointer(), walker},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || walker.getValue() == null)
+                return null;
+            return new UIAutomationTreeWalker(walker.getValue());
         }
 
         // IUIAutomation::ElementFromHandle — vtable index 6
@@ -655,6 +829,37 @@ public class WindowsUiAutomation implements UiAutomation {
 
         UIAutomationElement(Pointer p) {
             super(p);
+        }
+
+        // IUIAutomationElement::SetFocus — vtable index 3
+        void setFocus() {
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(3,
+                    new Object[]{getPointer()},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr))
+                logger.debug("SetFocus failed: 0x{}", Integer.toHexString(hr.intValue()));
+        }
+
+        // IUIAutomationElement::GetCurrentPattern — vtable index 16
+        UIAutomationTextPattern textPattern() {
+            PointerByReference pattern = new PointerByReference();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(16,
+                    new Object[]{getPointer(), UIA_TextPatternId, pattern},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || pattern.getValue() == null)
+                return null;
+            return new UIAutomationTextPattern(pattern.getValue());
+        }
+
+        // IUIAutomationElement::get_CurrentProcessId — vtable index 20
+        int processId() {
+            IntByReference processId = new IntByReference();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(20,
+                    new Object[]{getPointer(), processId},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr))
+                return -1;
+            return processId.getValue();
         }
 
         // IUIAutomationElement::FindAllBuildCache — vtable index 8
@@ -761,6 +966,125 @@ public class WindowsUiAutomation implements UiAutomation {
             if (W32Errors.FAILED(hr))
                 logger.warn("AddProperty({}) failed: 0x{}",
                         propertyId, Integer.toHexString(hr.intValue()));
+        }
+    }
+
+    private static class UIAutomationTreeWalker extends Unknown {
+
+        UIAutomationTreeWalker(Pointer p) {
+            super(p);
+        }
+
+        // IUIAutomationTreeWalker::GetParentElement — vtable index 3
+        UIAutomationElement parent(UIAutomationElement element) {
+            PointerByReference parent = new PointerByReference();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(3,
+                    new Object[]{getPointer(), element.getPointer(), parent},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || parent.getValue() == null)
+                return null;
+            return new UIAutomationElement(parent.getValue());
+        }
+    }
+
+    private static class UIAutomationTextPattern extends Unknown {
+
+        UIAutomationTextPattern(Pointer p) {
+            super(p);
+        }
+
+        // IUIAutomationTextPattern::RangeFromPoint — vtable index 3
+        UIAutomationTextRange rangeFromPoint(int x, int y) {
+            PointerByReference range = new PointerByReference();
+            long point = Integer.toUnsignedLong(x) | (Integer.toUnsignedLong(y) << 32);
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(3,
+                    new Object[]{getPointer(), point, range},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || range.getValue() == null)
+                return null;
+            return new UIAutomationTextRange(range.getValue());
+        }
+
+        // IUIAutomationTextPattern::get_DocumentRange — vtable index 7
+        UIAutomationTextRange documentRange() {
+            PointerByReference range = new PointerByReference();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(7,
+                    new Object[]{getPointer(), range},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || range.getValue() == null)
+                return null;
+            return new UIAutomationTextRange(range.getValue());
+        }
+
+        // IUIAutomationTextPattern::get_SupportedTextSelection — vtable index 8
+        int supportedTextSelection() {
+            IntByReference supported = new IntByReference(SUPPORTED_TEXT_SELECTION_NONE);
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(8,
+                    new Object[]{getPointer(), supported},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr))
+                return SUPPORTED_TEXT_SELECTION_NONE;
+            return supported.getValue();
+        }
+    }
+
+    private static class UIAutomationTextRange extends Unknown {
+
+        UIAutomationTextRange(Pointer p) {
+            super(p);
+        }
+
+        // IUIAutomationTextRange::ExpandToEnclosingUnit — vtable index 6
+        boolean expandToEnclosingUnit(int unit) {
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(6,
+                    new Object[]{getPointer(), unit},
+                    WinNT.HRESULT.class);
+            return !W32Errors.FAILED(hr);
+        }
+
+        // IUIAutomationTextRange::GetText — vtable index 12. -1 reads the whole range.
+        String text() {
+            PointerByReference result = new PointerByReference();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(12,
+                    new Object[]{getPointer(), -1, result},
+                    WinNT.HRESULT.class);
+            Pointer value = result.getValue();
+            if (W32Errors.FAILED(hr) || value == null)
+                return null;
+            WTypes.BSTR bstr = new WTypes.BSTR(value);
+            try {
+                return bstr.getValue();
+            }
+            finally {
+                OleAuto.INSTANCE.SysFreeString(bstr);
+            }
+        }
+
+        // IUIAutomationTextRange::MoveEndpointByUnit — vtable index 14
+        void trimTrailingWhitespace() {
+            String value = text();
+            if (value == null || value.isEmpty())
+                return;
+            int trailing = 0;
+            for (int index = value.length() - 1;
+                 index >= 0 && Character.isWhitespace(value.charAt(index));
+                 index--)
+                trailing++;
+            if (trailing == 0 || trailing == value.length())
+                return;
+            IntByReference moved = new IntByReference();
+            _invokeNativeObject(14, new Object[]{getPointer(),
+                    TEXT_PATTERN_RANGE_ENDPOINT_END, TEXT_UNIT_CHARACTER, -trailing, moved},
+                    WinNT.HRESULT.class);
+        }
+
+        // IUIAutomationTextRange::Select — vtable index 16
+        void select() {
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(16,
+                    new Object[]{getPointer()},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr))
+                logger.debug("Text selection failed: 0x{}", Integer.toHexString(hr.intValue()));
         }
     }
 

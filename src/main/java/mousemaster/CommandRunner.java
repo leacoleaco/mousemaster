@@ -1,5 +1,7 @@
 package mousemaster;
 
+import mousemaster.platform.UiAutomation;
+
 import java.time.Duration;
 import java.util.List;
 
@@ -42,8 +44,23 @@ public class CommandRunner {
             }
 
             @Override
+            public boolean copyText(CopyText.Kind kind) {
+                UiAutomation.TextExtent extent = switch (kind) {
+                    case WORD -> UiAutomation.TextExtent.WORD;
+                    case LINE -> UiAutomation.TextExtent.LINE;
+                    case ALL -> UiAutomation.TextExtent.ALL;
+                };
+                return platform.uiAutomation().copyText(extent);
+            }
+
+            @Override
             public void copy() {
                 sendChord(Key.ofCharacter("c"));
+                showCopied();
+            }
+
+            @Override
+            public void showCopied() {
                 if (animationPlayer != null)
                     animationPlayer.start("copiedhintanimation");
             }
