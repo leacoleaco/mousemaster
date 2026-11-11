@@ -374,16 +374,16 @@ class UiHintRoleDispatchTest {
     }
 
     @Test
-    void theFilterKeysKeepOneRole() {
-        tap("b");
-        assertEquals(Set.of(UiElement.Role.WIDGET), roles());
+    void gTBDoNotFilterTheHints() {
+        Set<UiElement.Role> before = roles();
+        assertEquals(Set.of(UiElement.Role.CLICK, UiElement.Role.INPUT,
+                UiElement.Role.WIDGET, UiElement.Role.OTHER), before);
         tap("g");
-        assertEquals(Set.of(UiElement.Role.CLICK), roles());
         tap("t");
-        assertEquals(Set.of(UiElement.Role.INPUT), roles());
+        tap("b");
+        assertEquals(before, roles());
         assertEquals("ui-hint-mode", currentModeName);
-        assertFalse(hintManager.hintMesh().hints().isEmpty());
-        assertTrue(ran(Command.PressLeft.class).isEmpty());
+        assertTrue(ran(Command.FilterUiHints.class).isEmpty());
     }
 
     private Set<UiElement.Role> roles() {
