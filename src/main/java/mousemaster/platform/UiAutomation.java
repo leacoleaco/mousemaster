@@ -3,6 +3,7 @@ package mousemaster.platform;
 import mousemaster.Rectangle;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 public interface UiAutomation {
@@ -36,11 +37,12 @@ public interface UiAutomation {
 
     /**
      * Copy that much of the text at the pointer onto the clipboard.
-     * Returns false when the pointer is not over text the platform can read,
+     * The future completes away from the thread that reads the keyboard.
+     * It is false when the pointer is not over text the platform can read,
      * so the caller selects it with clicks and copies with the keyboard.
      */
-    default boolean copyText(TextExtent extent) {
-        return false;
+    default Future<Boolean> startCopyText(TextExtent extent) {
+        return CompletableFuture.completedFuture(false);
     }
 
     record UiElement(Rectangle rectangle, Role role, Control control) {

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Future;
 
 /**
  * Copies the text under the pointer. A control that exposes its text is read
@@ -35,9 +36,10 @@ public final class CopyTextPlayer {
 
         /**
          * Read the text under the pointer and put it on the clipboard.
-         * Returns false when there is nothing there to read, so the clicks take over.
+         * The future is false when there is nothing there to read, so the clicks take over.
+         * It must not do the read on this thread: this thread owns the keyboard hook.
          */
-        boolean copyText(Command.CopyText.Kind kind);
+        Future<Boolean> startCopy(Command.CopyText.Kind kind);
 
         /** Ctrl+C, or Command+C. The text was selected with clicks. */
         void copy();
@@ -51,6 +53,8 @@ public final class CopyTextPlayer {
     private final Output output;
     private final List<Action> actions = new ArrayList<>();
     private Command.CopyText.Kind pending;
+    private Command.CopyText.Kind readingKind;
+    private Future<Boolean> copyFuture;
     private int next;
     private double remaining;
 
@@ -62,9 +66,10 @@ public final class CopyTextPlayer {
         // A previous sequence may still be holding the button.
         output.releaseLeft();
         output.haltMovement();
-        // Read on the next update. This runs from the keyboard hook, and a text
-        // query there would stall the hook.
+        // Read on the next update, and not on this thread. This runs from the
+        // keyboard hook, and a text query here stalls or tears down that hook.
         pending = kind;
+        copyFuture = null;
         actions.clear();
         next = 0;
         remaining = 0;
@@ -73,14 +78,22 @@ public final class CopyTextPlayer {
 
     public void update(double delta) {
         if (pending != null) {
-            Command.CopyText.Kind kind = pending;
+            readingKind = pending;
             pending = null;
-            if (copyDirectly(kind)) {
+            copyFuture = output.startCopy(readingKind);
+        }
+        if (copyFuture != null && copyFuture.isDone()) {
+            Future<Boolean> done = copyFuture;
+            Command.CopyText.Kind kind = readingKind;
+            copyFuture = null;
+            if (copied(done)) {
                 output.showCopied();
                 return;
             }
             scheduleClicks(kind);
         }
+        else if (copyFuture != null)
+            return;
         if (next >= actions.size())
             return;
         remaining -= delta;
@@ -98,11 +111,11 @@ public final class CopyTextPlayer {
         }
     }
 
-    private boolean copyDirectly(Command.CopyText.Kind kind) {
+    private boolean copied(Future<Boolean> done) {
         try {
-            return output.copyText(kind);
+            return Boolean.TRUE.equals(done.get());
         }
-        catch (RuntimeException e) {
+        catch (Exception e) {
             logger.warn("Reading the text under the pointer failed, selecting it with clicks", e);
             return false;
         }

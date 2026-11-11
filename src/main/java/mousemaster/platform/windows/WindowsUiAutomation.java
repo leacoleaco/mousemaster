@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -55,6 +56,8 @@ public class WindowsUiAutomation implements UiAutomation {
     private static final int TreeScope_Descendants = 4;
 
     private static final int UIA_TextPatternId = 10014;
+    private static final Guid.IID IID_IUIAutomationTextPattern =
+            new Guid.IID("32EBA289-3583-42C9-9C59-3B6D9A1E9B6A");
     /** How many parents to climb looking for a control that exposes its text. */
     private static final int TEXT_PATTERN_PARENT_LIMIT = 32;
     private static final int TEXT_UNIT_CHARACTER = 0;
@@ -63,6 +66,9 @@ public class WindowsUiAutomation implements UiAutomation {
     private static final int TEXT_PATTERN_RANGE_ENDPOINT_END = 1;
     /** The control cannot select text. A failed query is treated the same way. */
     private static final int SUPPORTED_TEXT_SELECTION_NONE = 0;
+    private static final int TEXT_LIMIT_WORD = 256;
+    private static final int TEXT_LIMIT_LINE = 4_000;
+    private static final int TEXT_LIMIT_ALL = 200_000;
 
     // VARIANT constants
     private static final short VT_BOOL = 0x000B;
@@ -562,31 +568,43 @@ public class WindowsUiAutomation implements UiAutomation {
 
     /**
      * Read the text at the pointer from the control's text pattern, select it when the
-     * control allows a selection, and put the plain text on the clipboard. A control
-     * with no text pattern, and this process's own windows, return false so the caller
-     * can select with clicks instead.
+     * control allows a selection, and put the plain text on the clipboard. The read runs
+     * on the UI Automation thread: doing it on the keyboard-hook thread freezes that
+     * thread and Windows then removes the hook. A control with no text pattern, and this
+     * process's own windows, complete as false so the caller can select with clicks.
      */
     @Override
-    public boolean copyText(TextExtent extent) {
+    public Future<Boolean> startCopyText(TextExtent extent) {
         try {
             ensureInitialized();
             if (automation == null)
-                return false;
+                return CompletableFuture.completedFuture(false);
             WinDef.POINT point = new WinDef.POINT();
             if (!User32.INSTANCE.GetCursorPos(point))
-                return false;
-            boolean copied = copyTextAt(point.x, point.y, extent);
-            if (copied)
-                logger.info("Copied the {} at {},{} from the text pattern",
-                        extent.name().toLowerCase(), point.x, point.y);
-            else
-                logger.debug("No text pattern at {},{}, selecting the {} with clicks",
-                        point.x, point.y, extent.name().toLowerCase());
-            return copied;
+                return CompletableFuture.completedFuture(false);
+            int x = point.x;
+            int y = point.y;
+            return queryExecutor.submit(() -> {
+                initializeBackgroundCom();
+                try {
+                    boolean copied = copyTextAt(x, y, extent);
+                    if (copied)
+                        logger.info("Copied the {} at {},{} from the text pattern",
+                                extent.name().toLowerCase(), x, y);
+                    else
+                        logger.debug("No text pattern at {},{}, selecting the {} with clicks",
+                                x, y, extent.name().toLowerCase());
+                    return copied;
+                }
+                catch (Throwable t) {
+                    logger.warn("Reading the text under the pointer failed, selecting it with clicks", t);
+                    return false;
+                }
+            });
         }
         catch (RuntimeException e) {
             logger.warn("Reading the text under the pointer failed, selecting it with clicks", e);
-            return false;
+            return CompletableFuture.completedFuture(false);
         }
     }
 
@@ -636,15 +654,13 @@ public class WindowsUiAutomation implements UiAutomation {
                 return false;
             if (extent == TextExtent.WORD)
                 range.trimTrailingWhitespace();
-            String text = range.text();
+            String text = range.text(textLimit(extent));
             if (extent == TextExtent.WORD)
                 text = stripTrailingWhitespace(text);
             if (text == null || text.isEmpty())
                 return false;
-            if (pattern.supportedTextSelection() != SUPPORTED_TEXT_SELECTION_NONE) {
-                element.setFocus();
+            if (pattern.supportedTextSelection() != SUPPORTED_TEXT_SELECTION_NONE)
                 range.select();
-            }
             return copyToClipboard(text);
         }
         finally {
@@ -656,6 +672,14 @@ public class WindowsUiAutomation implements UiAutomation {
 
     private static int textUnit(TextExtent extent) {
         return extent == TextExtent.WORD ? TEXT_UNIT_WORD : TEXT_UNIT_LINE;
+    }
+
+    private static int textLimit(TextExtent extent) {
+        return switch (extent) {
+            case WORD -> TEXT_LIMIT_WORD;
+            case LINE -> TEXT_LIMIT_LINE;
+            case ALL -> TEXT_LIMIT_ALL;
+        };
     }
 
     /** The word unit includes the space after the word. A word that is only space is empty. */
@@ -715,12 +739,12 @@ public class WindowsUiAutomation implements UiAutomation {
         }
 
         // IUIAutomation::ElementFromPoint — vtable index 7.
-        // POINT is one 64-bit argument, x in the low half and y in the high half.
+        // POINT is passed by value. A packed long is not a POINT to this call and
+        // corrupts the stack.
         UIAutomationElement elementFromPoint(int x, int y) {
             PointerByReference element = new PointerByReference();
-            long point = Integer.toUnsignedLong(x) | (Integer.toUnsignedLong(y) << 32);
             WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(7,
-                    new Object[]{getPointer(), point, element},
+                    new Object[]{getPointer(), new WinDef.POINT.ByValue(x, y), element},
                     WinNT.HRESULT.class);
             if (W32Errors.FAILED(hr) || element.getValue() == null)
                 return null;
@@ -831,16 +855,9 @@ public class WindowsUiAutomation implements UiAutomation {
             super(p);
         }
 
-        // IUIAutomationElement::SetFocus — vtable index 3
-        void setFocus() {
-            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(3,
-                    new Object[]{getPointer()},
-                    WinNT.HRESULT.class);
-            if (W32Errors.FAILED(hr))
-                logger.debug("SetFocus failed: 0x{}", Integer.toHexString(hr.intValue()));
-        }
-
-        // IUIAutomationElement::GetCurrentPattern — vtable index 16
+        // IUIAutomationElement::GetCurrentPattern — vtable index 16.
+        // The result is an IUnknown. QueryInterface for the text pattern before
+        // calling its methods; the IUnknown vtable does not have them.
         UIAutomationTextPattern textPattern() {
             PointerByReference pattern = new PointerByReference();
             WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(16,
@@ -848,7 +865,18 @@ public class WindowsUiAutomation implements UiAutomation {
                     WinNT.HRESULT.class);
             if (W32Errors.FAILED(hr) || pattern.getValue() == null)
                 return null;
-            return new UIAutomationTextPattern(pattern.getValue());
+            Unknown unknown = new Unknown(pattern.getValue());
+            try {
+                PointerByReference queried = new PointerByReference();
+                hr = unknown.QueryInterface(new Guid.REFIID(IID_IUIAutomationTextPattern),
+                        queried);
+                if (W32Errors.FAILED(hr) || queried.getValue() == null)
+                    return null;
+                return new UIAutomationTextPattern(queried.getValue());
+            }
+            finally {
+                unknown.Release();
+            }
         }
 
         // IUIAutomationElement::get_CurrentProcessId — vtable index 20
@@ -996,9 +1024,8 @@ public class WindowsUiAutomation implements UiAutomation {
         // IUIAutomationTextPattern::RangeFromPoint — vtable index 3
         UIAutomationTextRange rangeFromPoint(int x, int y) {
             PointerByReference range = new PointerByReference();
-            long point = Integer.toUnsignedLong(x) | (Integer.toUnsignedLong(y) << 32);
             WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(3,
-                    new Object[]{getPointer(), point, range},
+                    new Object[]{getPointer(), new WinDef.POINT.ByValue(x, y), range},
                     WinNT.HRESULT.class);
             if (W32Errors.FAILED(hr) || range.getValue() == null)
                 return null;
@@ -1042,11 +1069,11 @@ public class WindowsUiAutomation implements UiAutomation {
             return !W32Errors.FAILED(hr);
         }
 
-        // IUIAutomationTextRange::GetText — vtable index 12. -1 reads the whole range.
-        String text() {
+        // IUIAutomationTextRange::GetText — vtable index 12
+        String text(int maxLength) {
             PointerByReference result = new PointerByReference();
             WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(12,
-                    new Object[]{getPointer(), -1, result},
+                    new Object[]{getPointer(), maxLength, result},
                     WinNT.HRESULT.class);
             Pointer value = result.getValue();
             if (W32Errors.FAILED(hr) || value == null)
@@ -1062,7 +1089,7 @@ public class WindowsUiAutomation implements UiAutomation {
 
         // IUIAutomationTextRange::MoveEndpointByUnit — vtable index 14
         void trimTrailingWhitespace() {
-            String value = text();
+            String value = text(TEXT_LIMIT_WORD);
             if (value == null || value.isEmpty())
                 return;
             int trailing = 0;

@@ -4,6 +4,7 @@ import mousemaster.platform.UiAutomation;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.Future;
 
 import static mousemaster.Command.*;
 
@@ -44,13 +45,13 @@ public class CommandRunner {
             }
 
             @Override
-            public boolean copyText(CopyText.Kind kind) {
+            public Future<Boolean> startCopy(CopyText.Kind kind) {
                 UiAutomation.TextExtent extent = switch (kind) {
                     case WORD -> UiAutomation.TextExtent.WORD;
                     case LINE -> UiAutomation.TextExtent.LINE;
                     case ALL -> UiAutomation.TextExtent.ALL;
                 };
-                return platform.uiAutomation().copyText(extent);
+                return platform.uiAutomation().startCopyText(extent);
             }
 
             @Override

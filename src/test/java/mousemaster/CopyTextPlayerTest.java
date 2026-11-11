@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -98,9 +100,9 @@ class CopyTextPlayerTest {
             }
 
             @Override
-            public boolean copyText(Command.CopyText.Kind kind) {
+            public Future<Boolean> startCopy(Command.CopyText.Kind kind) {
                 events.add("pattern-" + kind.name().toLowerCase());
-                return patternCopies;
+                return CompletableFuture.completedFuture(patternCopies);
             }
 
             @Override

@@ -9158,6 +9158,13 @@
     {
       "type": {
         "proxy": [
+          "com.sun.jna.platform.win32.OleAuto"
+        ]
+      }
+    },
+    {
+      "type": {
+        "proxy": [
           "com.sun.jna.platform.win32.User32"
         ]
       }
