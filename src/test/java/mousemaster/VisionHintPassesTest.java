@@ -31,6 +31,9 @@ class VisionHintPassesTest {
                 modeMap.get("vision-hint-3-mode").hintMesh().type().refine());
         for (String modeName : List.of("vision-hint-mode", "vision-hint-2-mode",
                 "vision-hint-3-mode")) {
+            assertEquals(AreaSizeSource.ACTIVE_SCREEN,
+                    modeMap.get(modeName).hintMesh().type().area().size().source(),
+                    modeName);
             List<Key> keys = modeMap.get(modeName).hintMesh().keysByFilter()
                     .get(AnyScreenFilter.ANY_SCREEN_FILTER).selectionKeys();
             assertTrue(keys.stream().anyMatch(key -> key.name().equals("q")), modeName);
