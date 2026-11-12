@@ -128,6 +128,37 @@ class UnhandledKeySwallowTest {
     }
 
     @Test
+    void everyBoundKeyIsLeftAlone() throws Exception {
+        applyModeSwitches = true;
+        loadShipped();
+        List<String> swallowed = new ArrayList<>();
+        for (Mode mode : modeMap.modes()) {
+            if (!mode.eatUnhandledKeyPress())
+                continue;
+            comboWatcher.modeChanged(mode);
+            Set<Key> bound = new HashSet<>();
+            for (Combo combo : mode.comboMap().commandsByCombo().keySet()) {
+                bound.addAll(combo.sequence().allKeys());
+                bound.addAll(combo.precondition().keyPrecondition().pressedKeyPrecondition().allKeys());
+                bound.addAll(combo.precondition().keyPrecondition().unpressedKeySet());
+            }
+            if (mode.hintMesh().enabled()) {
+                for (HintMeshKeys hintKeys : mode.hintMesh().keysByFilter().map().values())
+                    if (hintKeys.selectionKeys() != null)
+                        bound.addAll(hintKeys.selectionKeys());
+            }
+            for (Key key : bound) {
+                if (!isLetterOrSymbol(key))
+                    continue;
+                comboWatcher.modeChanged(mode);
+                if (!comboWatcher.isCurrentModeCommandKey(key))
+                    swallowed.add(mode.name() + " " + key.name());
+            }
+        }
+        assertTrue(swallowed.isEmpty(), "bound keys still swallowed: " + swallowed);
+    }
+
+    @Test
     void functionLettersDoNotShowTheActivationTip() throws Exception {
         applyModeSwitches = true;
         loadShipped();
@@ -278,6 +309,26 @@ class UnhandledKeySwallowTest {
     private EatAndRegurgitates release(String keyName) {
         now = now.plusMillis(30);
         return keyboardManager.keyEvent(new KeyEvent.ReleaseKeyEvent(now, Key.ofName(keyName)));
+    }
+
+    private EatAndRegurgitates pressKey(Key key) {
+        now = now.plusMillis(30);
+        return keyboardManager.keyEvent(new KeyEvent.PressKeyEvent(now, key));
+    }
+
+    private EatAndRegurgitates releaseKey(Key key) {
+        now = now.plusMillis(30);
+        return keyboardManager.keyEvent(new KeyEvent.ReleaseKeyEvent(now, key));
+    }
+
+    private static boolean isLetterOrSymbol(Key key) {
+        String character = key.character();
+        if (character == null || character.length() != 1)
+            return false;
+        char c = character.charAt(0);
+        if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
+            return true;
+        return !Character.isLetterOrDigit(c) && !Character.isWhitespace(c);
     }
 
     private boolean ran(Command command) {

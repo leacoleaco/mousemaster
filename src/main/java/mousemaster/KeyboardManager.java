@@ -574,11 +574,11 @@ public class KeyboardManager {
     }
 
     /**
-     * An English letter or symbol that does not belong to this mode is eaten, and the
-     * mode's note is shown. A key the mode already binds, including one whose command
-     * switches mode during this press, hides that note and is not eaten here. Digits,
-     * Enter, arrows, and every other key are left for the focused program. Ctrl itself
-     * is never eaten: a chord must still reach the focused program.
+     * An English letter or symbol that this mode does not bind is eaten, and the mode's
+     * note is shown. A bound key — a command, a modifier, or a hint letter — hides that
+     * note and is not eaten here, including when its command switches mode during the
+     * press. Digits, Enter, arrows, and every other key are left for the focused program.
+     * Ctrl itself is never eaten: a chord must still reach the focused program.
      */
     private PressKeyEventProcessingSet noteNonFunctionKey(Key key,
                                                           PressKeyEventProcessingSet processingSet,

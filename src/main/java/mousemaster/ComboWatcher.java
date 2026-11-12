@@ -43,11 +43,15 @@ public class ComboWatcher {
      */
     private final Map<String, Set<Key>> pressedPreconditionKeysByModeName;
     private final Map<String, Set<Key>> sequenceKeysByModeName;
+    private final Map<String, Set<Key>> unpressedPreconditionKeysByModeName;
+    private final Map<String, Set<Key>> hintSelectionKeysByModeName;
     private final KeyboardLayout activeKeyboardLayout;
     private final Set<Key> sequenceModifierKeys;
     private final Map<Key, Key> modifiedTypedKeyByModifiedKey = new HashMap<>();
     private Set<Key> currentModePressedPreconditionKeys;
     private Set<Key> currentModeSequenceKeys = Set.of();
+    private Set<Key> currentModeUnpressedPreconditionKeys = Set.of();
+    private Set<Key> currentModeHintSelectionKeys = Set.of();
     private List<ModeListener> modeListeners;
     private Mode baseMode;
     private Mode mutatedMode;
@@ -235,10 +239,13 @@ public class ComboWatcher {
         this.comboPreparation = ComboPreparation.empty();
         Map<String, Set<Key>> preconditionKeysByModeName = new HashMap<>();
         Map<String, Set<Key>> sequenceKeysByModeName = new HashMap<>();
+        Map<String, Set<Key>> unpressedPreconditionKeysByModeName = new HashMap<>();
+        Map<String, Set<Key>> hintSelectionKeysByModeName = new HashMap<>();
         Set<Key> sequenceModifierKeys = new HashSet<>();
         for (Mode mode : modeMap.modes()) {
             Set<Key> keys = new HashSet<>();
             Set<Key> sequenceKeys = new HashSet<>();
+            Set<Key> unpressedKeys = new HashSet<>();
             for (Combo combo : mode.comboMap().commandsByCombo().keySet()) {
                 keys.addAll(combo.precondition()
                                  .keyPrecondition()
@@ -247,13 +254,24 @@ public class ComboWatcher {
                 keys.addAll(combo.sequence().modifierKeys());
                 keys.addAll(preconditionModifierKeys(combo));
                 sequenceKeys.addAll(combo.sequence().allKeys());
+                unpressedKeys.addAll(combo.precondition().keyPrecondition().unpressedKeySet());
                 sequenceModifierKeys.addAll(combo.sequence().modifierKeys());
+            }
+            Set<Key> hintSelectionKeys = new HashSet<>();
+            if (mode.hintMesh().enabled()) {
+                for (HintMeshKeys meshKeys : mode.hintMesh().keysByFilter().map().values())
+                    if (meshKeys.selectionKeys() != null)
+                        hintSelectionKeys.addAll(meshKeys.selectionKeys());
             }
             preconditionKeysByModeName.put(mode.name(), keys);
             sequenceKeysByModeName.put(mode.name(), sequenceKeys);
+            unpressedPreconditionKeysByModeName.put(mode.name(), unpressedKeys);
+            hintSelectionKeysByModeName.put(mode.name(), hintSelectionKeys);
         }
         this.pressedPreconditionKeysByModeName = preconditionKeysByModeName;
         this.sequenceKeysByModeName = sequenceKeysByModeName;
+        this.unpressedPreconditionKeysByModeName = unpressedPreconditionKeysByModeName;
+        this.hintSelectionKeysByModeName = hintSelectionKeysByModeName;
         this.sequenceModifierKeys = sequenceModifierKeys;
         Set<Key> allPressedComboPreconditionKeys = new HashSet<>(pressedComboPreconditionKeys);
         preconditionKeysByModeName.values().forEach(allPressedComboPreconditionKeys::addAll);
@@ -1784,14 +1802,19 @@ public class ComboWatcher {
                currentModePressedPreconditionKeys.contains(modifiedTypedKey);
     }
 
-    /** A key this mode already uses as a command or as a held modifier, such as exit or slow. */
+    /** A key this mode already uses: a command, a modifier, or a hint letter. */
     public boolean isCurrentModeCommandKey(Key key) {
-        if (currentModeSequenceKeys.contains(key) || currentModePressedPreconditionKeys.contains(key))
+        if (belongsToCurrentMode(key))
             return true;
         Key modifiedTypedKey = modifiedTypedKeyByModifiedKey.get(key);
-        return modifiedTypedKey != null &&
-               (currentModeSequenceKeys.contains(modifiedTypedKey) ||
-                currentModePressedPreconditionKeys.contains(modifiedTypedKey));
+        return modifiedTypedKey != null && belongsToCurrentMode(modifiedTypedKey);
+    }
+
+    private boolean belongsToCurrentMode(Key key) {
+        return currentModeSequenceKeys.contains(key) ||
+               currentModePressedPreconditionKeys.contains(key) ||
+               currentModeUnpressedPreconditionKeys.contains(key) ||
+               currentModeHintSelectionKeys.contains(key);
     }
 
     public void modeChanged(Mode newMode) {
@@ -1804,6 +1827,10 @@ public class ComboWatcher {
         currentModePressedPreconditionKeys =
                 pressedPreconditionKeysByModeName.getOrDefault(newMode.name(), Set.of());
         currentModeSequenceKeys = sequenceKeysByModeName.getOrDefault(newMode.name(), Set.of());
+        currentModeUnpressedPreconditionKeys =
+                unpressedPreconditionKeysByModeName.getOrDefault(newMode.name(), Set.of());
+        currentModeHintSelectionKeys =
+                hintSelectionKeysByModeName.getOrDefault(newMode.name(), Set.of());
         computePreconditionOnlyByPropertyPath();
         boolean notificationSuspended = mutatedModeNotificationSuspended;
         mutatedModeNotificationSuspended = false;
