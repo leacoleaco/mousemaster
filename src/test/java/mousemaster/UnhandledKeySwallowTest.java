@@ -43,6 +43,12 @@ class UnhandledKeySwallowTest {
         assertEquals(TIP, modeMap.get("normal-mode").unhandledKeyPressAnimation());
         assertTrue(modeMap.get("zoom-mode").eatUnhandledKeyPress());
         assertTrue(modeMap.get("ui-hint-mode").eatUnhandledKeyPress());
+        assertTrue(tipText("normal-mode").contains("现在处于激活模式，请先取消激活才能输入。"));
+        assertTrue(tipText("ui-hint-mode").contains("标记里没有这个按键"));
+        assertTrue(tipText("vision-hint-mode").contains("标记里没有这个按键"));
+        assertTrue(tipText("input-hint-mode").contains("标记里没有这个按键"));
+        assertTrue(tipText("zoom-mode").contains("现在处于激活模式，请先取消激活才能输入。"));
+        assertFalse(tipLayer("ui-hint-mode").enabled());
         assertTrue(modeMap.get("vision-hint-mode").eatUnhandledKeyPress());
         assertTrue(modeMap.get("scroll-bar-mode").eatUnhandledKeyPress());
         assertFalse(modeMap.get("idle-mode").eatUnhandledKeyPress());
@@ -340,6 +346,14 @@ class UnhandledKeySwallowTest {
     private EatAndRegurgitates releaseKey(Key key) {
         now = now.plusMillis(30);
         return keyboardManager.keyEvent(new KeyEvent.ReleaseKeyEvent(now, key));
+    }
+
+    private String tipText(String modeName) {
+        return tipLayer(modeName).text();
+    }
+
+    private IndicatorLayerConfiguration tipLayer(String modeName) {
+        return modeMap.get(modeName).indicator().layerByName().get("activemode-tip-indicator");
     }
 
     private static boolean isLetterOrSymbol(Key key) {
