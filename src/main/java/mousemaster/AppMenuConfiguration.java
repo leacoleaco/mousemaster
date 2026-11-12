@@ -1,0 +1,21 @@
+package mousemaster;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * The menu of one program, from the app-menu.* properties. {@code name} is the app
+ * alias the menu was declared for, and {@code apps} are the executables of that alias.
+ * Choosing an item plays its macro, which sends the program its own shortcut.
+ */
+public record AppMenuConfiguration(String name, Set<App> apps, String title,
+                                   List<Item> items) {
+
+    public record Item(String name, String label, Macro macro) {
+    }
+
+    public boolean matches(App app) {
+        return app != null && apps.contains(app);
+    }
+
+}

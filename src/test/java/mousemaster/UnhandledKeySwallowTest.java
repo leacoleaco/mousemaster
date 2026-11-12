@@ -214,23 +214,31 @@ class UnhandledKeySwallowTest {
         release("leftarrow");
     }
 
-    /** Win+A, Win+period and the like belong to the system, as a Ctrl chord does. */
+    /**
+     * Win+A, Win+W, Win+period and the like belong to the system, as a Ctrl chord does.
+     * a alone opens the program menu and w alone is not a command: neither does anything
+     * while Alt or Win is held.
+     */
     @Test
     void aLetterPressedWhileAltOrWinIsHeldIsLeftToTheSystem() throws Exception {
         loadShipped();
         for (String modifier : List.of("leftwin", "rightwin", "leftalt", "rightalt")) {
             comboWatcher.modeChanged(modeMap.get("normal-mode"));
+            ranCommands.clear();
             press(modifier);
             assertFalse(press("a").mustBeEaten(), modifier + " a");
+            assertFalse(press("w").mustBeEaten(), modifier + " w");
             assertFalse(press(".").mustBeEaten(), modifier + " .");
             drain();
             assertFalse(animations.running(TIP), modifier);
+            assertFalse(ran(new Command.SwitchMode("app-menu-mode")), modifier);
             release("a");
+            release("w");
             release(".");
             release(modifier);
         }
         comboWatcher.modeChanged(modeMap.get("normal-mode"));
-        assertTrue(press("a").mustBeEaten());
+        assertTrue(press("w").mustBeEaten());
         drain();
         assertTrue(animations.running(TIP));
     }
@@ -256,13 +264,18 @@ class UnhandledKeySwallowTest {
         Configuration configuration = ConfigurationParser.parse(lines,
                 KeyboardLayout.keyboardLayoutByShortName.get("us-qwerty"));
         modeMap = configuration.modeMap();
+        // Both sets are filled the way Mousemaster fills them.
+        Set<Key> unpressedPreconditionKeys = new HashSet<>();
         Set<Key> pressedPreconditionKeys = new HashSet<>();
         for (Mode mode : modeMap.modes())
-            for (Combo combo : mode.comboMap().commandsByCombo().keySet())
+            for (Combo combo : mode.comboMap().commandsByCombo().keySet()) {
+                unpressedPreconditionKeys.addAll(
+                        combo.precondition().keyPrecondition().unpressedKeySet());
                 pressedPreconditionKeys.addAll(combo.precondition()
                                                     .keyPrecondition()
                                                     .pressedKeyPrecondition()
                                                     .allKeys());
+            }
         CommandRunner commandRunner = new CommandRunner(null, null, null) {
             @Override
             public boolean runningAtomicCommand() {
@@ -277,7 +290,8 @@ class UnhandledKeySwallowTest {
             }
         };
         comboWatcher = new ComboWatcher(commandRunner, null,
-                () -> new App("test.exe"), null, () -> now, Set.of(), pressedPreconditionKeys,
+                () -> new App("test.exe"), null, () -> now, unpressedPreconditionKeys,
+                pressedPreconditionKeys,
                 new KeyRedactor(KeyRedaction.NONE), modeMap,
                 configuration.initiallySetVariables(), configuration.virtualKeys(),
                 configuration.initiallyPressedVirtualKeys(),

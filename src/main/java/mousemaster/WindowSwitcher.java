@@ -30,6 +30,8 @@ public final class WindowSwitcher implements ModeListener {
     private SwitchableWindows windows = SwitchableWindows.NONE;
     private WindowMenu menu = WindowMenu.empty();
     private boolean listReady;
+    /** The keys that tag the rows of the first page, as the mode's tag command lists them. */
+    private List<Key> tagKeys = List.of();
 
     public WindowSwitcher(Platform platform) {
         this.platform = platform;
@@ -41,6 +43,8 @@ public final class WindowSwitcher implements ModeListener {
             listReady = false;
             windows = SwitchableWindows.NONE;
             menu = WindowMenu.empty();
+            tagKeys = MenuTags.keys(newMode, Command.SelectWindowByTag.class,
+                    Command.SelectWindowByTag::tagKeys);
         }
         modeName = newMode.name();
     }
@@ -51,6 +55,11 @@ public final class WindowSwitcher implements ModeListener {
 
     public void move(int delta) {
         menu = menu.move(delta);
+    }
+
+    /** Moves the highlight to the row this key tags. A key that tags no row does nothing. */
+    public void selectTag(Key key) {
+        menu = menu.select(MenuTags.row(tagKeys, key, menu.tagCount()));
     }
 
     public String html() {
@@ -74,7 +83,7 @@ public final class WindowSwitcher implements ModeListener {
     private void ensureListed() {
         try {
             windows = platform.switchableWindows();
-            menu = WindowMenu.of(windows.entries());
+            menu = WindowMenu.of(windows.entries(), tagKeys);
         }
         catch (Throwable failure) {
             logger.error("Could not list windows", failure);

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -68,12 +69,67 @@ class WindowMenuTest {
     }
 
     @Test
+    void rowsAreTaggedFromTheTopAndATagMovesTheHighlight() {
+        WindowMenu menu = WindowMenu.of(
+                List.of(row("当前"), row("上一个"), row("更早"), row("最早")), keys("f", "c", "a"));
+        assertEquals(3, menu.tagCount());
+        String html = menu.html();
+        assertTrue(html.contains("字母 定位"));
+        int tagF = html.indexOf(">F</td>");
+        int tagC = html.indexOf(">C</td>");
+        int tagA = html.indexOf(">A</td>");
+        assertTrue(tagF > 0 && tagF < html.indexOf("当前"));
+        assertTrue(tagC > html.indexOf("当前") && tagC < html.indexOf("上一个"));
+        assertTrue(tagA > html.indexOf("上一个") && tagA < html.indexOf("更早"));
+        // The highlighted row draws its tag dark, and a row past the keys keeps the column.
+        assertTrue(html.contains("class=tagon bgcolor=\"#7AA2F7\" rowspan=2 valign=\"middle\" width=\"26\">C</td>"));
+        assertTrue(html.contains("class=tag rowspan=2 valign=\"middle\" width=\"26\">&nbsp;</td>"));
+
+        assertEquals(2, menu.select(2).selected());
+        assertEquals(0, menu.select(0).selected());
+        assertEquals(1, menu.select(-1).selected());
+        assertEquals(1, menu.select(4).selected());
+        // Icons arriving later keep the tags and the highlight.
+        WindowMenu withIcons = menu.select(2).withEntries(
+                List.of(row("当前"), row("上一个"), row("更早"), row("最早")));
+        assertEquals(3, withIcons.tagCount());
+        assertEquals(2, withIcons.selected());
+    }
+
+    @Test
+    void onlyTheFirstPageIsTagged() {
+        List<WindowEntry> titles = IntStream.range(0, 20)
+                                             .mapToObj(index -> row("窗口" + index))
+                                             .toList();
+        List<Key> manyKeys = keys("f", "c", "a", "w", "v", "r", "x", "q", "z", "t", "b",
+                "y", "u", "i", "o");
+        assertEquals(WindowMenu.VISIBLE_ROWS, WindowMenu.of(titles, manyKeys).tagCount());
+        assertEquals(3, WindowMenu.of(titles, keys("f", "c", "a")).tagCount());
+        // Scrolled past the first page, the tagged rows are gone but the column stays.
+        WindowMenu scrolled = WindowMenu.of(titles, keys("f", "c", "a")).select(2);
+        for (int step = 0; step < 15; step++)
+            scrolled = scrolled.move(1);
+        assertFalse(scrolled.html().contains(">F</td>"));
+    }
+
+    @Test
+    void withoutTagKeysTheRowsHaveNoTagColumn() {
+        String html = WindowMenu.of(List.of(row("当前"), row("上一个"))).html();
+        assertFalse(html.contains("class=tag"));
+        assertFalse(html.contains("字母 定位"));
+    }
+
+    @Test
     void emptyMenuSaysSo() {
         assertTrue(WindowMenu.empty().html().contains("没有可切换的窗口"));
     }
 
     private static WindowEntry row(String title) {
         return new WindowEntry(title, "app.exe", null);
+    }
+
+    private static List<Key> keys(String... characters) {
+        return Stream.of(characters).map(Key::ofCharacter).toList();
     }
 
 }

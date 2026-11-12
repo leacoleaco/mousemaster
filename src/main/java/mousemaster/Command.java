@@ -2,6 +2,8 @@ package mousemaster;
 
 import mousemaster.platform.UiAutomation.UiElement;
 
+import java.util.List;
+
 public sealed interface Command {
 
     record SwitchMode(String modeName) implements Command {}
@@ -160,5 +162,23 @@ public sealed interface Command {
      * (the shipped configuration centers the pointer on that window, then returns).
      */
     record ActivateSelectedWindow(String modeAfter) implements Command {}
+
+    /**
+     * Move the highlight to the window whose tag is the key just pressed.
+     * The tags go to the rows of the first page, top to bottom, in this order.
+     */
+    record SelectWindowByTag(List<Key> tagKeys) implements Command {}
+
+    /** Move the highlight in the menu of the program in front. Negative is up. */
+    record SelectMenuItem(int delta) implements Command {}
+
+    /** Move the highlight to the menu item whose tag is the key just pressed. */
+    record SelectMenuItemByTag(List<Key> tagKeys) implements Command {}
+
+    /**
+     * Send the keys of the highlighted menu item to the program, then switch to
+     * {@code modeAfter}. A program with no menu only switches.
+     */
+    record RunSelectedMenuItem(String modeAfter) implements Command {}
 
 }

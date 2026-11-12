@@ -18,6 +18,7 @@ public class CommandRunner {
     private MacroPlayer macroPlayer;
     private AnimationPlayer animationPlayer;
     private WindowSwitcher windowSwitcher;
+    private AppMenus appMenus;
 
     public CommandRunner(MouseManager mouseManager, HintManager hintManager,
                          Platform platform) {
@@ -87,6 +88,10 @@ public class CommandRunner {
 
     public void setWindowSwitcher(WindowSwitcher windowSwitcher) {
         this.windowSwitcher = windowSwitcher;
+    }
+
+    public void setAppMenus(AppMenus appMenus) {
+        this.appMenus = appMenus;
     }
 
     public boolean runningAtomicCommand() {
@@ -212,6 +217,28 @@ public class CommandRunner {
             case ActivateSelectedWindow activateSelectedWindow -> {
                 if (windowSwitcher != null && windowSwitcher.activateSelected())
                     modeController.switchMode(activateSelectedWindow.modeAfter());
+            }
+            case SelectWindowByTag selectWindowByTag -> {
+                if (windowSwitcher != null)
+                    windowSwitcher.selectTag(eventKey);
+            }
+            case SelectMenuItem selectMenuItem -> {
+                if (appMenus != null)
+                    appMenus.move(selectMenuItem.delta());
+            }
+            case SelectMenuItemByTag selectMenuItemByTag -> {
+                if (appMenus != null)
+                    appMenus.selectTag(eventKey);
+            }
+            case RunSelectedMenuItem runSelectedMenuItem -> {
+                if (appMenus != null) {
+                    // The item's keys are queued first. Leaving the menu mode then takes
+                    // the menu off the screen. A program with no menu only leaves.
+                    ResolvedMacro macro = appMenus.selectedMacro();
+                    if (macro != null && macroPlayer != null)
+                        macroPlayer.submit(macro);
+                    modeController.switchMode(runSelectedMenuItem.modeAfter());
+                }
             }
             // @formatter:on
         }

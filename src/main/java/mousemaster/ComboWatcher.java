@@ -1200,12 +1200,15 @@ public class ComboWatcher {
             else {
                 List<Command> commands = comboCommands;
                 // We never want to execute (un)select hint key if the key event just
-                // switched the mode to a hint mode.
+                // switched the mode to a hint mode. The same goes for the tag of a
+                // menu row: the key that opened the menu (a) can also be one of its tags.
                 Predicate<Command> switchModeOrHintPredicate =
                         c -> c instanceof Command.SwitchMode ||
                              c instanceof Command.SelectHintKey ||
                              c instanceof Command.DeselectHintKey ||
-                             c instanceof Command.DeselectAllHintKeys;
+                             c instanceof Command.DeselectAllHintKeys ||
+                             c instanceof Command.SelectWindowByTag ||
+                             c instanceof Command.SelectMenuItemByTag;
                 if (ignoreSwitchModeAndHintCommands &&
                     commands.stream()
                             .anyMatch(switchModeOrHintPredicate)) {

@@ -169,6 +169,8 @@ public class ConfigurationParser {
                 new Property<>("copy-text", Map.of()),
                 new Property<>("select-window", Map.of()),
                 new Property<>("activate-window", Map.of()),
+                new Property<>("select-menu-item", Map.of()),
+                new Property<>("run-menu-item", Map.of()),
                 new Property<>("release", Map.of()),
                 new Property<>("toggle", Map.of()),
                 new Property<>("start-wheel", Map.of()),
@@ -699,6 +701,13 @@ public class ConfigurationParser {
                                                 .map(ActivateSelectedWindow.class::cast)
                                                 .map(ActivateSelectedWindow::modeAfter)
                                                 .forEach(referencedModes::add);
+            mode.comboMap.runMenuItem.builder.values()
+                                             .stream()
+                                             .flatMap(Collection::stream)
+                                             .filter(RunSelectedMenuItem.class::isInstance)
+                                             .map(RunSelectedMenuItem.class::cast)
+                                             .map(RunSelectedMenuItem::modeAfter)
+                                             .forEach(referencedModes::add);
             if (mode.modeAfterUnhandledKeyPress.builder.get() != null)
                 referencedModes.add(mode.modeAfterUnhandledKeyPress.builder.get());
             if (mode.hintMesh.builder.modeAfterSelection() != null)
@@ -770,7 +779,8 @@ public class ConfigurationParser {
                 declaredVirtualKeyNames.initiallyPressed()
                                        .stream()
                                        .map(keyResolver::resolve)
-                                       .collect(Collectors.toSet()));
+                                       .collect(Collectors.toSet()),
+                parseAppMenus(properties, keyAliases, appAliases, keyResolver));
     }
 
     private static List<Combo> deriveSelectCombosFromHintSelectionKeys(ModeBuilder mode,
@@ -2179,24 +2189,80 @@ public class ConfigurationParser {
                 if (keyMatcher.group(group3) == null)
                     mode.comboMap.selectWindow.parseReferenceOr(propertyKey, propertyValue,
                             ignored -> {
-                                throw new IllegalArgumentException(
-                                        "select-window requires a direction: select-window.<previous|next>");
+                                    throw new IllegalArgumentException(
+                                        "select-window requires a direction or the tag keys: select-window.<previous|next|tag-keys>");
                             },
                             childPropertiesByParentProperty, nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "select-window requires a direction: select-window.<previous|next>");
+                            "select-window requires a direction or the tag keys: select-window.<previous|next|tag-keys>");
+                else if (keyMatcher.group(group4).equals("tag-keys")) {
+                    List<Key> tagKeys = parseTagKeys(propertyValue, keyAliases, keyResolver);
+                    setTagCommand(mode.comboMap.selectWindow.builder, tagKeys,
+                            new SelectWindowByTag(tagKeys), propertyKey,
+                            defaultComboMoveDuration);
+                }
                 else {
                     int delta = switch (keyMatcher.group(group4)) {
                         case "previous" -> -1;
                         case "next" -> 1;
                         default -> throw new IllegalArgumentException(
                                 "Unknown select-window direction: " + keyMatcher.group(group4) +
-                                " (expected previous or next)");
+                                " (expected previous, next or tag-keys)");
                     };
                     setCommand(mode.comboMap.selectWindow.builder, propertyValue,
                             new SelectWindow(delta), propertyKey, defaultComboMoveDuration,
                             keyAliases, appAliases, keyResolver, allVariableNames);
+                }
+            }
+            case "select-menu-item" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.selectMenuItem.parseReferenceOr(propertyKey, propertyValue,
+                            ignored -> {
+                                throw new IllegalArgumentException(
+                                        "select-menu-item requires a direction or the tag keys: select-menu-item.<previous|next|tag-keys>");
+                            },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "select-menu-item requires a direction or the tag keys: select-menu-item.<previous|next|tag-keys>");
+                else if (keyMatcher.group(group4).equals("tag-keys")) {
+                    List<Key> tagKeys = parseTagKeys(propertyValue, keyAliases, keyResolver);
+                    setTagCommand(mode.comboMap.selectMenuItem.builder, tagKeys,
+                            new SelectMenuItemByTag(tagKeys), propertyKey,
+                            defaultComboMoveDuration);
+                }
+                else {
+                    int delta = switch (keyMatcher.group(group4)) {
+                        case "previous" -> -1;
+                        case "next" -> 1;
+                        default -> throw new IllegalArgumentException(
+                                "Unknown select-menu-item direction: " + keyMatcher.group(group4) +
+                                " (expected previous, next or tag-keys)");
+                    };
+                    setCommand(mode.comboMap.selectMenuItem.builder, propertyValue,
+                            new SelectMenuItem(delta), propertyKey, defaultComboMoveDuration,
+                            keyAliases, appAliases, keyResolver, allVariableNames);
+                }
+            }
+            case "run-menu-item" -> {
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.runMenuItem.parseReferenceOr(propertyKey, propertyValue,
+                            ignored -> {
+                                throw new IllegalArgumentException(
+                                        "run-menu-item requires the mode to enter after the item ran: run-menu-item.<mode>");
+                            },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(
+                            "run-menu-item requires the mode to enter after the item ran: run-menu-item.<mode>");
+                else {
+                    String modeAfter = keyMatcher.group(group4);
+                    modeReferences.add(checkModeReference(modeAfter));
+                    setCommand(mode.comboMap.runMenuItem.builder, propertyValue,
+                            new RunSelectedMenuItem(modeAfter), propertyKey,
+                            defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
+                            allVariableNames);
                 }
             }
             case "activate-window" -> {
@@ -4366,6 +4432,115 @@ public class ConfigurationParser {
                            .add(command);
     }
 
+    /** The keys that tag the rows of a menu, in the order the rows get them. */
+    private static List<Key> parseTagKeys(String propertyValue,
+                                          Map<String, KeyAlias> keyAliases,
+                                          KeyResolver keyResolver) {
+        List<Key> tagKeys = parseKeyList(propertyValue, keyAliases, keyResolver);
+        if (new HashSet<>(tagKeys).size() != tagKeys.size())
+            throw new IllegalArgumentException(
+                    "Invalid tag keys " + propertyValue + ": a key can tag only one row");
+        return tagKeys;
+    }
+
+    /**
+     * One combo per tag key, the press of that key, all running the same command. The
+     * command finds the row from the key that was pressed.
+     */
+    private static void setTagCommand(Map<Combo, List<Command>> commandsByCombo,
+                                      List<Key> tagKeys, Command command, String label,
+                                      ComboMoveDuration defaultComboMoveDuration) {
+        ComboPrecondition emptyComboPrecondition = new ComboPrecondition(
+                new ComboPrecondition.ComboKeyPrecondition(Set.of(),
+                        new ComboPrecondition.PressedKeyPrecondition(List.of())),
+                new ComboPrecondition.ComboAppPrecondition(Set.of(), Set.of()),
+                new ComboPrecondition.ComboVariablePrecondition(List.of()));
+        for (Key key : tagKeys) {
+            Combo combo = new Combo(label, emptyComboPrecondition, ComboSequence.ofMoves(
+                    List.<KeyComboMove>of(new PressComboMove(KeyOrAlias.ofKey(key), false, true,
+                            defaultComboMoveDuration, null))));
+            commandsByCombo.computeIfAbsent(combo, combo1 -> new ArrayList<>()).add(command);
+        }
+    }
+
+    /**
+     * app-menu.<app alias>.title=<what the menu is headed with>
+     * app-menu.<app alias>.item.<name>=<label> -> <macro output>
+     * The items of a menu are in the order of the file. Choosing one plays its output,
+     * which is written like the output of a macro.
+     */
+    private static List<AppMenuConfiguration> parseAppMenus(List<String> properties,
+                                                           Map<String, KeyAlias> keyAliases,
+                                                           Map<String, AppAlias> appAliases,
+                                                           KeyResolver keyResolver) {
+        Pattern appMenuKeyPattern =
+                Pattern.compile("app-menu\\.([^.]+)\\.(title|item\\.([^.]+))");
+        Map<String, String> titleByName = new LinkedHashMap<>();
+        Map<String, List<AppMenuConfiguration.Item>> itemsByName = new LinkedHashMap<>();
+        for (String property : properties) {
+            Matcher lineMatcher = propertyLinePattern.matcher(property);
+            if (!lineMatcher.matches())
+                continue;
+            String propertyKey = lineMatcher.group(1).strip();
+            String propertyValue = lineMatcher.group(2).strip();
+            if (!propertyKey.startsWith("app-menu."))
+                continue;
+            try {
+                Matcher keyMatcher = appMenuKeyPattern.matcher(propertyKey);
+                if (!keyMatcher.matches())
+                    throw new IllegalArgumentException(
+                            "Invalid app-menu property key: expected app-menu.<app alias>.title or app-menu.<app alias>.item.<name>");
+                String menuName = keyMatcher.group(1);
+                if (!appAliases.containsKey(menuName))
+                    throw new IllegalArgumentException(
+                            "Undefined app alias " + menuName + ": define app-alias." +
+                            menuName + " with the executable names the menu is for");
+                List<AppMenuConfiguration.Item> items =
+                        itemsByName.computeIfAbsent(menuName, name -> new ArrayList<>());
+                if (keyMatcher.group(3) == null) {
+                    titleByName.put(menuName, propertyValue);
+                    continue;
+                }
+                String itemName = keyMatcher.group(3);
+                String[] split = propertyValue.split("\\s*->\\s*", 2);
+                if (split.length != 2 || split[0].isBlank() || split[1].isBlank())
+                    throw new IllegalArgumentException(
+                            "Invalid menu item " + propertyValue +
+                            ": expected <label> -> <macro output>");
+                String outputString = split[1];
+                Set<String> negatedNames = Macro.negatedNamesUsedInOutput(outputString);
+                if (!negatedNames.isEmpty())
+                    throw new IllegalArgumentException(
+                            "Negated names " + negatedNames +
+                            " cannot be used in a menu item: it has no combo to take them from");
+                Map<String, List<Key>> outputAliasAllKeys = new HashMap<>();
+                for (String aliasName : Macro.aliasNamesUsedInOutput(outputString,
+                        keyAliases.keySet()))
+                    outputAliasAllKeys.put(aliasName, keyAliases.get(aliasName).keys());
+                Macro macro = Macro.of(menuName + "." + itemName, outputString, keyAliases,
+                        keyResolver, Map.of(), outputAliasAllKeys);
+                items.add(new AppMenuConfiguration.Item(itemName, split[0].strip(), macro));
+            } catch (IllegalArgumentException e) {
+                IllegalArgumentException e2 =
+                        new IllegalArgumentException("[" + propertyKey + "] " + e.getMessage());
+                e2.setStackTrace(e.getStackTrace());
+                throw e2;
+            }
+        }
+        List<AppMenuConfiguration> appMenus = new ArrayList<>();
+        for (Map.Entry<String, List<AppMenuConfiguration.Item>> entry : itemsByName.entrySet()) {
+            String menuName = entry.getKey();
+            if (entry.getValue().isEmpty())
+                throw new IllegalArgumentException(
+                        "[app-menu." + menuName + ".title] the menu has no item: define app-menu." +
+                        menuName + ".item.<name>");
+            appMenus.add(new AppMenuConfiguration(menuName, appAliases.get(menuName).apps(),
+                    titleByName.getOrDefault(menuName, menuName),
+                    List.copyOf(entry.getValue())));
+        }
+        return List.copyOf(appMenus);
+    }
+
     private static List<Combo> parseCombos(String multiComboString,
                                            String label,
                                            ComboMoveDuration defaultComboMoveDuration,
@@ -5190,6 +5365,8 @@ public class ConfigurationParser {
         Property<Map<Combo, List<Command>>> copyText;
         Property<Map<Combo, List<Command>>> selectWindow;
         Property<Map<Combo, List<Command>>> activateWindow;
+        Property<Map<Combo, List<Command>>> selectMenuItem;
+        Property<Map<Combo, List<Command>>> runMenuItem;
 
         public ComboMapConfigurationBuilder(String modeName,
                                             Map<PropertyKey, Property<?>> propertyByKey) {
@@ -5232,6 +5409,8 @@ public class ConfigurationParser {
             copyText = new ComboMapProperty("copy-text", modeName, propertyByKey);
             selectWindow = new ComboMapProperty("select-window", modeName, propertyByKey);
             activateWindow = new ComboMapProperty("activate-window", modeName, propertyByKey);
+            selectMenuItem = new ComboMapProperty("select-menu-item", modeName, propertyByKey);
+            runMenuItem = new ComboMapProperty("run-menu-item", modeName, propertyByKey);
         }
 
           private static class ComboMapProperty extends Property<Map<Combo, List<Command>>> {
@@ -5290,6 +5469,8 @@ public class ConfigurationParser {
             add(commandsByCombo, copyText.builder);
             add(commandsByCombo, selectWindow.builder);
             add(commandsByCombo, activateWindow.builder);
+            add(commandsByCombo, selectMenuItem.builder);
+            add(commandsByCombo, runMenuItem.builder);
             add(commandsByCombo, to.builder);
             add(commandsByCombo, startMove.builder);
             add(commandsByCombo, stopMove.builder);

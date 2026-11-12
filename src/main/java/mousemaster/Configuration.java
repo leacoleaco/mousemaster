@@ -1,5 +1,6 @@
 package mousemaster;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -11,7 +12,8 @@ public record Configuration(
         boolean hideConsole, KeyboardLayout activeKeyboardLayout,
         KeyboardLayout forcedActiveKeyboardLayout,
         Set<String> initiallySetVariables, Set<Key> virtualKeys,
-        Set<Key> initiallyPressedVirtualKeys) {
+        Set<Key> initiallyPressedVirtualKeys,
+        List<AppMenuConfiguration> appMenus) {
 
 
 }

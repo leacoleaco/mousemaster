@@ -31,6 +31,7 @@ public class IndicatorManager implements ModeListener {
     private Map<Point, HintRectangles> hintRectanglesByPoint = Map.of();
     private double frameWait;
     private WindowSwitcher windowSwitcher;
+    private AppMenus appMenus;
 
     public IndicatorManager(Overlay overlay, AnimationPlayer animationPlayer,
                             HintManager hintManager, Supplier<App> activeApp) {
@@ -42,6 +43,10 @@ public class IndicatorManager implements ModeListener {
 
     public void setWindowSwitcher(WindowSwitcher windowSwitcher) {
         this.windowSwitcher = windowSwitcher;
+    }
+
+    public void setAppMenus(AppMenus appMenus) {
+        this.appMenus = appMenus;
     }
 
     public boolean animating() {
@@ -196,13 +201,13 @@ public class IndicatorManager implements ModeListener {
         layerByName.replaceAll((layerName, layer) ->
                 layer.enabled() && shapeCount(layer) == 0 ?
                         layer.builder().enabled(false).build() : layer);
-        return withWindowMenu(new IndicatorConfiguration(indicator.renderAsCursor(),
+        return withMenus(new IndicatorConfiguration(indicator.renderAsCursor(),
                 indicator.excludeFromCapture(), layerByName));
     }
 
-    /** The menu's rows are not part of the configuration. They are filled in when it is drawn. */
-    private IndicatorConfiguration withWindowMenu(IndicatorConfiguration indicator) {
-        if (windowSwitcher == null)
+    /** A menu's rows are not part of the configuration. They are filled in when it is drawn. */
+    private IndicatorConfiguration withMenus(IndicatorConfiguration indicator) {
+        if (windowSwitcher == null && appMenus == null)
             return indicator;
         boolean changed = false;
         Map<String, IndicatorLayerConfiguration> layers = new LinkedHashMap<>();
@@ -210,12 +215,15 @@ public class IndicatorManager implements ModeListener {
                                                                              .entrySet()) {
             IndicatorLayerConfiguration layer = entry.getValue();
             String text = layer.text();
-            if (text != null && text.contains(WindowMenu.PLACEHOLDER)) {
-                String expanded = text.replace(WindowMenu.PLACEHOLDER, windowSwitcher.html());
-                if (!expanded.equals(text)) {
-                    layer = layer.builder().text(expanded).build();
-                    changed = true;
-                }
+            String expanded = text;
+            if (expanded != null && windowSwitcher != null &&
+                expanded.contains(WindowMenu.PLACEHOLDER))
+                expanded = expanded.replace(WindowMenu.PLACEHOLDER, windowSwitcher.html());
+            if (expanded != null && appMenus != null && expanded.contains(AppMenu.PLACEHOLDER))
+                expanded = expanded.replace(AppMenu.PLACEHOLDER, appMenus.html());
+            if (expanded != null && !expanded.equals(text)) {
+                layer = layer.builder().text(expanded).build();
+                changed = true;
             }
             layers.put(entry.getKey(), layer);
         }
