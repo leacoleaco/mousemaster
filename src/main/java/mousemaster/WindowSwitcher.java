@@ -4,17 +4,24 @@ import mousemaster.platform.SwitchableWindows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Owns the window list for window-switch-mode. The list is taken once, on entry,
- * in Alt-Tab order, and stays put while e and d move the highlight.
- * Program icons are read after the keyboard hook returns, so opening the list does
- * not stall the hook.
+ * Owns the window list for window-switch-mode. The list is taken once, in Alt-Tab
+ * order, and stays put while e and d move the highlight.
+ * The key that opens the list arrives inside the keyboard hook, which Windows removes
+ * when its callback takes too long. The hook therefore draws only a title line, the
+ * windows are enumerated on the next frame, and program icons are filled in once a
+ * background thread has read them.
  */
 public final class WindowSwitcher implements ModeListener {
 
     public static final String MODE = "window-switch-mode";
+
+    /** Drawn while the hook is still on the stack, so the callback stays cheap. */
+    private static final String LOADING_HTML =
+            "<table cellspacing=0 cellpadding=0><tr><td class=title>窗口</td></tr></table>";
 
     private static final Logger logger = LoggerFactory.getLogger(WindowSwitcher.class);
 
@@ -22,7 +29,7 @@ public final class WindowSwitcher implements ModeListener {
     private String modeName;
     private SwitchableWindows windows = SwitchableWindows.NONE;
     private WindowMenu menu = WindowMenu.empty();
-    private boolean iconsLoaded;
+    private boolean listReady;
 
     public WindowSwitcher(Platform platform) {
         this.platform = platform;
@@ -30,8 +37,11 @@ public final class WindowSwitcher implements ModeListener {
 
     @Override
     public void modeChanged(Mode newMode) {
-        if (MODE.equals(newMode.name()) && !MODE.equals(modeName))
-            open();
+        if (MODE.equals(newMode.name()) && !MODE.equals(modeName)) {
+            listReady = false;
+            windows = SwitchableWindows.NONE;
+            menu = WindowMenu.empty();
+        }
         modeName = newMode.name();
     }
 
@@ -44,19 +54,13 @@ public final class WindowSwitcher implements ModeListener {
     }
 
     public String html() {
-        if (!iconsLoaded && !platform.inKeyboardHook()) {
-            try {
-                windows.loadIcons();
-                int pixelSize = windows.iconPixelSize();
-                for (Map.Entry<String, int[]> icon : windows.icons().entrySet())
-                    WindowIconImages.add(icon.getKey(), icon.getValue(), pixelSize);
-                menu = menu.withEntries(windows.entries());
-            }
-            catch (RuntimeException exception) {
-                logger.warn("Could not load window icons", exception);
-            }
-            iconsLoaded = true;
+        if (!listReady) {
+            if (platform.inKeyboardHook())
+                return LOADING_HTML;
+            ensureListed();
         }
+        else if (!platform.inKeyboardHook())
+            showIcons();
         return menu.html();
     }
 
@@ -67,10 +71,43 @@ public final class WindowSwitcher implements ModeListener {
         return windows.activate(menu.selected());
     }
 
-    private void open() {
-        windows = platform.switchableWindows();
-        menu = WindowMenu.of(windows.entries());
-        iconsLoaded = false;
+    private void ensureListed() {
+        try {
+            windows = platform.switchableWindows();
+            menu = WindowMenu.of(windows.entries());
+        }
+        catch (Throwable failure) {
+            logger.error("Could not list windows", failure);
+            windows = SwitchableWindows.NONE;
+            menu = WindowMenu.empty();
+        }
+        listReady = true;
+    }
+
+    /** Puts icons on the rows once the background read has finished. */
+    private void showIcons() {
+        try {
+            if (!windows.drainIcons())
+                return;
+            List<WindowEntry> entries = windows.entries();
+            List<int[]> icons = windows.icons();
+            int pixelSize = windows.iconPixelSize();
+            List<WindowEntry> withIcons = new ArrayList<>(entries.size());
+            int shown = 0;
+            for (int index = 0; index < entries.size(); index++) {
+                WindowEntry entry = entries.get(index);
+                int[] argb = index < icons.size() ? icons.get(index) : null;
+                String source = WindowIconImages.source(argb, pixelSize);
+                if (source != null)
+                    shown++;
+                withIcons.add(new WindowEntry(entry.title(), entry.processName(), source));
+            }
+            menu = menu.withEntries(withIcons);
+            logger.debug("Window icons: " + shown + "/" + entries.size());
+        }
+        catch (Throwable failure) {
+            logger.error("Could not draw window icons", failure);
+        }
     }
 
 }

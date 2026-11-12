@@ -2,8 +2,6 @@ package mousemaster.platform.windows;
 
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
-import com.sun.jna.WString;
-import com.sun.jna.platform.win32.BaseTSD;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinDef;
@@ -17,9 +15,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Top-level windows in Alt-Tab order. EnumWindows walks the Z-order from front to
@@ -32,14 +33,17 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
     /** Enough for a hidpi menu when the row draws the icon at 32. */
     private static final int ICON_PX = 48;
     private static final int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
-    private static final int GCLP_HICON = -14;
-    private static final int GCLP_HICONSM = -34;
+    /** Cached failure, so a file with no icon is not opened again. */
+    private static final int[] NO_ICON = new int[0];
+    private static final ConcurrentHashMap<String, int[]> ICONS_BY_PATH = new ConcurrentHashMap<>();
+    private static volatile boolean loggedIconFailure;
+    private static volatile boolean loggedWindowFailure;
 
     private final List<ListedWindow> windows;
-    private final long generation = System.nanoTime();
-    private Map<String, int[]> icons = Map.of();
-    private boolean iconsLoaded;
-    private boolean exeIconsUnavailable;
+    private final AtomicBoolean iconLoadStarted = new AtomicBoolean();
+    /** Published by the reader thread once every program file has been parsed. */
+    private volatile Map<String, int[]> loadedIcons;
+    private boolean iconsApplied;
 
     private WindowsSwitchableWindows(List<ListedWindow> windows) {
         this.windows = windows;
@@ -50,7 +54,15 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
         Map<Integer, String> pathByPid = new HashMap<>();
         List<ListedWindow> windows = new ArrayList<>();
         User32.INSTANCE.EnumWindows((hwnd, data) -> {
-            consider(hwnd, self, pathByPid, windows);
+            try {
+                consider(hwnd, self, pathByPid, windows);
+            }
+            catch (Throwable failure) {
+                if (!loggedWindowFailure) {
+                    loggedWindowFailure = true;
+                    logger.error("Could not inspect a window", failure);
+                }
+            }
             return true;
         }, null);
         logger.debug("Alt-Tab windows: " + windows.size());
@@ -87,13 +99,16 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
     @Override
     public List<WindowEntry> entries() {
         return windows.stream()
-                      .map(window -> new WindowEntry(window.title, window.processName, window.iconName))
+                      .map(window -> new WindowEntry(window.title, window.processName, null))
                       .toList();
     }
 
     @Override
-    public Map<String, int[]> icons() {
-        return icons;
+    public List<int[]> icons() {
+        List<int[]> icons = new ArrayList<>(windows.size());
+        for (ListedWindow window : windows)
+            icons.add(window.icon);
+        return Collections.unmodifiableList(icons);
     }
 
     @Override
@@ -101,36 +116,71 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
         return ICON_PX;
     }
 
+    /**
+     * Program files are parsed on a reader thread, so a slow disk does not hold up the
+     * list. This method only takes in what that thread has finished.
+     */
     @Override
-    public void loadIcons() {
-        if (iconsLoaded)
-            return;
-        iconsLoaded = true;
-        Map<String, String> nameByExecutable = new HashMap<>();
-        Map<String, int[]> loaded = new HashMap<>();
-        int shown = 0;
+    public boolean drainIcons() {
+        startIconLoad();
+        Map<String, int[]> loaded = loadedIcons;
+        if (loaded == null || iconsApplied)
+            return false;
+        iconsApplied = true;
+        boolean changed = false;
         for (ListedWindow window : windows) {
-            String cached = window.executablePath == null ? null
-                    : nameByExecutable.get(window.executablePath);
+            String path = window.executablePath;
+            if (path == null || path.isEmpty())
+                continue;
+            int[] argb = loaded.get(path);
+            if (argb == null || argb.length == 0)
+                continue;
+            window.icon = argb;
+            changed = true;
+        }
+        return changed;
+    }
+
+    private void startIconLoad() {
+        if (windows.isEmpty() || !iconLoadStarted.compareAndSet(false, true))
+            return;
+        List<ListedWindow> snapshot = windows;
+        Thread thread = new Thread(() -> loadedIcons = readIcons(snapshot), "window-icons");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private static Map<String, int[]> readIcons(List<ListedWindow> windows) {
+        Map<String, int[]> byPath = new HashMap<>();
+        for (ListedWindow window : windows) {
+            String path = window.executablePath;
+            if (path == null || path.isEmpty() || byPath.containsKey(path))
+                continue;
+            int[] cached = ICONS_BY_PATH.get(path);
             if (cached != null) {
-                window.iconName = cached;
-                shown++;
+                byPath.put(path, cached);
                 continue;
             }
-            int[] pixels = exeIcon(window.executablePath);
-            if (pixels == null)
-                pixels = windowIcon(window.hwnd);
-            if (pixels == null)
-                continue;
-            String name = "window-icon-" + Long.toUnsignedString(generation) + "-" + loaded.size();
-            loaded.put(name, pixels);
-            window.iconName = name;
-            if (window.executablePath != null)
-                nameByExecutable.put(window.executablePath, name);
-            shown++;
+            int[] read = NO_ICON;
+            try {
+                int[] pixels = ExeIcon.read(path, ICON_PX);
+                if (pixels != null)
+                    read = pixels;
+            }
+            catch (Throwable failure) {
+                logIconFailure(failure);
+            }
+            ICONS_BY_PATH.put(path, read);
+            byPath.put(path, read);
         }
-        icons = Map.copyOf(loaded);
-        logger.debug("Window icons " + shown + "/" + windows.size());
+        return Map.copyOf(byPath);
+    }
+
+    private static void logIconFailure(Throwable failure) {
+        if (loggedIconFailure)
+            return;
+        loggedIconFailure = true;
+        logger.error("Could not read program icons", failure);
     }
 
     @Override
@@ -144,44 +194,6 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
         if (!focused)
             logger.debug("Could not focus window " + index + ": " + windows.get(index).title);
         return focused;
-    }
-
-    /** The program icon stored in the executable. The returned pixels are not owned as an icon. */
-    private int[] exeIcon(String path) {
-        if (path == null || path.isEmpty() || exeIconsUnavailable)
-            return null;
-        WinDef.HICON[] extracted = new WinDef.HICON[1];
-        try {
-            int count = ExtendedUser32.INSTANCE.PrivateExtractIconsW(
-                    new WString(path), 0, ICON_PX, ICON_PX, extracted, null, 1, 0);
-            if (count <= 0 || extracted[0] == null)
-                return null;
-            return WindowIconFile.pixels(extracted[0], ICON_PX);
-        }
-        catch (LinkageError error) {
-            exeIconsUnavailable = true;
-            logger.debug("PrivateExtractIconsW is unavailable", error);
-            return null;
-        }
-        finally {
-            if (extracted[0] != null)
-                User32.INSTANCE.DestroyIcon(extracted[0]);
-        }
-    }
-
-    /** The icon the window class registered, when the executable has none. */
-    private static int[] windowIcon(WinDef.HWND hwnd) {
-        int[] large = WindowIconFile.pixels(classIcon(hwnd, GCLP_HICON), ICON_PX);
-        if (large != null)
-            return large;
-        return WindowIconFile.pixels(classIcon(hwnd, GCLP_HICONSM), ICON_PX);
-    }
-
-    private static WinDef.HICON classIcon(WinDef.HWND hwnd, int index) {
-        BaseTSD.ULONG_PTR value = User32.INSTANCE.GetClassLongPtr(hwnd, index);
-        if (value == null || value.longValue() == 0)
-            return null;
-        return new WinDef.HICON(new Pointer(value.longValue()));
     }
 
     /**
@@ -338,7 +350,8 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
         private final String title;
         private final String processName;
         private final String executablePath;
-        private String iconName;
+        /** Set on the main thread by {@link #drainIcons()}. */
+        private int[] icon;
 
         private ListedWindow(WinDef.HWND hwnd, String title, String processName,
                              String executablePath) {

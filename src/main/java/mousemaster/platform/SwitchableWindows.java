@@ -3,7 +3,6 @@ package mousemaster.platform;
 import mousemaster.WindowEntry;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * A snapshot of the windows Alt-Tab would list, in that order.
@@ -25,13 +24,20 @@ public interface SwitchableWindows {
 
     List<WindowEntry> entries();
 
-    /** Reads program icons. Safe to call more than once. Does nothing when there are none. */
-    default void loadIcons() {
+    /**
+     * Takes in program icons that have finished loading. Does not block: the first
+     * call starts the read. True when {@link #icons()} changed.
+     */
+    default boolean drainIcons() {
+        return false;
     }
 
-    /** Icon pixels filled in by {@link #loadIcons()}, keyed by {@link WindowEntry#iconName()}. */
-    default Map<String, int[]> icons() {
-        return Map.of();
+    /**
+     * ARGB pixels of each entry's program icon, in the order of {@link #entries()}.
+     * Null where no icon has been read. Windows of one program share an array.
+     */
+    default List<int[]> icons() {
+        return List.of();
     }
 
     /** Width and height of each array returned by {@link #icons()}. */

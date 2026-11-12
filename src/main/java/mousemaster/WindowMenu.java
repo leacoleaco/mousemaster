@@ -100,8 +100,8 @@ public final class WindowMenu {
         html.append("<tr><td class=row").append(bg)
             .append("><table cellspacing=0 cellpadding=0><tr>");
         html.append("<td class=icon rowspan=2 valign=\"middle\" width=\"40\">");
-        if (entry.iconName() != null)
-            html.append("<img src=\"").append(entry.iconName())
+        if (entry.iconSource() != null)
+            html.append("<img src=\"").append(entry.iconSource())
                 .append("\" width=\"").append(ICON_PX).append("\" height=\"").append(ICON_PX)
                 .append("\">");
         else

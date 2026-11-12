@@ -4,7 +4,6 @@ import mousemaster.*;
 
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
-import com.sun.jna.WString;
 import com.sun.jna.Structure;
 import com.sun.jna.platform.win32.*;
 import com.sun.jna.ptr.IntByReference;
@@ -133,13 +132,6 @@ public interface ExtendedUser32 extends User32 {
     WinDef.HICON CreateIconIndirect(WinGDI.ICONINFO piconinfo);
 
     boolean DestroyIcon(WinDef.HICON hIcon);
-
-    /**
-     * The executable's icon at the requested pixel size. The caller owns each returned
-     * icon and destroys it. {@code piconid} may be null.
-     */
-    int PrivateExtractIconsW(WString szFileName, int nIconIndex, int cxIcon, int cyIcon,
-                             WinDef.HICON[] phicon, Pointer piconid, int nIcons, int flags);
 
     int IMAGE_CURSOR = 2;
 
