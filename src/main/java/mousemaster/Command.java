@@ -164,16 +164,20 @@ public sealed interface Command {
     record ActivateSelectedWindow(String modeAfter) implements Command {}
 
     /**
-     * Move the highlight to the window whose tag is the key just pressed.
+     * Focus the window whose tag is the key just pressed, then switch to {@code modeAfter}.
      * The tags go to the rows of the first page, top to bottom, in this order.
+     * A key that tags no row does nothing.
      */
-    record SelectWindowByTag(List<Key> tagKeys) implements Command {}
+    record ActivateWindowByTag(List<Key> tagKeys, String modeAfter) implements Command {}
 
     /** Move the highlight in the menu of the program in front. Negative is up. */
     record SelectMenuItem(int delta) implements Command {}
 
-    /** Move the highlight to the menu item whose tag is the key just pressed. */
-    record SelectMenuItemByTag(List<Key> tagKeys) implements Command {}
+    /**
+     * Send the keys of the menu item whose tag is the key just pressed, then switch to
+     * {@code modeAfter}. A key that tags no item does nothing.
+     */
+    record RunMenuItemByTag(List<Key> tagKeys, String modeAfter) implements Command {}
 
     /**
      * Send the keys of the highlighted menu item to the program, then switch to

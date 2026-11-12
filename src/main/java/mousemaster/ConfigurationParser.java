@@ -697,16 +697,22 @@ public class ConfigurationParser {
             mode.comboMap.activateWindow.builder.values()
                                                 .stream()
                                                 .flatMap(Collection::stream)
-                                                .filter(ActivateSelectedWindow.class::isInstance)
-                                                .map(ActivateSelectedWindow.class::cast)
-                                                .map(ActivateSelectedWindow::modeAfter)
+                                                .map(command -> switch (command) {
+                                                    case ActivateSelectedWindow activate -> activate.modeAfter();
+                                                    case ActivateWindowByTag byTag -> byTag.modeAfter();
+                                                    default -> null;
+                                                })
+                                                .filter(Objects::nonNull)
                                                 .forEach(referencedModes::add);
             mode.comboMap.runMenuItem.builder.values()
                                              .stream()
                                              .flatMap(Collection::stream)
-                                             .filter(RunSelectedMenuItem.class::isInstance)
-                                             .map(RunSelectedMenuItem.class::cast)
-                                             .map(RunSelectedMenuItem::modeAfter)
+                                             .map(command -> switch (command) {
+                                                 case RunSelectedMenuItem run -> run.modeAfter();
+                                                 case RunMenuItemByTag byTag -> byTag.modeAfter();
+                                                 default -> null;
+                                             })
+                                             .filter(Objects::nonNull)
                                              .forEach(referencedModes::add);
             if (mode.modeAfterUnhandledKeyPress.builder.get() != null)
                 referencedModes.add(mode.modeAfterUnhandledKeyPress.builder.get());
@@ -2190,25 +2196,19 @@ public class ConfigurationParser {
                     mode.comboMap.selectWindow.parseReferenceOr(propertyKey, propertyValue,
                             ignored -> {
                                     throw new IllegalArgumentException(
-                                        "select-window requires a direction or the tag keys: select-window.<previous|next|tag-keys>");
+                                        "select-window requires a direction: select-window.<previous|next>");
                             },
                             childPropertiesByParentProperty, nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "select-window requires a direction or the tag keys: select-window.<previous|next|tag-keys>");
-                else if (keyMatcher.group(group4).equals("tag-keys")) {
-                    List<Key> tagKeys = parseTagKeys(propertyValue, keyAliases, keyResolver);
-                    setTagCommand(mode.comboMap.selectWindow.builder, tagKeys,
-                            new SelectWindowByTag(tagKeys), propertyKey,
-                            defaultComboMoveDuration);
-                }
+                            "select-window requires a direction: select-window.<previous|next>");
                 else {
                     int delta = switch (keyMatcher.group(group4)) {
                         case "previous" -> -1;
                         case "next" -> 1;
                         default -> throw new IllegalArgumentException(
                                 "Unknown select-window direction: " + keyMatcher.group(group4) +
-                                " (expected previous, next or tag-keys)");
+                                " (expected previous or next)");
                     };
                     setCommand(mode.comboMap.selectWindow.builder, propertyValue,
                             new SelectWindow(delta), propertyKey, defaultComboMoveDuration,
@@ -2220,25 +2220,19 @@ public class ConfigurationParser {
                     mode.comboMap.selectMenuItem.parseReferenceOr(propertyKey, propertyValue,
                             ignored -> {
                                 throw new IllegalArgumentException(
-                                        "select-menu-item requires a direction or the tag keys: select-menu-item.<previous|next|tag-keys>");
+                                        "select-menu-item requires a direction: select-menu-item.<previous|next>");
                             },
                             childPropertiesByParentProperty, nonRootPropertyKeys);
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
-                            "select-menu-item requires a direction or the tag keys: select-menu-item.<previous|next|tag-keys>");
-                else if (keyMatcher.group(group4).equals("tag-keys")) {
-                    List<Key> tagKeys = parseTagKeys(propertyValue, keyAliases, keyResolver);
-                    setTagCommand(mode.comboMap.selectMenuItem.builder, tagKeys,
-                            new SelectMenuItemByTag(tagKeys), propertyKey,
-                            defaultComboMoveDuration);
-                }
+                            "select-menu-item requires a direction: select-menu-item.<previous|next>");
                 else {
                     int delta = switch (keyMatcher.group(group4)) {
                         case "previous" -> -1;
                         case "next" -> 1;
                         default -> throw new IllegalArgumentException(
                                 "Unknown select-menu-item direction: " + keyMatcher.group(group4) +
-                                " (expected previous, next or tag-keys)");
+                                " (expected previous or next)");
                     };
                     setCommand(mode.comboMap.selectMenuItem.builder, propertyValue,
                             new SelectMenuItem(delta), propertyKey, defaultComboMoveDuration,
@@ -2256,6 +2250,18 @@ public class ConfigurationParser {
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
                             "run-menu-item requires the mode to enter after the item ran: run-menu-item.<mode>");
+                else if (keyMatcher.group(group4).equals("tag-keys")) {
+                    // run-menu-item.tag-keys.<mode>=<keys>: a tag runs the item of its row.
+                    String modeAfter = keyMatcher.group(group5);
+                    if (modeAfter == null)
+                        throw new IllegalArgumentException(
+                                "run-menu-item.tag-keys requires the mode to enter after the item ran: run-menu-item.tag-keys.<mode>");
+                    modeReferences.add(checkModeReference(modeAfter));
+                    List<Key> tagKeys = parseTagKeys(propertyValue, keyAliases, keyResolver);
+                    setTagCommand(mode.comboMap.runMenuItem.builder, tagKeys,
+                            new RunMenuItemByTag(tagKeys, modeAfter), propertyKey,
+                            defaultComboMoveDuration);
+                }
                 else {
                     String modeAfter = keyMatcher.group(group4);
                     modeReferences.add(checkModeReference(modeAfter));
@@ -2276,6 +2282,18 @@ public class ConfigurationParser {
                 else if (keyMatcher.group(group4) == null)
                     throw new IllegalArgumentException(
                             "activate-window requires the mode to enter after the jump: activate-window.<mode>");
+                else if (keyMatcher.group(group4).equals("tag-keys")) {
+                    // activate-window.tag-keys.<mode>=<keys>: a tag jumps to the window of its row.
+                    String modeAfter = keyMatcher.group(group5);
+                    if (modeAfter == null)
+                        throw new IllegalArgumentException(
+                                "activate-window.tag-keys requires the mode to enter after the jump: activate-window.tag-keys.<mode>");
+                    modeReferences.add(checkModeReference(modeAfter));
+                    List<Key> tagKeys = parseTagKeys(propertyValue, keyAliases, keyResolver);
+                    setTagCommand(mode.comboMap.activateWindow.builder, tagKeys,
+                            new ActivateWindowByTag(tagKeys, modeAfter), propertyKey,
+                            defaultComboMoveDuration);
+                }
                 else {
                     String modeAfter = keyMatcher.group(group4);
                     modeReferences.add(checkModeReference(modeAfter));

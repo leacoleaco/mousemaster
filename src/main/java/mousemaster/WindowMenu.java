@@ -10,7 +10,7 @@ import java.util.List;
  * e moves up the list and d moves down. Both wrap.
  * Each row is its tag, then the program icon, centered on two lines: the window title,
  * then the process file name. The rows of the first page are tagged, top to bottom, and
- * pressing a tag moves the highlight to its row.
+ * pressing a tag jumps to the window of its row.
  */
 public final class WindowMenu {
 
@@ -82,6 +82,26 @@ public final class WindowMenu {
         return tags.size();
     }
 
+    /**
+     * Whether the row at {@code index} is drawn. A list longer than a page is drawn
+     * around the highlight, so the first rows scroll out of sight, and their tags with them.
+     */
+    public boolean shows(int index) {
+        return index >= firstShown() && index < endShown();
+    }
+
+    private int firstShown() {
+        if (entries.size() <= VISIBLE_ROWS)
+            return 0;
+        int end = Math.min(entries.size(),
+                Math.max(0, selected - VISIBLE_ROWS / 2) + VISIBLE_ROWS);
+        return end - VISIBLE_ROWS;
+    }
+
+    private int endShown() {
+        return Math.min(entries.size(), firstShown() + VISIBLE_ROWS);
+    }
+
     public boolean isEmpty() {
         return entries.isEmpty();
     }
@@ -96,19 +116,14 @@ public final class WindowMenu {
         html.append("<tr><td class=title>窗口</td></tr>");
         html.append("<tr><td class=hint>");
         if (!tags.isEmpty())
-            html.append("字母 定位&nbsp;&nbsp;");
+            html.append("字母 直接跳转&nbsp;&nbsp;");
         html.append("e k 上&nbsp;&nbsp;d j 下&nbsp;&nbsp;g / 空格 / 回车 跳转&nbsp;&nbsp;Esc 返回</td></tr>");
         if (entries.isEmpty()) {
             html.append("<tr><td class=empty>没有可切换的窗口</td></tr></table>");
             return html.toString();
         }
-        int start = 0;
-        int end = entries.size();
-        if (entries.size() > VISIBLE_ROWS) {
-            start = Math.max(0, selected - VISIBLE_ROWS / 2);
-            end = Math.min(entries.size(), start + VISIBLE_ROWS);
-            start = Math.max(0, end - VISIBLE_ROWS);
-        }
+        int start = firstShown();
+        int end = endShown();
         if (start > 0)
             html.append("<tr><td class=more>上面还有 ").append(start).append(" 个</td></tr>");
         for (int index = start; index < end; index++)

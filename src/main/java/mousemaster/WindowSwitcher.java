@@ -43,8 +43,8 @@ public final class WindowSwitcher implements ModeListener {
             listReady = false;
             windows = SwitchableWindows.NONE;
             menu = WindowMenu.empty();
-            tagKeys = MenuTags.keys(newMode, Command.SelectWindowByTag.class,
-                    Command.SelectWindowByTag::tagKeys);
+            tagKeys = MenuTags.keys(newMode, Command.ActivateWindowByTag.class,
+                    Command.ActivateWindowByTag::tagKeys);
         }
         modeName = newMode.name();
     }
@@ -57,9 +57,16 @@ public final class WindowSwitcher implements ModeListener {
         menu = menu.move(delta);
     }
 
-    /** Moves the highlight to the row this key tags. A key that tags no row does nothing. */
-    public void selectTag(Key key) {
-        menu = menu.select(MenuTags.row(tagKeys, key, menu.tagCount()));
+    /**
+     * Moves the highlight to the row this key tags. False when the key tags no row, or a
+     * row that has scrolled out of sight: a tag that is not drawn chooses nothing.
+     */
+    public boolean selectTag(Key key) {
+        int row = MenuTags.row(tagKeys, key, menu.tagCount());
+        if (row < 0 || !menu.shows(row))
+            return false;
+        menu = menu.select(row);
+        return true;
     }
 
     public String html() {

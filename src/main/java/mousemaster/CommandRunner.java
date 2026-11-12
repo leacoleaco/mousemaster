@@ -218,30 +218,36 @@ public class CommandRunner {
                 if (windowSwitcher != null && windowSwitcher.activateSelected())
                     modeController.switchMode(activateSelectedWindow.modeAfter());
             }
-            case SelectWindowByTag selectWindowByTag -> {
-                if (windowSwitcher != null)
-                    windowSwitcher.selectTag(eventKey);
+            case ActivateWindowByTag activateWindowByTag -> {
+                if (windowSwitcher != null && windowSwitcher.selectTag(eventKey) &&
+                    windowSwitcher.activateSelected())
+                    modeController.switchMode(activateWindowByTag.modeAfter());
             }
             case SelectMenuItem selectMenuItem -> {
                 if (appMenus != null)
                     appMenus.move(selectMenuItem.delta());
             }
-            case SelectMenuItemByTag selectMenuItemByTag -> {
-                if (appMenus != null)
-                    appMenus.selectTag(eventKey);
+            case RunMenuItemByTag runMenuItemByTag -> {
+                if (appMenus != null && appMenus.selectTag(eventKey))
+                    runSelectedMenuItem(runMenuItemByTag.modeAfter());
             }
             case RunSelectedMenuItem runSelectedMenuItem -> {
-                if (appMenus != null) {
-                    // The item's keys are queued first. Leaving the menu mode then takes
-                    // the menu off the screen. A program with no menu only leaves.
-                    ResolvedMacro macro = appMenus.selectedMacro();
-                    if (macro != null && macroPlayer != null)
-                        macroPlayer.submit(macro);
-                    modeController.switchMode(runSelectedMenuItem.modeAfter());
-                }
+                if (appMenus != null)
+                    runSelectedMenuItem(runSelectedMenuItem.modeAfter());
             }
             // @formatter:on
         }
+    }
+
+    /**
+     * The item's keys are queued first. Leaving the menu mode then takes the menu off
+     * the screen. A program with no menu only leaves.
+     */
+    private void runSelectedMenuItem(String modeAfter) {
+        ResolvedMacro macro = appMenus.selectedMacro();
+        if (macro != null && macroPlayer != null)
+            macroPlayer.submit(macro);
+        modeController.switchMode(modeAfter);
     }
 
     /** Ctrl+key on Windows, Command+key on macOS. Injected, so the hook does not eat it. */

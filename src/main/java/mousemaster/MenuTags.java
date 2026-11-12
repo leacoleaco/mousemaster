@@ -5,8 +5,9 @@ import java.util.function.Function;
 
 /**
  * The letters beside the rows of the window list and of the program menu.
- * Pressing a row's letter moves the highlight to it. The letters are handed out
- * from the top row down, in the order the configuration lists the keys.
+ * Pressing a row's letter chooses that row at once: the window is focused, the item is
+ * run. The letters are handed out from the top row down, in the order the configuration
+ * lists the keys.
  */
 final class MenuTags {
 

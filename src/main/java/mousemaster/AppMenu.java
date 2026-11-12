@@ -5,8 +5,8 @@ import java.util.List;
 /**
  * The menu drawn while app-menu-mode is active: the items configured for the program
  * in front, one per row, each with its tag. The highlight starts on the first item.
- * e moves up and d moves down, and both wrap. Pressing a tag moves the highlight to
- * its row. A program that has no menu gets a note saying so.
+ * e moves up and d moves down, and both wrap. Pressing a tag runs the item of its
+ * row. A program that has no menu gets a note saying so.
  */
 public final class AppMenu {
 
@@ -80,7 +80,7 @@ public final class AppMenu {
         html.append("<tr><td class=title>").append(WindowMenu.escape(title)).append("</td></tr>");
         html.append("<tr><td class=hint>");
         if (!tags.isEmpty())
-            html.append("字母 定位&nbsp;&nbsp;");
+            html.append("字母 直接执行&nbsp;&nbsp;");
         html.append("e k 上&nbsp;&nbsp;d j 下&nbsp;&nbsp;g / 空格 / 回车 执行&nbsp;&nbsp;Esc 返回</td></tr>");
         for (int index = 0; index < labels.size(); index++)
             appendRow(html, labels.get(index), index < tags.size() ? tags.get(index) : null,

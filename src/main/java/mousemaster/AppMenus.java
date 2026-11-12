@@ -30,8 +30,8 @@ public final class AppMenus implements ModeListener {
     @Override
     public void modeChanged(Mode newMode) {
         if (MODE.equals(newMode.name()) && !MODE.equals(modeName)) {
-            tagKeys = MenuTags.keys(newMode, Command.SelectMenuItemByTag.class,
-                    Command.SelectMenuItemByTag::tagKeys);
+            tagKeys = MenuTags.keys(newMode, Command.RunMenuItemByTag.class,
+                    Command.RunMenuItemByTag::tagKeys);
             open(activeApp.get());
         }
         modeName = newMode.name();
@@ -61,9 +61,13 @@ public final class AppMenus implements ModeListener {
         menu = menu.move(delta);
     }
 
-    /** Moves the highlight to the item this key tags. A key that tags no item does nothing. */
-    public void selectTag(Key key) {
-        menu = menu.select(MenuTags.row(tagKeys, key, menu.tagCount()));
+    /** Moves the highlight to the item this key tags. False when the key tags no item. */
+    public boolean selectTag(Key key) {
+        int row = MenuTags.row(tagKeys, key, menu.tagCount());
+        if (row < 0)
+            return false;
+        menu = menu.select(row);
+        return true;
     }
 
     public boolean isEmpty() {

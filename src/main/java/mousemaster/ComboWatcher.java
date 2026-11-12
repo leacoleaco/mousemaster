@@ -1207,8 +1207,8 @@ public class ComboWatcher {
                              c instanceof Command.SelectHintKey ||
                              c instanceof Command.DeselectHintKey ||
                              c instanceof Command.DeselectAllHintKeys ||
-                             c instanceof Command.SelectWindowByTag ||
-                             c instanceof Command.SelectMenuItemByTag;
+                             c instanceof Command.ActivateWindowByTag ||
+                             c instanceof Command.RunMenuItemByTag;
                 if (ignoreSwitchModeAndHintCommands &&
                     commands.stream()
                             .anyMatch(switchModeOrHintPredicate)) {

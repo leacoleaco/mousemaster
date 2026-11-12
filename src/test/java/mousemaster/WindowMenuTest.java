@@ -69,12 +69,12 @@ class WindowMenuTest {
     }
 
     @Test
-    void rowsAreTaggedFromTheTopAndATagMovesTheHighlight() {
+    void rowsAreTaggedFromTheTop() {
         WindowMenu menu = WindowMenu.of(
                 List.of(row("当前"), row("上一个"), row("更早"), row("最早")), keys("f", "c", "a"));
         assertEquals(3, menu.tagCount());
         String html = menu.html();
-        assertTrue(html.contains("字母 定位"));
+        assertTrue(html.contains("字母 直接跳转"));
         int tagF = html.indexOf(">F</td>");
         int tagC = html.indexOf(">C</td>");
         int tagA = html.indexOf(">A</td>");
@@ -105,18 +105,26 @@ class WindowMenuTest {
                 "y", "u", "i", "o");
         assertEquals(WindowMenu.VISIBLE_ROWS, WindowMenu.of(titles, manyKeys).tagCount());
         assertEquals(3, WindowMenu.of(titles, keys("f", "c", "a")).tagCount());
+        WindowMenu firstPage = WindowMenu.of(titles, keys("f", "c", "a"));
+        assertTrue(firstPage.shows(0));
+        assertTrue(firstPage.shows(WindowMenu.VISIBLE_ROWS - 1));
+        assertFalse(firstPage.shows(WindowMenu.VISIBLE_ROWS));
         // Scrolled past the first page, the tagged rows are gone but the column stays.
-        WindowMenu scrolled = WindowMenu.of(titles, keys("f", "c", "a")).select(2);
+        WindowMenu scrolled = firstPage.select(2);
         for (int step = 0; step < 15; step++)
             scrolled = scrolled.move(1);
         assertFalse(scrolled.html().contains(">F</td>"));
+        assertFalse(scrolled.shows(0));
+        assertTrue(scrolled.shows(scrolled.selected()));
+        assertTrue(scrolled.shows(19));
+        assertFalse(scrolled.shows(20));
     }
 
     @Test
     void withoutTagKeysTheRowsHaveNoTagColumn() {
         String html = WindowMenu.of(List.of(row("当前"), row("上一个"))).html();
         assertFalse(html.contains("class=tag"));
-        assertFalse(html.contains("字母 定位"));
+        assertFalse(html.contains("字母"));
     }
 
     @Test

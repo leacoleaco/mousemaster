@@ -67,6 +67,9 @@ class HandMoveComboTest {
                     case Command.SwitchMode switchMode -> switchMode.modeName();
                     case Command.ActivateSelectedWindow activate -> activate.modeAfter();
                     case Command.RunSelectedMenuItem runItem -> runItem.modeAfter();
+                    // As if the pressed letter tagged a row.
+                    case Command.ActivateWindowByTag byTag -> byTag.modeAfter();
+                    case Command.RunMenuItemByTag byTag -> byTag.modeAfter();
                     default -> null;
                 };
                 if (modeName == null)
@@ -339,7 +342,7 @@ class HandMoveComboTest {
         comboWatcher.modeChanged(modeMap.get("window-switch-mode"));
         ranCommands.clear();
         assertTrue(press("space").mustBeEaten());
-        assertTrue(ran(new Command.ActivateSelectedWindow("window-switch-space-mode")));
+        assertTrue(ran(new Command.ActivateSelectedWindow("window-switch-done-mode")));
         ranCommands.clear();
         EatAndRegurgitates releaseSpace = release("space");
         assertTrue(releaseSpace.mustBeEaten());
@@ -355,23 +358,35 @@ class HandMoveComboTest {
         return ranCommands.stream().anyMatch(tagCommand::isInstance);
     }
 
+    /**
+     * What ran, apart from what a key coming up runs to no effect: the noops that eat the
+     * release, and the release of a mouse button that is not down (t is the right button).
+     */
+    private List<Command> ranBesidesReleases() {
+        return ranCommands.stream()
+                          .filter(command -> !(command instanceof Command.Noop ||
+                                               command instanceof Command.ReleaseLeft ||
+                                               command instanceof Command.ReleaseMiddle ||
+                                               command instanceof Command.ReleaseRight))
+                          .toList();
+    }
+
     @Test
     void windowMenuRowsAreTaggedWithLeftHandLetters() throws Exception {
         load();
         Mode windowSwitchMode = modeMap.get("window-switch-mode");
         assertEquals(MENU_TAGS,
-                MenuTags.keys(windowSwitchMode, Command.SelectWindowByTag.class,
-                                Command.SelectWindowByTag::tagKeys)
+                MenuTags.keys(windowSwitchMode, Command.ActivateWindowByTag.class,
+                                Command.ActivateWindowByTag::tagKeys)
                         .stream().map(Key::name).toList());
         comboWatcher.modeChanged(windowSwitchMode);
+        // The harness does not follow the jump, so the list stays open: this is a tag whose
+        // row does not exist. The key is eaten and its release types nothing.
         for (String tag : MENU_TAGS) {
             ranCommands.clear();
             assertTrue(press(tag).mustBeEaten(), tag);
-            assertTrue(ranTag(Command.SelectWindowByTag.class), tag);
-            assertFalse(ranCommands.stream().anyMatch(
-                    command -> command instanceof Command.SelectWindow ||
-                               command instanceof Command.ActivateSelectedWindow ||
-                               command instanceof Command.SwitchMode), tag);
+            assertEquals(1, ranCommands.size(), tag);
+            assertTrue(ranTag(Command.ActivateWindowByTag.class), tag);
             EatAndRegurgitates releaseTag = release(tag);
             assertTrue(releaseTag.mustBeEaten(), tag);
             assertTrue(releaseTag.regurgitates().isEmpty(), tag);
@@ -380,8 +395,34 @@ class HandMoveComboTest {
         for (String notTag : List.of("e", "d", "g", "k", "j", "s")) {
             ranCommands.clear();
             press(notTag);
-            assertFalse(ranTag(Command.SelectWindowByTag.class), notTag);
+            assertFalse(ranTag(Command.ActivateWindowByTag.class), notTag);
             release(notTag);
+        }
+    }
+
+    /**
+     * A tag jumps at once. Activation mode is back only when the letter is up: there the
+     * letter is a command of its own (f opens hints, v selects a screen), and its release
+     * must not be typed into the window that was just focused.
+     */
+    @Test
+    void aTagInTheWindowListJumpsAndWaitsForTheLetterToComeUp() throws Exception {
+        load(true);
+        for (String tag : MENU_TAGS) {
+            comboWatcher.modeChanged(modeMap.get("window-switch-mode"));
+            ranCommands.clear();
+            assertTrue(press(tag).mustBeEaten(), tag);
+            assertEquals(1, ranCommands.size(), tag);
+            assertTrue(ranCommands.getFirst() instanceof Command.ActivateWindowByTag byTag &&
+                       byTag.modeAfter().equals("window-switch-done-mode"), tag);
+            // Auto-repeat while the letter is held does nothing.
+            assertTrue(press(tag).mustBeEaten(), tag);
+            assertEquals(1, ranCommands.size(), tag);
+            ranCommands.clear();
+            EatAndRegurgitates releaseTag = release(tag);
+            assertTrue(releaseTag.mustBeEaten(), tag);
+            assertTrue(releaseTag.regurgitates().isEmpty(), tag);
+            assertEquals(List.of(new Command.SwitchMode("normal-mode")), ranBesidesReleases(), tag);
         }
     }
 
@@ -390,12 +431,19 @@ class HandMoveComboTest {
         load(true);
         assertTrue(press("a").mustBeEaten());
         assertTrue(ran(new Command.SwitchMode("app-menu-mode")));
-        // a is also a tag of the menu. The press that opened it does not pick a row.
-        assertFalse(ranTag(Command.SelectMenuItemByTag.class));
+        // a is also a tag of the menu. The press that opened it does not run a row, and
+        // neither does a held down while the menu is open.
+        assertFalse(ranTag(Command.RunMenuItemByTag.class));
+        assertTrue(press("a").mustBeEaten());
+        assertFalse(ranTag(Command.RunMenuItemByTag.class));
         EatAndRegurgitates releaseA = release("a");
         assertTrue(releaseA.mustBeEaten());
         assertTrue(releaseA.regurgitates().isEmpty());
-        assertFalse(ranTag(Command.SelectMenuItemByTag.class));
+        assertFalse(ranTag(Command.RunMenuItemByTag.class));
+        // Pressed again, a is the tag of the third row.
+        assertTrue(press("a").mustBeEaten());
+        assertTrue(ranTag(Command.RunMenuItemByTag.class));
+        release("a");
 
         load();
         press("leftshift");
@@ -427,8 +475,8 @@ class HandMoveComboTest {
         load(true);
         Mode appMenuMode = modeMap.get("app-menu-mode");
         assertEquals(MENU_TAGS,
-                MenuTags.keys(appMenuMode, Command.SelectMenuItemByTag.class,
-                                Command.SelectMenuItemByTag::tagKeys)
+                MenuTags.keys(appMenuMode, Command.RunMenuItemByTag.class,
+                                Command.RunMenuItemByTag::tagKeys)
                         .stream().map(Key::name).toList());
         comboWatcher.modeChanged(appMenuMode);
         ranCommands.clear();
@@ -441,23 +489,29 @@ class HandMoveComboTest {
         assertTrue(ran(new Command.SelectMenuItem(-1)));
         assertTrue(press("j").mustBeEaten());
         assertTrue(ran(new Command.SelectMenuItem(1)));
-        assertFalse(ranTag(Command.SelectMenuItemByTag.class));
+        assertFalse(ranTag(Command.RunMenuItemByTag.class));
         for (String key : List.of("k", "j", "e", "d")) {
             EatAndRegurgitates releaseKey = release(key);
             assertTrue(releaseKey.mustBeEaten(), key);
             assertTrue(releaseKey.regurgitates().isEmpty(), key);
         }
+        // A tag runs its item at once. Activation mode is back only when the letter is up:
+        // there the letter is a command of its own (f opens hints, a opens this menu).
         for (String tag : MENU_TAGS) {
+            comboWatcher.modeChanged(appMenuMode);
             ranCommands.clear();
             assertTrue(press(tag).mustBeEaten(), tag);
-            assertTrue(ranTag(Command.SelectMenuItemByTag.class), tag);
-            assertFalse(ranCommands.stream().anyMatch(
-                    command -> command instanceof Command.SelectMenuItem ||
-                               command instanceof Command.RunSelectedMenuItem ||
-                               command instanceof Command.SwitchMode), tag);
+            assertEquals(1, ranCommands.size(), tag);
+            assertTrue(ranCommands.getFirst() instanceof Command.RunMenuItemByTag byTag &&
+                       byTag.modeAfter().equals("app-menu-done-mode"), tag);
+            // Auto-repeat while the letter is held does nothing.
+            assertTrue(press(tag).mustBeEaten(), tag);
+            assertEquals(1, ranCommands.size(), tag);
+            ranCommands.clear();
             EatAndRegurgitates releaseTag = release(tag);
             assertTrue(releaseTag.mustBeEaten(), tag);
             assertTrue(releaseTag.regurgitates().isEmpty(), tag);
+            assertEquals(List.of(new Command.SwitchMode("normal-mode")), ranBesidesReleases(), tag);
         }
 
         // g, space and Enter run the item. Activation mode is back only once the key is
