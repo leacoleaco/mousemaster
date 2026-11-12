@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Hold A and e/d/s/f move the pointer the way k/j/h/l do. Release A and e/d scroll
- * again, and f opens hints again.
+ * Hold Shift and e/d/s/f move the pointer the way k/j/h/l do. Release Shift and e/d
+ * scroll again. F alone opens hints. Shift+R opens the letter grid.
  */
 class HandMoveComboTest {
 
@@ -129,9 +129,9 @@ class HandMoveComboTest {
     }
 
     @Test
-    void holdingATurnsEdsfIntoMovement() throws Exception {
+    void holdingShiftTurnsEdsfIntoMovement() throws Exception {
         load();
-        assertTrue(press("a").mustBeEaten());
+        assertTrue(press("leftshift").mustBeEaten());
         assertFalse(ran(new Command.StartMoveUp()));
 
         assertTrue(press("e").mustBeEaten());
@@ -142,19 +142,19 @@ class HandMoveComboTest {
         assertTrue(releaseE.mustBeEaten());
         assertTrue(releaseE.regurgitates().isEmpty());
         assertTrue(ran(new Command.StopMoveUp()));
-        release("a");
+        release("leftshift");
 
         ranCommands.clear();
         assertTrue(press("d").mustBeEaten());
         assertFalse(ran(new Command.StartMoveDown()));
         release("d");
-        press("a");
+        press("leftshift");
         ranCommands.clear();
         assertTrue(press("d").mustBeEaten());
         assertTrue(ran(new Command.StartMoveDown()));
         assertFalse(ran(new Command.StartWheelDown()));
         release("d");
-        release("a");
+        release("leftshift");
 
         ranCommands.clear();
         assertTrue(press("s").mustBeEaten());
@@ -162,13 +162,13 @@ class HandMoveComboTest {
         assertFalse(ran(new Command.StartMoveLeft()));
         release("s");
         load();
-        press("a");
+        press("leftshift");
         ranCommands.clear();
         assertTrue(press("s").mustBeEaten());
         assertTrue(ran(new Command.StartMoveLeft()));
         assertFalse(ran(new Command.SwitchMode("window-switch-mode")));
         release("s");
-        release("a");
+        release("leftshift");
 
         ranCommands.clear();
         assertTrue(press("f").mustBeEaten());
@@ -177,27 +177,40 @@ class HandMoveComboTest {
         release("f");
 
         load();
-        press("a");
+        press("leftshift");
         ranCommands.clear();
         assertTrue(press("f").mustBeEaten());
         assertTrue(ran(new Command.StartMoveRight()));
         assertFalse(ran(new Command.SwitchMode("ui-hint-mode")));
         assertFalse(ran(new Command.SwitchMode("hint1-mode")));
+
+        load();
+        assertTrue(press("r").mustBeEaten());
+        assertTrue(ran(new Command.SwitchMode("vision-hint-mode")));
+        assertFalse(ran(new Command.SwitchMode("hint1-mode")));
+
+        load();
+        press("leftshift");
+        ranCommands.clear();
+        assertTrue(press("r").mustBeEaten());
+        assertTrue(ran(new Command.SwitchMode("hint1-mode")));
+        assertFalse(ran(new Command.StartMoveRight()));
+        assertFalse(ran(new Command.SwitchMode("vision-hint-mode")));
     }
 
     @Test
-    void releasingAStopsHandMovementAndRestoresTheWheel() throws Exception {
+    void releasingShiftStopsHandMovementAndRestoresTheWheel() throws Exception {
         load();
         press("e");
         assertTrue(ran(new Command.StartWheelUp()));
         ranCommands.clear();
-        press("a");
+        press("leftshift");
         assertTrue(ran(new Command.StopWheelUp()));
         assertTrue(ran(new Command.StartMoveUp()));
         ranCommands.clear();
-        EatAndRegurgitates releaseA = release("a");
-        assertTrue(releaseA.mustBeEaten());
-        assertTrue(releaseA.regurgitates().isEmpty());
+        EatAndRegurgitates releaseShift = release("leftshift");
+        assertTrue(releaseShift.mustBeEaten());
+        assertTrue(releaseShift.regurgitates().isEmpty());
         assertTrue(ran(new Command.StopMoveUp()));
         ranCommands.clear();
         EatAndRegurgitates releaseE = release("e");
@@ -215,7 +228,7 @@ class HandMoveComboTest {
         load();
         press("k");
         assertTrue(ran(new Command.StartMoveUp()));
-        press("a");
+        press("leftshift");
         press("e");
         ranCommands.clear();
         release("k");
@@ -225,9 +238,9 @@ class HandMoveComboTest {
     }
 
     @Test
-    void clicksStillWorkWhileAIsHeld() throws Exception {
+    void clicksStillWorkWhileShiftIsHeld() throws Exception {
         load();
-        press("a");
+        press("leftshift");
         press("e");
         ranCommands.clear();
         assertTrue(press("g").mustBeEaten());
@@ -237,7 +250,7 @@ class HandMoveComboTest {
     @Test
     void ctrlStillPassesEdsfThrough() throws Exception {
         load();
-        press("a");
+        press("leftshift");
         press("leftctrl");
         ranCommands.clear();
         assertFalse(press("e").mustBeEaten());
@@ -332,7 +345,7 @@ class HandMoveComboTest {
         load();
         comboWatcher.modeChanged(modeMap.get("zoom-mode"));
         ranCommands.clear();
-        assertTrue(press("a").mustBeEaten());
+        assertTrue(press("leftshift").mustBeEaten());
         assertTrue(press("e").mustBeEaten());
         assertTrue(ran(new Command.StartMoveUp()));
         assertFalse(ran(new Command.StartWheelUp()));

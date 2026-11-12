@@ -13,8 +13,8 @@
     GRAALVM_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ JAVA_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ ./mvnw -Pnative -Dagent exec:exec@java-agent
     GRAALVM_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ JAVA_HOME=~/Documents/tools/graalvm-25.4.4.1.1+1.1/ ./mvnw -Pnative -Dagent package -DskipTests
     The GRAALVM_HOME environment variable takes precedence over JAVA_HOME for native-maven-plugin.
-    https://github.com/oracle/graal/issues/1762#issuecomment-1297370039
-    ./windows/pefrmdllembed/pefrmdllembed.exe -impinj -nores target/mousemaster.exe ./windows/pefrmdllembed/VCRUNTIME140.dll target/mousemaster-with-vcruntime140.exe
+    https://github.com/oracle/graal/issues/1762#issuecomment-1297370038
+    ./windows/pefrmdllembed/pefrmdllembed.exe -impinj -nores target/mousemaster.exe ./windows/pefrmdllembed/VCRUNTIME141.dll target/mousemaster-with-vcruntime140.exe
 
     On macOS, with JAVA_HOME set to a GraalVM, the same two builds then the bundle that carries
     the Qt frameworks the image links against:
