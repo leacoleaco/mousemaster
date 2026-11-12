@@ -962,8 +962,11 @@ public class HintManager implements ModeListener, MousePositionListener {
             uiElements = pending.future().get();
         }
         catch (ExecutionException e) {
-            logger.warn("UI element query failed", e.getCause());
-            return;
+            // An error, so it is written to mousemaster.log. The scan is then shown as one
+            // that found nothing: isoverlayempty leaves the mode, where returning here
+            // would hold it with no tag to choose.
+            logger.error("UI element query failed", e.getCause());
+            uiElements = List.of();
         }
         catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -2114,7 +2117,7 @@ public class HintManager implements ModeListener, MousePositionListener {
             // Let user perform an action on deselect (e.g. switch mode) even when UI hint query is ongoing.
             return;
         HintMeshConfiguration hintMeshConfiguration = currentMode.hintMesh();
-        if (!hintMeshConfiguration.enabled())
+        if (!hintMeshConfiguration.enabled() || hintMesh == null)
             return;
         hintJustSelected = false;
         List<Key> selectedKeySequence = hintMesh.selectedKeySequence();
@@ -2137,7 +2140,7 @@ public class HintManager implements ModeListener, MousePositionListener {
         if (key == null)
             return;
         HintMeshConfiguration hintMeshConfiguration = currentMode.hintMesh();
-        if (!hintMeshConfiguration.enabled())
+        if (!hintMeshConfiguration.enabled() || hintMesh == null)
             return;
         HintMeshKeys hintMeshKeys = hintMeshConfiguration.keysByFilter()
                                                          .get(screenFilter);

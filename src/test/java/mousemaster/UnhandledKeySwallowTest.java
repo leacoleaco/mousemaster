@@ -208,6 +208,27 @@ class UnhandledKeySwallowTest {
         release("leftarrow");
     }
 
+    /** Win+A, Win+period and the like belong to the system, as a Ctrl chord does. */
+    @Test
+    void aLetterPressedWhileAltOrWinIsHeldIsLeftToTheSystem() throws Exception {
+        loadShipped();
+        for (String modifier : List.of("leftwin", "rightwin", "leftalt", "rightalt")) {
+            comboWatcher.modeChanged(modeMap.get("normal-mode"));
+            press(modifier);
+            assertFalse(press("a").mustBeEaten(), modifier + " a");
+            assertFalse(press(".").mustBeEaten(), modifier + " .");
+            drain();
+            assertFalse(animations.running(TIP), modifier);
+            release("a");
+            release(".");
+            release(modifier);
+        }
+        comboWatcher.modeChanged(modeMap.get("normal-mode"));
+        assertTrue(press("a").mustBeEaten());
+        drain();
+        assertTrue(animations.running(TIP));
+    }
+
     @Test
     void withoutTheFlagANonFunctionKeyReachesTheApp() {
         load(List.of(

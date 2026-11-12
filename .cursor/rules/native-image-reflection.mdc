@@ -1,5 +1,5 @@
 ---
-description: 给 Mode 等 record 加字段后，必须同步登记 GraalVM 原生镜像反射，否则打包的 exe 启动即崩
+description: 给 Mode 等 record 加字段、或新用到 JNA 类型后，必须同步登记 GraalVM 原生镜像反射，否则打包的 exe 启动即崩或功能悄悄失效
 alwaysApply: true
 ---
 
@@ -16,5 +16,11 @@ alwaysApply: true
 
 1. 增加无参访问方法，名字等于组件名，例如 `eatUnhandledKeyPress`、`unhandledKeyPressAnimation`。
 2. 把该组件的类型按 record 声明顺序插进规范 `<init>` 的 `parameterTypes`。`boolean` 写 `boolean`，引用类型写全名（`java.lang.String`、`java.util.Map`、`mousemaster.ComboMap`）。
+
+## JNA 类型
+
+JNA 把 `PointerType`、`IntegerType` 这类 `NativeMapped` 参数或返回值交给库接口（`OleAuto.INSTANCE.SysFreeString(bstr)`）时，会反射调用该类型的无参构造器。新用到一个这样的类型（`WTypes$BSTR`、`WinDef$HWND`…）就在两份文件里登记它的 `<init>()`，写法照抄 `WinDef$HWND`。缺登记时 exe 里抛 `IllegalArgumentException: Can't create an instance of class …, requires a public no-arg constructor`。
+
+这种失败常被吞掉：`WindowsUiAutomation` 读控件名失败会让整次无障碍扫描失败，F / I 标签不出现；复制文字则悄悄退回点击选中。exe 里某个功能没反应时，先查 `mousemaster.log`，再查它新用了哪些 JNA 类型。
 
 已打出来的 exe 不会读工作区里的 json。改完元数据后要重新执行原生打包，用户本机是 `build-native.cmd`。

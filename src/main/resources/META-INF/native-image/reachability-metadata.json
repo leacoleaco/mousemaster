@@ -544,6 +544,15 @@
       "allDeclaredFields": true
     },
     {
+      "type": "com.sun.jna.platform.win32.WTypes$BSTR",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
       "type": "com.sun.jna.platform.win32.WinBase$PROCESS_INFORMATION",
       "allDeclaredFields": true
     },

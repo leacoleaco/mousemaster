@@ -224,8 +224,8 @@ normal-mode.mode-after-unhandled-key-press=idle-mode
 - `eat-unhandled-key-press` (default `false`) eats an English letter or symbol that
   the mode does not use, so it is not delivered to other programs. Any key the mode
   binds — a command, a modifier, or a hint letter — keeps that behavior and dismisses
-  the note. Digits, Enter, arrows, and other non-typing keys are left alone. Ctrl
-  chords are still passed through.
+  the note. Digits, Enter, arrows, and other non-typing keys are left alone. A key
+  pressed while Ctrl, Alt, or Win is held is a chord and is still passed through.
 - `unhandled-key-press-animation` names an animation to start when such a key is pressed
   and to stop when a combo key is pressed. The value is the animation's name, such as
   `activemode-tip-animation`.

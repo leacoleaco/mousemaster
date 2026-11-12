@@ -579,6 +579,7 @@ public class KeyboardManager {
      * note and is not eaten here, including when its command switches mode during the
      * press. Digits, Enter, arrows, and every other key are left for the focused program.
      * Ctrl itself is never eaten: a chord must still reach the focused program.
+     * A letter pressed while Alt or Win is held is a chord too, such as Win+A.
      */
     private PressKeyEventProcessingSet noteNonFunctionKey(Key key,
                                                           PressKeyEventProcessingSet processingSet,
@@ -587,7 +588,8 @@ public class KeyboardManager {
         if (mode == null)
             return processingSet;
         String animation = mode.unhandledKeyPressAnimation();
-        if (isCtrlKey(key) || commandKey || isRealComboKey(processingSet)) {
+        if (isCtrlKey(key) || commandKey || isRealComboKey(processingSet) ||
+            pressingAltOrWin()) {
             queueUnhandledKeyTip(animation, false);
             return processingSet;
         }
@@ -597,6 +599,13 @@ public class KeyboardManager {
         queueUnhandledKeyTip(animation, true);
         logger.debug("Swallowing non-function key " + key);
         return processingSet.withSwallowedNonFunctionKey();
+    }
+
+    private boolean pressingAltOrWin() {
+        return currentlyPressedKeys.containsKey(Key.leftalt) ||
+               currentlyPressedKeys.containsKey(Key.rightalt) ||
+               currentlyPressedKeys.containsKey(Key.leftwin) ||
+               currentlyPressedKeys.containsKey(Key.rightwin);
     }
 
     /** Letters a–z and punctuation. Digits stay available, including a digit that is a command. */

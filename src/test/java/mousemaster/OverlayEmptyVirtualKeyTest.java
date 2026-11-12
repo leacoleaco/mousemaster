@@ -170,6 +170,17 @@ class OverlayEmptyVirtualKeyTest {
         assertTrue(overlayCalls.contains("setHintMesh"), overlayCalls.toString());
     }
 
+    /** A scan that throws must not hold the mode with no tag to choose. */
+    @Test
+    void aFailedQueryLeavesTheModeLikeAnEmptyMesh() {
+        load(CompletableFuture.failedFuture(new IllegalStateException("scan failed")));
+        tick();
+        assertTrue(hintManager.hintMeshEmpty());
+        assertEquals(List.of(new Command.SwitchMode("normal-mode")), ranCommands);
+        assertDoesNotThrow(() -> hintManager.selectHintKey(Key.ofName("a")));
+        assertDoesNotThrow(() -> hintManager.deselectHintKey());
+    }
+
     @Test
     void theMeshLeftOnScreenByAQueryStillRunningIsNotAnEmptyMesh() {
         load(found(), new CompletableFuture<>());
