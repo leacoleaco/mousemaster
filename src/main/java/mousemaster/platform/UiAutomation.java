@@ -45,7 +45,11 @@ public interface UiAutomation {
         return CompletableFuture.completedFuture(false);
     }
 
-    record UiElement(Rectangle rectangle, Role role, Control control) {
+    record UiElement(Rectangle rectangle, Role role, Control control, String name) {
+
+        public UiElement(Rectangle rectangle, Role role, Control control) {
+            this(rectangle, role, control, null);
+        }
 
         public UiElement(Rectangle rectangle, Role role) {
             this(rectangle, role, null);
@@ -53,7 +57,7 @@ public interface UiAutomation {
 
         /** A rectangle whose control type was not reported. Vision hints use this. */
         public UiElement(Rectangle rectangle) {
-            this(rectangle, null, null);
+            this(rectangle, null);
         }
 
         public double centerX() {

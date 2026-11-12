@@ -113,6 +113,45 @@ public class UiHintOrderTest {
     }
 
     @Test
+    void anInputAndAButtonAreLabeledBeforeWhateverIsUnderThePointer() {
+        UiElement edit = element(10, 10, UiElement.Role.INPUT, UiElement.Control.EDIT, null);
+        UiElement button = element(40, 400, UiElement.Role.CLICK, UiElement.Control.BUTTON, "确定");
+        UiElement close = element(800, 12, UiElement.Role.CLICK, UiElement.Control.BUTTON, "关闭");
+        UiElement menu = element(200, 40, UiElement.Role.OTHER, UiElement.Control.MENU, "菜单");
+        UiElement list = element(300, 80, UiElement.Role.OTHER, UiElement.Control.LIST, "File list");
+        UiElement pane = element(510, 505, UiElement.Role.OTHER, UiElement.Control.PANE, null);
+        assertEquals(List.of(close, edit, button, menu, list, pane),
+                HintManager.labeledUiElements(
+                        List.of(pane, list, button, menu, edit, close), 1));
+    }
+
+    @Test
+    void aFunctionalNameIsAWholeWordAndEitherLanguage() {
+        assertTrue(HintManager.functionalName("关闭"));
+        assertTrue(HintManager.functionalName("向下还原"));
+        assertTrue(HintManager.functionalName("Close"));
+        assertTrue(HintManager.functionalName("Main menu"));
+        assertTrue(HintManager.functionalName("File list"));
+        assertFalse(HintManager.functionalName("listener"));
+        assertFalse(HintManager.functionalName("playlist"));
+        assertFalse(HintManager.functionalName("enclosure"));
+        assertFalse(HintManager.functionalName(null));
+    }
+
+    @Test
+    void buttonsOfOneKindKeepTheirPlacesWhenReadFromTheTop() {
+        UiElement top = element(100, 40, UiElement.Role.CLICK, UiElement.Control.BUTTON, "保存");
+        UiElement bottom = element(20, 400, UiElement.Role.CLICK, UiElement.Control.BUTTON, "打开");
+        assertEquals(List.of(top, bottom),
+                HintManager.labeledUiElements(List.of(bottom, top), 1));
+    }
+
+    private static UiElement element(int x, int y, UiElement.Role role,
+                                     UiElement.Control control, String name) {
+        return new UiElement(new Rectangle(x, y, 20, 20), role, control, name);
+    }
+
+    @Test
     void theElementsNearestTheMouseComeFirst() {
         UiElement near = new UiElement(new Rectangle(510, 505, 0, 0));
         UiElement middle = new UiElement(new Rectangle(600, 500, 0, 0));
@@ -123,7 +162,7 @@ public class UiHintOrderTest {
     }
 
     @Test
-    void theMouseOrderStaysWhenTheModeIsRebuiltAfterTheMouseMoved() throws IOException {
+    void anInputKeepsAShorterLabelThanTheControlUnderThePointer() throws IOException {
         Mode mode = parse("""
                 idle-mode.to.ui-hint-mode=+u
                 ui-hint-mode.to.idle-mode=+esc
@@ -131,13 +170,17 @@ public class UiHintOrderTest {
                 ui-hint-mode.hint.type=ui-accessibility
                 ui-hint-mode.hint.ui-order=mouse
                 """).modeMap().get("ui-hint-mode");
-        HintManager hintManager = hintManager(List.of(new UiElement(new Rectangle(10, 10, 0, 0)),
-                new UiElement(new Rectangle(510, 505, 0, 0))));
+        UiElement edit = new UiElement(new Rectangle(10, 10, 40, 20),
+                UiElement.Role.INPUT, UiElement.Control.EDIT);
+        UiElement pane = new UiElement(new Rectangle(510, 505, 40, 20),
+                UiElement.Role.OTHER, UiElement.Control.PANE);
+        HintManager hintManager = hintManager(List.of(pane, edit));
         hintManager.mouseMoved(500, 500);
         hintManager.modeChanged(mode);
         hintManager.completePendingUiHintQuery();
         List<Hint> hints = hintManager.hintMesh().hints();
-        assertEquals(510, hints.getFirst().centerX());
+        assertEquals(30, hints.getFirst().centerX());
+        assertTrue(hints.getFirst().keySequence().size() <= hints.get(1).keySequence().size());
         hintManager.mouseMoved(10, 10);
         hintManager.modeChanged(mode);
         assertEquals(hints, hintManager.hintMesh().hints());
@@ -149,7 +192,7 @@ public class UiHintOrderTest {
                 idle-mode.to.ui-hint-mode=+u
                 ui-hint-mode.to.idle-mode=+esc
                 ui-hint-mode.hint.selection-keys=a b c d
-                ui-hint-mode.hint.type=ui-accessibility
+                ui-hint-mode.hint.type=ui-vision
                 ui-hint-mode.hint.ui-order=active-screen-center
                 """).modeMap().get("ui-hint-mode");
         HintManager hintManager = hintManager(List.of(new UiElement(new Rectangle(10, 10, 0, 0)),
@@ -164,9 +207,10 @@ public class UiHintOrderTest {
         Future<List<UiElement>> found = CompletableFuture.completedFuture(elements);
         ScreenManager screenManager = new ScreenManager(
                 () -> Set.of(new Screen(new Rectangle(0, 0, 1920, 1080), 96, 1)));
+        Overlay overlay = proxy(Overlay.class);
         return new HintManager(Map.of(), screenManager,
                 new MouseManager(screenManager, proxy(MouseController.class)),
-                proxy(Overlay.class), new UiAutomation() {
+                overlay, new UiAutomation() {
                     @Override
                     public Future<List<UiElement>> startFindActiveWindowUiElements() {
                         return found;
@@ -176,7 +220,16 @@ public class UiHintOrderTest {
                     public Future<List<UiElement>> startFindUiElementsInArea(Rectangle area) {
                         return found;
                     }
-                }, () -> new App("test.exe"), new KeyRedactor(KeyRedaction.NONE), null);
+                }, () -> new App("test.exe"), new KeyRedactor(KeyRedaction.NONE),
+                new Vision(overlay) {
+                    @Override
+                    public Future<List<UiElement>> startFindElements(Set<Screen> screens,
+                                                                     Rectangle area, int density,
+                                                                     double minSize, int refine,
+                                                                     List<Rectangle> occupied) {
+                        return found;
+                    }
+                });
     }
 
     @SuppressWarnings("unchecked")

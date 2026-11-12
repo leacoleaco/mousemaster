@@ -1376,9 +1376,14 @@ public class HintManager implements ModeListener, MousePositionListener {
             int hintCount = uiElements.size();
             List<Hint> hints = new ArrayList<>(hintCount);
             Set<Integer> prefixLengths = new HashSet<>();
-            buildUiHints(hintMeshConfiguration, screenFilter,
+            // Accessibility tags follow the control, not the pointer, so they stay
+            // when the pointer moves and the window does not. Vision has no type or
+            // name, and keeps ui-order.
+            List<UiElement> ordered = type.type() == HintMeshTypeType.UI_ACCESSIBILITY ?
+                    labeledUiElements(uiElements, activeScreen.scale()) :
                     sortedUiElements(uiElements, type.order(),
-                            activeScreen.scale(), orderPoint),
+                            activeScreen.scale(), orderPoint);
+            buildUiHints(hintMeshConfiguration, screenFilter, ordered,
                     prefixLengths, hints);
             hintMesh.hints(hints)
                     .prefixLength(prefixLengths.size() == 1 ?
@@ -1539,6 +1544,90 @@ public class HintManager implements ModeListener, MousePositionListener {
                     -1, -1, keySequence, element.rectangle(), element.role(),
                     element.control()));
         }
+    }
+
+    /**
+     * The order accessibility hints are labeled in. The first elements get the shortest
+     * labels. An input or a button comes before anything else, and one whose name is a
+     * common control (close, maximize, menu, …) comes before the other inputs and
+     * buttons. The pointer is not consulted, so the same window keeps its tags.
+     */
+    static List<UiElement> labeledUiElements(List<UiElement> uiElements, double scale) {
+        List<List<UiElement>> groups = List.of(new ArrayList<>(), new ArrayList<>(),
+                new ArrayList<>(), new ArrayList<>());
+        for (UiElement element : uiElements)
+            groups.get(labelGroup(element)).add(element);
+        List<UiElement> labeled = new ArrayList<>(uiElements.size());
+        for (List<UiElement> group : groups)
+            labeled.addAll(bandSortedUiElements(group, UiElement::centerY,
+                    UiElement::centerX, scale));
+        return labeled;
+    }
+
+    /** Names of the window buttons, menus and lists people reach for, in either language. */
+    private static final String[] FUNCTIONAL_NAME_MARKS = {
+            "关闭", "最大化", "最小化", "向下还原", "还原", "菜单", "列表",
+            "close", "maximize", "maximise", "minimize", "minimise", "restore",
+            "menu", "list"
+    };
+
+    /**
+     * 0 is an input or a button with a functional name, 1 is any other input or button,
+     * 2 is anything else with a functional name, 3 is the rest.
+     */
+    private static int labelGroup(UiElement element) {
+        boolean preferred = prefersShortLabel(element);
+        boolean named = functionalName(element.name());
+        if (preferred && named)
+            return 0;
+        if (preferred)
+            return 1;
+        if (named)
+            return 2;
+        return 3;
+    }
+
+    /** An input is typed into, a button is pressed. Both are worth a short label. */
+    private static boolean prefersShortLabel(UiElement element) {
+        if (element.role() == UiElement.Role.INPUT)
+            return true;
+        UiElement.Control control = element.control();
+        return control == UiElement.Control.BUTTON ||
+               control == UiElement.Control.SPLIT_BUTTON;
+    }
+
+    static boolean functionalName(String name) {
+        if (name == null || name.isBlank())
+            return false;
+        String folded = name.toLowerCase(Locale.ROOT);
+        for (String mark : FUNCTIONAL_NAME_MARKS)
+            if (occursAsMark(folded, mark))
+                return true;
+        return false;
+    }
+
+    private static boolean occursAsMark(String folded, String mark) {
+        int from = 0;
+        while (from <= folded.length() - mark.length()) {
+            int at = folded.indexOf(mark, from);
+            if (at < 0)
+                return false;
+            if (markBounded(folded, mark, at))
+                return true;
+            from = at + 1;
+        }
+        return false;
+    }
+
+    /** A Latin mark must be a whole word, so "list" does not match "listener". */
+    private static boolean markBounded(String folded, String mark, int at) {
+        if (mark.charAt(0) >= 128)
+            return true;
+        int end = at + mark.length();
+        boolean left = at == 0 || !Character.isLetterOrDigit(folded.charAt(at - 1));
+        boolean right = end == folded.length() ||
+                        !Character.isLetterOrDigit(folded.charAt(end));
+        return left && right;
     }
 
     static List<UiElement> sortedUiElements(List<UiElement> uiElements, UiHintOrder order,

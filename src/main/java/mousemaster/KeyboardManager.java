@@ -243,7 +243,12 @@ public class KeyboardManager {
         if (keyEvent.isPress()) {
             List<Regurgitate> regurgitates = List.of();
             if (processingSet == null) {
-                if (!pressingUnhandledKey()) {
+                Mode modeBefore = comboWatcher.getMutatedMode();
+                boolean commandKey = modeBefore != null &&
+                                     comboWatcher.isCurrentModeCommandKey(key);
+                // A held unbound key blocks combos. A key this mode already binds
+                // still has to reach them, or exit and hint are swallowed instead.
+                if (!pressingUnhandledKey() || commandKey) {
                     PressKeyEventProcessingSet comboWatcherProcessingSet =
                             comboWatcher.keyEvent(keyEvent);
                     Map<Combo, PressKeyEventProcessing> processingByCombo =
@@ -254,7 +259,7 @@ public class KeyboardManager {
                 else {
                     processingSet = new PressKeyEventProcessingSet(Map.of(), Map.of());
                 }
-                processingSet = noteNonFunctionKey(key, processingSet);
+                processingSet = noteNonFunctionKey(key, processingSet, modeBefore, commandKey);
                 if (!processingSet.isPartOfComboSequence()) {
                     regurgitates = buildRegurgitates(null, null, Set.of());
                 }
@@ -569,26 +574,40 @@ public class KeyboardManager {
     }
 
     /**
-     * A key that does not run a command is eaten, and the mode's note is shown.
-     * A command key hides that note. Ctrl itself is never eaten: a chord must still
-     * reach the focused program. A key that a combo only ignores, such as a letter
-     * during a copy's wait, is not a command.
+     * An English letter or symbol that does not belong to this mode is eaten, and the
+     * mode's note is shown. A key the mode already binds, including one whose command
+     * switches mode during this press, hides that note and is not eaten here. Digits,
+     * Enter, arrows, and every other key are left for the focused program. Ctrl itself
+     * is never eaten: a chord must still reach the focused program.
      */
     private PressKeyEventProcessingSet noteNonFunctionKey(Key key,
-                                                          PressKeyEventProcessingSet processingSet) {
-        Mode mode = comboWatcher.getMutatedMode();
+                                                          PressKeyEventProcessingSet processingSet,
+                                                          Mode mode,
+                                                          boolean commandKey) {
         if (mode == null)
             return processingSet;
         String animation = mode.unhandledKeyPressAnimation();
-        if (isCtrlKey(key) || isRealComboKey(processingSet)) {
+        if (isCtrlKey(key) || commandKey || isRealComboKey(processingSet)) {
             queueUnhandledKeyTip(animation, false);
             return processingSet;
         }
-        if (!mode.eatUnhandledKeyPress() || processingSet.mustBeEaten())
+        if (!mode.eatUnhandledKeyPress() || processingSet.mustBeEaten() ||
+            !isEnglishLetterOrSymbol(key))
             return processingSet;
         queueUnhandledKeyTip(animation, true);
         logger.debug("Swallowing non-function key " + key);
         return processingSet.withSwallowedNonFunctionKey();
+    }
+
+    /** Letters a–z and punctuation. Digits stay available, including a digit that is a command. */
+    private static boolean isEnglishLetterOrSymbol(Key key) {
+        String character = key.character();
+        if (character == null || character.length() != 1)
+            return false;
+        char c = character.charAt(0);
+        if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
+            return true;
+        return !Character.isLetterOrDigit(c) && !Character.isWhitespace(c);
     }
 
     private void queueUnhandledKeyTip(boolean show) {

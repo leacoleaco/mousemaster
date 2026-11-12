@@ -221,9 +221,10 @@ normal-mode.mode-after-unhandled-key-press=idle-mode
   button will be released) as soon as the current mode is switched to that mode.
 - `mode-after-unhandled-key-press` is for switching to a mode whenever a key that is not
   part of any combo is pressed.
-- `eat-unhandled-key-press` (default `false`) eats a key that is not part of a combo, so
-  it is not delivered to other programs. Ctrl chords are still passed through. A key that
-  a combo only ignores is eaten too.
+- `eat-unhandled-key-press` (default `false`) eats an English letter or symbol that
+  the mode does not use, so it is not delivered to other programs. A key that is already
+  a command or a held modifier keeps that behavior and dismisses the note. Digits, Enter,
+  arrows, and other non-typing keys are left alone. Ctrl chords are still passed through.
 - `unhandled-key-press-animation` names an animation to start when such a key is pressed
   and to stop when a combo key is pressed. The value is the animation's name, such as
   `activemode-tip-animation`.
@@ -872,7 +873,16 @@ apart horizontally, is one column labeled from top to bottom:
 ui-hint-mode.overlay.ui-order=left-to-right
 ```
 
-`ui-order` only applies to `overlay.type=ui-accessibility` and `overlay.type=ui-vision`.
+`ui-order` applies to `overlay.type=ui-vision`.
+
+Accessibility hints (`overlay.type=ui-accessibility`) are not ordered by `ui-order` or by the
+pointer. They are labeled by the element, so the tags stay put when the pointer moves and the
+window does not. An input (an edit, a combo box, a spinner) or a button (a button, a split
+button) is labeled before anything else, and one whose name is a common control — close,
+maximize, minimize, restore, menu, list, or 关闭、最大化、最小化、还原、菜单、列表 — is labeled
+before the other inputs and buttons. An element that is not an input or a button but has one
+of those names comes next. The rest are labeled from the top of the window, each row from
+left to right. The first elements get the shortest labels.
 
 A scan that finds no element leaves the mode showing nothing. The built-in virtual key
 `isoverlayempty` is pressed then, so a combo can leave the mode:
@@ -980,8 +990,9 @@ ui-hint-mode.overlay.area=active-screen
 ui-hint-mode.overlay.vision-density=6
 ```
 
-Vision UI hints read the same **`area`** and **`ui-order`** as accessibility UI hints, and
-share every selection, click and appearance property with them. Detection runs off the keyboard
+Vision UI hints read the same **`area`** as accessibility UI hints, and they read
+**`ui-order`**, which accessibility hints do not. They share every selection, click and
+appearance property with them. Detection runs off the keyboard
 hook, so mousemaster stays responsive while a scan is in progress, and `isoverlayempty` is
 pressed when a scan finds nothing, exactly as for accessibility UI hints.
 

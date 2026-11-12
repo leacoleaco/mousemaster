@@ -20,8 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * In activation mode a key that is not a command is eaten, and a note is shown
- * until a command key is pressed or the note's animation ends.
+ * In activation mode an unbound English letter or symbol is eaten, and a note is shown
+ * until a command key is pressed or the note's animation ends. Digits, Enter, and arrows
+ * still reach the focused program.
  */
 class UnhandledKeySwallowTest {
 
@@ -33,6 +34,7 @@ class UnhandledKeySwallowTest {
     private ModeMap modeMap;
     private AnimationPlayer animations;
     private Instant now = Instant.parse("2020-01-01T00:00:00Z");
+    private boolean applyModeSwitches;
 
     @Test
     void shippedModesSwallowNonFunctionKeysOnlyWhileActivated() throws Exception {
@@ -93,11 +95,86 @@ class UnhandledKeySwallowTest {
         release("w");
         release("leftctrl");
 
+        assertFalse(press("enter").mustBeEaten());
+        drain();
+        assertFalse(animations.running(TIP));
+        release("enter");
+        assertFalse(press("leftarrow").mustBeEaten());
+        assertFalse(press("1").mustBeEaten());
+        assertFalse(press("backspace").mustBeEaten());
+        release("leftarrow");
+        release("1");
+        release("backspace");
+
+        EatAndRegurgitates comma = press(",");
+        assertTrue(comma.mustBeEaten());
+        drain();
+        assertTrue(animations.running(TIP));
+        release(",");
+
+        ranCommands.clear();
+        EatAndRegurgitates zero = press("0");
+        assertTrue(zero.mustBeEaten());
+        assertTrue(ran(new Command.PressMiddle()));
+        drain();
+        assertFalse(animations.running(TIP));
+        release("0");
+
         comboWatcher.modeChanged(modeMap.get("idle-mode"));
         ranCommands.clear();
         assertFalse(press("w").mustBeEaten());
         drain();
         assertFalse(animations.running(TIP));
+    }
+
+    @Test
+    void functionLettersDoNotShowTheActivationTip() throws Exception {
+        applyModeSwitches = true;
+        loadShipped();
+
+        press("w");
+        drain();
+        assertTrue(animations.running(TIP));
+        release("w");
+
+        animations.stop(TIP);
+        ranCommands.clear();
+        EatAndRegurgitates q = press("q");
+        drain();
+        assertFalse(animations.running(TIP));
+        assertTrue(ran(new Command.SwitchMode("idle-mode")));
+        release("q");
+
+        comboWatcher.modeChanged(modeMap.get("normal-mode"));
+        animations.stop(TIP);
+        ranCommands.clear();
+        press("w");
+        drain();
+        assertTrue(animations.running(TIP));
+        release("w");
+        EatAndRegurgitates f = press("f");
+        drain();
+        assertFalse(animations.running(TIP));
+        assertTrue(ran(new Command.SwitchMode("ui-hint-mode")));
+        release("f");
+
+        comboWatcher.modeChanged(modeMap.get("normal-mode"));
+        animations.stop(TIP);
+        ranCommands.clear();
+        assertFalse(press("c").mustBeEaten());
+        drain();
+        assertFalse(animations.running(TIP));
+        release("c");
+
+        animations.stop(TIP);
+        press("leftarrow");
+        ranCommands.clear();
+        press("q");
+        drain();
+        assertFalse(animations.running(TIP));
+        assertTrue(ran(new Command.SwitchMode("idle-mode")));
+        release("q");
+        release("leftarrow");
     }
 
     @Test
@@ -137,6 +214,8 @@ class UnhandledKeySwallowTest {
             @Override
             public void run(Command command, Key eventKey) {
                 ranCommands.add(command);
+                if (applyModeSwitches && command instanceof Command.SwitchMode switchMode)
+                    comboWatcher.modeChanged(modeMap.get(switchMode.modeName()));
             }
         };
         comboWatcher = new ComboWatcher(commandRunner, null,

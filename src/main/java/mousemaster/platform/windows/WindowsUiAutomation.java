@@ -34,6 +34,7 @@ public class WindowsUiAutomation implements UiAutomation {
 
     private static final int UIA_BoundingRectanglePropertyId = 30001;
     private static final int UIA_ControlTypePropertyId = 30003;
+    private static final int UIA_NamePropertyId = 30005;
     private static final int UIA_IsOffscreenPropertyId = 30022;
     private static final int UIA_IsEnabledPropertyId = 30010;
     private static final int UIA_IsKeyboardFocusablePropertyId = 30009;
@@ -73,6 +74,7 @@ public class WindowsUiAutomation implements UiAutomation {
     // VARIANT constants
     private static final short VT_BOOL = 0x000B;
     private static final short VT_I4 = 3;
+    private static final short VT_BSTR = 8;
     private static final short VARIANT_TRUE = -1;
     private static final short VARIANT_FALSE = 0;
 
@@ -144,6 +146,7 @@ public class WindowsUiAutomation implements UiAutomation {
         if (cachedCacheRequest != null) {
             cachedCacheRequest.addProperty(UIA_BoundingRectanglePropertyId);
             cachedCacheRequest.addProperty(UIA_ControlTypePropertyId);
+            cachedCacheRequest.addProperty(UIA_NamePropertyId);
             // What tells a control that reacts to a click from one that is only focusable.
             for (int clickPatternPropertyId : CLICK_PATTERN_PROPERTY_IDS)
                 cachedCacheRequest.addProperty(clickPatternPropertyId);
@@ -510,7 +513,8 @@ public class WindowsUiAutomation implements UiAutomation {
                         typeRole == UiElement.Role.OTHER ?
                                 UiElement.Role.of(control, element.isCachedClickable()) :
                                 typeRole,
-                        control);
+                        control,
+                        element.getCachedName());
                 if (!elementBounds.contains(uiElement.centerX(), uiElement.centerY()))
                     continue;
                 if (!clickReaches(hwnd, uiElement.centerX(), uiElement.centerY()))
@@ -906,6 +910,30 @@ public class WindowsUiAutomation implements UiAutomation {
         }
 
         // IUIAutomationElement::GetCachedPropertyValue — vtable index 12
+        /** The control's Name, or null when it has none. The caller matches tags against it. */
+        String getCachedName() {
+            Memory variant = new Memory(24);
+            variant.clear();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(12,
+                    new Object[]{getPointer(), UIA_NamePropertyId, variant},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || variant.getShort(0) != VT_BSTR)
+                return null;
+            Pointer pointer = variant.getPointer(8);
+            if (pointer == null)
+                return null;
+            WTypes.BSTR bstr = new WTypes.BSTR(pointer);
+            try {
+                String value = bstr.getValue();
+                if (value == null || value.isBlank())
+                    return null;
+                return value;
+            }
+            finally {
+                OleAuto.INSTANCE.SysFreeString(bstr);
+            }
+        }
+
         int getCachedControlType() {
             Memory variant = new Memory(24);
             variant.clear();

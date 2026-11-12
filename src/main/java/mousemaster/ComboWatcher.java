@@ -1784,6 +1784,16 @@ public class ComboWatcher {
                currentModePressedPreconditionKeys.contains(modifiedTypedKey);
     }
 
+    /** A key this mode already uses as a command or as a held modifier, such as exit or slow. */
+    public boolean isCurrentModeCommandKey(Key key) {
+        if (currentModeSequenceKeys.contains(key) || currentModePressedPreconditionKeys.contains(key))
+            return true;
+        Key modifiedTypedKey = modifiedTypedKeyByModifiedKey.get(key);
+        return modifiedTypedKey != null &&
+               (currentModeSequenceKeys.contains(modifiedTypedKey) ||
+                currentModePressedPreconditionKeys.contains(modifiedTypedKey));
+    }
+
     public void modeChanged(Mode newMode) {
         App activeApp = activeAppFinder.activeApp();
         entryCombosPending = true;
