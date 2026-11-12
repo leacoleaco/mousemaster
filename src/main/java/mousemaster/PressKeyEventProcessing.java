@@ -15,7 +15,8 @@ public enum PressKeyEventProcessing {
     COMBO_PREPARATION_BREAKER_MUST_BE_EATEN,
     PART_OF_HINT_PREFIX_MUST_BE_EATEN,
     HINT_UNDO_MUST_BE_EATEN, UNSWALLOWED_HINT_END_MUST_BE_EATEN,
-    UNUSED_HINT_SELECTION_KEY_MUST_BE_EATEN;
+    UNUSED_HINT_SELECTION_KEY_MUST_BE_EATEN,
+    SWALLOWED_NON_FUNCTION_KEY;
 
     public boolean mustBeEaten() {
         return this == PART_OF_COMBO_SEQUENCE_MUST_BE_EATEN ||
@@ -25,7 +26,8 @@ public enum PressKeyEventProcessing {
                this == IGNORED_BY_LEADING_WAIT_MUST_BE_EATEN ||
                this == HINT_UNDO_MUST_BE_EATEN ||
                this == UNSWALLOWED_HINT_END_MUST_BE_EATEN ||
-               this == UNUSED_HINT_SELECTION_KEY_MUST_BE_EATEN;
+               this == UNUSED_HINT_SELECTION_KEY_MUST_BE_EATEN ||
+               this == SWALLOWED_NON_FUNCTION_KEY;
     }
 
     public boolean handled() {
@@ -41,7 +43,12 @@ public enum PressKeyEventProcessing {
                this == UNUSED_HINT_SELECTION_KEY_MUST_BE_EATEN ||
                this == PART_OF_PRESSED_COMBO_PRECONDITION_ONLY ||
                this == IGNORED_BY_LEADING_WAIT_MUST_NOT_BE_EATEN ||
-               this == IGNORED_BY_LEADING_WAIT_MUST_BE_EATEN;
+               this == IGNORED_BY_LEADING_WAIT_MUST_BE_EATEN ||
+               this == SWALLOWED_NON_FUNCTION_KEY;
+    }
+
+    public boolean isSwallowedNonFunctionKey() {
+        return this == SWALLOWED_NON_FUNCTION_KEY;
     }
 
     public boolean isPartOfComboSequence() {
@@ -107,6 +114,10 @@ public enum PressKeyEventProcessing {
 
     public static PressKeyEventProcessing unhandled() {
         return UNHANDLED;
+    }
+
+    public static PressKeyEventProcessing swallowedNonFunctionKey() {
+        return SWALLOWED_NON_FUNCTION_KEY;
     }
 
     public static PressKeyEventProcessing partOfComboSequence(boolean mustBeEaten,

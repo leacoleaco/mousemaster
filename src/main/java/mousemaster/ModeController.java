@@ -52,6 +52,7 @@ public class ModeController {
 
     public void update(double delta) {
         hintManager.completePendingUiHintQuery();
+        keyboardState.drainUnhandledKeyPressTips(animationPlayer);
         Mode mutatedMode =
                 animationPlayer.animate(comboWatcher.getMutatedMode(), "hideCursor");
         // The flag catches briefly-pressed unhandled keys that are released before this poll.

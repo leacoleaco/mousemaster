@@ -7614,6 +7614,8 @@
             "boolean",
             "boolean",
             "java.lang.String",
+            "boolean",
+            "java.lang.String",
             "mousemaster.ComboMap",
             "mousemaster.MovementConfiguration",
             "mousemaster.VelocityConfiguration",
@@ -7666,6 +7668,14 @@
         },
         {
           "name": "modeAfterUnhandledKeyPress",
+          "parameterTypes": []
+        },
+        {
+          "name": "eatUnhandledKeyPress",
+          "parameterTypes": []
+        },
+        {
+          "name": "unhandledKeyPressAnimation",
           "parameterTypes": []
         },
         {

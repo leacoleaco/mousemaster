@@ -1,6 +1,17 @@
 @echo off
 setlocal EnableExtensions
+
+rem mousemaster.exe is requireAdministrator. A normal token cannot stop that
+rem process (taskkill returns Access Denied) or replace a file it has open.
+rem S-1-16-12288 is the high integrity level, present only on an elevated token.
+whoami /groups | find "S-1-16-12288" >nul
+if not errorlevel 1 goto :run
+if /i "%~1"=="/elevated" goto :elevate_failed
+goto :elevate
+
+:run
 cd /d "%~dp0"
+title mousemaster deploy
 
 rem ===== 部署目录：以后只改这一行 =====
 set "DEPLOY_DIR=D:\mousemaster"
@@ -53,7 +64,7 @@ taskkill /F /IM mousemaster.exe
 if errorlevel 1 (
     echo.
     echo ERROR: could not stop mousemaster.exe.
-    echo If it is running as administrator, run this script as administrator.
+    echo Close it in Task Manager, then run deploy.cmd again.
     exit /b 1
 )
 rem The exe stays locked for a moment after the process exits.
@@ -67,5 +78,22 @@ echo mousemaster.exe may still be running and locking the file.
 
 :fail
 echo.
+pause
+exit /b 1
+
+:elevate
+echo Requesting administrator privileges...
+echo Approve the User Account Control prompt.
+echo Build output is shown in the new window.
+set "MM_DEPLOY_CMD=%~f0"
+set "MM_DEPLOY_DIR=%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; try { $p = Start-Process -FilePath $env:MM_DEPLOY_CMD -ArgumentList '/elevated' -Verb RunAs -Wait -PassThru -WorkingDirectory $env:MM_DEPLOY_DIR } catch { exit 1223 }; if (-not $p) { exit 1223 }; if ($null -eq $p.ExitCode) { exit 0 }; exit $p.ExitCode"
+if "%ERRORLEVEL%"=="1223" goto :elevate_failed
+exit /b %ERRORLEVEL%
+
+:elevate_failed
+echo.
+echo ERROR: administrator privileges were not granted.
+echo deploy.cmd cannot stop an elevated mousemaster.exe without them.
 pause
 exit /b 1

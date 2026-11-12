@@ -1,0 +1,20 @@
+---
+description: 给 Mode 等 record 加字段后，必须同步登记 GraalVM 原生镜像反射，否则打包的 exe 启动即崩
+alwaysApply: true
+---
+
+# 原生镜像反射登记
+
+`ModePropertyMutator.createWithField` 用反射调用 record 的每个访问方法，再调用规范构造器重建对象。配置加载时 `ComboWatcher.rebuildMutatedMode` 就会走这条路径。HotSpot 上的单元测试发现不了缺登记；打包成 exe 后启动即报 `MissingReflectionRegistrationError`，日志在安装目录的 `mousemaster.log`。`reflect-config.json` 里的 `allRecordComponents: true` 不够，访问方法和构造器参数仍要写明。
+
+给 `Mode` 或任何会被这条路径重建的 record（指示器、缩放等嵌套配置）**新增、重排或删除组件**时，同一次改动里更新这两个文件：
+
+- `src/main/resources/META-INF/native-image/reflect-config.json`
+- `src/main/resources/META-INF/native-image/reachability-metadata.json`
+
+每个组件做两件事，两份文件保持一致：
+
+1. 增加无参访问方法，名字等于组件名，例如 `eatUnhandledKeyPress`、`unhandledKeyPressAnimation`。
+2. 把该组件的类型按 record 声明顺序插进规范 `<init>` 的 `parameterTypes`。`boolean` 写 `boolean`，引用类型写全名（`java.lang.String`、`java.util.Map`、`mousemaster.ComboMap`）。
+
+已打出来的 exe 不会读工作区里的 json。改完元数据后要重新执行原生打包，用户本机是 `build-native.cmd`。

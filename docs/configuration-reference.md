@@ -221,6 +221,12 @@ normal-mode.mode-after-unhandled-key-press=idle-mode
   button will be released) as soon as the current mode is switched to that mode.
 - `mode-after-unhandled-key-press` is for switching to a mode whenever a key that is not
   part of any combo is pressed.
+- `eat-unhandled-key-press` (default `false`) eats a key that is not part of a combo, so
+  it is not delivered to other programs. Ctrl chords are still passed through. A key that
+  a combo only ignores is eaten too.
+- `unhandled-key-press-animation` names an animation to start when such a key is pressed
+  and to stop when a combo key is pressed. The value is the animation's name, such as
+  `activemode-tip-animation`.
 
 ### Mode property mutation
 

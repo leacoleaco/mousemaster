@@ -2,6 +2,7 @@ package mousemaster;
 
 import mousemaster.ComboPrecondition.PressedKeyPrecondition;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -9,6 +10,18 @@ import java.util.Set;
 public record PressKeyEventProcessingSet(
         Map<Combo, PressKeyEventProcessing> processingByCombo,
         Map<Combo, ComboSequenceMatch> matchByCombo) {
+
+    /**
+     * Marks a key that was not a command, so the press and its release are eaten
+     * without joining the eaten-key list that regurgitation replays into the OS.
+     */
+    public static final Combo swallowedNonFunctionKeyCombo = new Combo(
+            "swallowed-non-function-key", new ComboPrecondition(
+            new ComboPrecondition.ComboKeyPrecondition(Set.of(),
+                    new PressedKeyPrecondition(List.of())),
+            new ComboPrecondition.ComboAppPrecondition(Set.of(), Set.of()),
+            new ComboPrecondition.ComboVariablePrecondition(List.of())),
+            new ComboSequence(List.of(), Set.of()));
 
     /**
      * Used for hints and unknown combo (combo of another mode, for which the key is a precondition key).
@@ -120,6 +133,29 @@ public record PressKeyEventProcessingSet(
         return processingByCombo.values()
                                 .stream()
                                 .anyMatch(PressKeyEventProcessing::isHint);
+    }
+
+    /**
+     * True when the key is eaten only because it was not a command. An eating combo
+     * that also matches must stay on the regurgitation list.
+     */
+    public boolean isOnlySwallowedNonFunctionKey() {
+        boolean swallowed = false;
+        for (PressKeyEventProcessing processing : processingByCombo.values()) {
+            if (processing.isSwallowedNonFunctionKey())
+                swallowed = true;
+            else if (processing.mustBeEaten())
+                return false;
+        }
+        return swallowed;
+    }
+
+    public PressKeyEventProcessingSet withSwallowedNonFunctionKey() {
+        Map<Combo, PressKeyEventProcessing> processing =
+                new HashMap<>(processingByCombo);
+        processing.put(swallowedNonFunctionKeyCombo,
+                PressKeyEventProcessing.swallowedNonFunctionKey());
+        return new PressKeyEventProcessingSet(processing, new HashMap<>(matchByCombo));
     }
 
 }

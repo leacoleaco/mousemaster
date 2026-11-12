@@ -5,6 +5,8 @@ import java.util.Map;
 public record Mode(String name, boolean stopCommandsFromPreviousMode,
                    boolean pushModeToHistoryStack,
                    String modeAfterUnhandledKeyPress,
+                   boolean eatUnhandledKeyPress,
+                   String unhandledKeyPressAnimation,
                    ComboMap comboMap, MovementConfiguration mouse,
                    VelocityConfiguration target, Wheel wheel,
                    HintMeshConfiguration hintMesh,

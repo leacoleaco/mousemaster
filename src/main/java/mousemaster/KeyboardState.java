@@ -20,4 +20,8 @@ public class KeyboardState {
     public boolean pollUnhandledKeyJustPressedInCurrentMode() {
         return keyboardManager.pollUnhandledKeyJustPressedInCurrentMode();
     }
+
+    public void drainUnhandledKeyPressTips(AnimationPlayer animationPlayer) {
+        keyboardManager.drainUnhandledKeyPressTips(animationPlayer);
+    }
 }

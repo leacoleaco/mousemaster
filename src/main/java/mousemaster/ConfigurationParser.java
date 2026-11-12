@@ -48,7 +48,9 @@ public class ConfigurationParser {
     private static Map<String, Property<?>> defaultPropertyByName() {
         AtomicReference<Boolean> pushModeToHistoryStack = new AtomicReference<>(false);
         AtomicReference<Boolean> stopCommandsFromPreviousMode = new AtomicReference<>(false);
+        AtomicReference<Boolean> eatUnhandledKeyPress = new AtomicReference<>(false);
         AtomicReference<String> modeAfterPressingUnhandledKeysOnly = new AtomicReference<>();
+        AtomicReference<String> unhandledKeyPressAnimation = new AtomicReference<>();
         MovementConfigurationBuilder mouse = new MovementConfigurationBuilder();
         mouse.velocity().initialVelocity(1000)
                  .maxVelocity(2200)
@@ -147,6 +149,8 @@ public class ConfigurationParser {
                 new Property<>("stop-commands-from-previous-mode", stopCommandsFromPreviousMode),
                 new Property<>("push-mode-to-history-stack", pushModeToHistoryStack),
                 new Property<>("mode-after-unhandled-key-press", modeAfterPressingUnhandledKeysOnly),
+                new Property<>("eat-unhandled-key-press", eatUnhandledKeyPress),
+                new Property<>("unhandled-key-press-animation", unhandledKeyPressAnimation),
                 new Property<>("mouse", mouse),
                 new Property<>("target", mouse.velocity()),
                 new Property<>("wheel", wheel), 
@@ -663,6 +667,8 @@ public class ConfigurationParser {
                     mode.stopCommandsFromPreviousMode,
                     mode.pushModeToHistoryStack,
                     mode.modeAfterUnhandledKeyPress,
+                    mode.eatUnhandledKeyPress,
+                    mode.unhandledKeyPressAnimation,
                     mode.mouse, mode.target, mode.wheel,
                     mode.hintMesh, mode.timeout, mode.indicator,
                     mode.hideCursor, mode.zoom)) {
@@ -1510,6 +1516,27 @@ public class ConfigurationParser {
                                     builder.set(propertyValue);
                                 }
                             },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+            case "eat-unhandled-key-press" ->
+                    mode.eatUnhandledKeyPress.parseReferenceOr(propertyKey,
+                            propertyValue, builder -> {
+                                if (!tryParseComboProperty(propertyValue, modeName,
+                                        new ModePropertyPath(List.of("eatUnhandledKeyPress")),
+                                        v -> Boolean.parseBoolean(v),
+                                        v -> builder.set(Boolean.parseBoolean(v)),
+                                        mode.eatUnhandledKeyPress.mutateModeCommands,
+                                        mode.eatUnhandledKeyPress.setPropertyPaths,
+                                        defaultComboMoveDuration, keyAliases, appAliases,
+                                        keyResolver, allVariableNames, null))
+                                    builder.set(parseBooleanProperty(propertyKey, propertyValue));
+                            },
+                            childPropertiesByParentProperty,
+                            nonRootPropertyKeys);
+            case "unhandled-key-press-animation" ->
+                    mode.unhandledKeyPressAnimation.parseReferenceOr(propertyKey,
+                            propertyValue, builder -> builder.set(checkedAnimationName(
+                                    propertyKey, propertyValue.strip(),
+                                    animationConfigurationByName)),
                             childPropertiesByParentProperty, nonRootPropertyKeys);
             case "mouse" -> {
                 if (keyMatcher.group(group3) == null)
@@ -4312,6 +4339,15 @@ public class ConfigurationParser {
         return Duration.ofMillis(Integer.parseUnsignedInt(string));
     }
 
+    private static boolean parseBooleanProperty(String propertyKey, String propertyValue) {
+        String value = propertyValue.strip();
+        if (!value.equals("true") && !value.equals("false"))
+            throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": should be true or false");
+        return Boolean.parseBoolean(value);
+    }
+
     private static void setCommand(Map<Combo, List<Command>> commandsByCombo,
                                    String multiComboString, Command command,
                                    String label,
@@ -4368,6 +4404,8 @@ public class ConfigurationParser {
         Property<AtomicReference<Boolean>> stopCommandsFromPreviousMode;
         Property<AtomicReference<Boolean>> pushModeToHistoryStack;
         Property<AtomicReference<String>> modeAfterUnhandledKeyPress;
+        Property<AtomicReference<Boolean>> eatUnhandledKeyPress;
+        Property<AtomicReference<String>> unhandledKeyPressAnimation;
         ComboMapConfigurationBuilder comboMap;
         Property<MovementConfigurationBuilder> mouse;
         Property<VelocityConfigurationBuilder> target;
@@ -4407,6 +4445,24 @@ public class ConfigurationParser {
                 }
             };
             modeAfterUnhandledKeyPress = new Property<>("mode-after-unhandled-key-press", modeName,
+                    propertyByKey, new AtomicReference<>()) {
+                @Override
+                void extend(Object parent_) {
+                    AtomicReference<String> parent = (AtomicReference<String>) parent_;
+                    if (builder.get() == null)
+                        builder.set(parent.get());
+                }
+            };
+            eatUnhandledKeyPress = new Property<>("eat-unhandled-key-press", modeName,
+                    propertyByKey, new AtomicReference<>()) {
+                @Override
+                void extend(Object parent_) {
+                    AtomicReference<Boolean> parent = (AtomicReference<Boolean>) parent_;
+                    if (builder.get() == null)
+                        builder.set(parent.get());
+                }
+            };
+            unhandledKeyPressAnimation = new Property<>("unhandled-key-press-animation", modeName,
                     propertyByKey, new AtomicReference<>()) {
                 @Override
                 void extend(Object parent_) {
@@ -4497,9 +4553,12 @@ public class ConfigurationParser {
         }
 
         public Mode build() {
+            Boolean eatUnhandled = eatUnhandledKeyPress.builder.get();
             return new Mode(modeName, stopCommandsFromPreviousMode.builder.get(),
                     pushModeToHistoryStack.builder.get(),
                     modeAfterUnhandledKeyPress.builder.get(),
+                    eatUnhandled != null && eatUnhandled,
+                    unhandledKeyPressAnimation.builder.get(),
                     comboMap.build(),
                     mouse.builder.build(), target.builder.build(), wheel.builder.build(),
                     hintMesh.builder.build(), timeout.builder.build(),

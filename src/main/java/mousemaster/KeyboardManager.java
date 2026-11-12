@@ -6,7 +6,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -44,6 +46,14 @@ public class KeyboardManager {
      * poll-based check in ModeController.update().
      */
     private boolean unhandledKeyJustPressedInCurrentMode;
+    /**
+     * Show or hide the mode's unhandled-key note, in the order the keys arrived.
+     * True shows it, false hides it.
+     */
+    private final Deque<UnhandledKeyTip> unhandledKeyTips = new ArrayDeque<>();
+
+    private record UnhandledKeyTip(String animationName, boolean show) {
+    }
 
     private record Eat(boolean released, PressKeyEventProcessingSet processingSet) {
     }
@@ -121,6 +131,7 @@ public class KeyboardManager {
         eatenKeys.clear();
         lastOsAutoRepeat = null;
         unhandledKeyJustPressedInCurrentMode = false;
+        unhandledKeyTips.clear();
         comboWatcher.reset();
         macroPlayer.reset();
     }
@@ -225,6 +236,8 @@ public class KeyboardManager {
             boolean mustBeEaten = macroPlayer.isKeyPressedByMacro(key);
             if (!mustBeEaten)
                 macroPlayer.keyPressedNotEaten(key);
+            // Ctrl+key is a system shortcut. Drop the "you cannot type" note.
+            queueUnhandledKeyTip(false);
             return eatAndRegurgitates(mustBeEaten, List.of());
         }
         if (keyEvent.isPress()) {
@@ -241,6 +254,7 @@ public class KeyboardManager {
                 else {
                     processingSet = new PressKeyEventProcessingSet(Map.of(), Map.of());
                 }
+                processingSet = noteNonFunctionKey(key, processingSet);
                 if (!processingSet.isPartOfComboSequence()) {
                     regurgitates = buildRegurgitates(null, null, Set.of());
                 }
@@ -255,7 +269,8 @@ public class KeyboardManager {
                     unhandledKeyJustPressedInCurrentMode = true;
                 macroPlayer.clearEarlyRelease(key);
                 macroPlayer.clearDeferredRelease(key);
-                if (processingSet.mustBeEaten()) {
+                if (processingSet.mustBeEaten() &&
+                    !processingSet.isOnlySwallowedNonFunctionKey()) {
                     eatenKeys.put(key, new Eat(false, processingSet));
                 }
                 if (processingSet.isPartOfCompletedComboSequence()) {
@@ -353,6 +368,7 @@ public class KeyboardManager {
                     // for future regurgitation if the combo fails.
                     if (mustBeEaten &&
                         !pressedProcessingSet.isPartOfCompletedComboSequenceAndMustBeEaten() &&
+                        !pressedProcessingSet.isOnlySwallowedNonFunctionKey() &&
                         regurgitates.stream().noneMatch(r -> r.key().equals(key))) {
                         eatenKeys.put(key, new Eat(true, pressedProcessingSet));
                     }
@@ -534,6 +550,69 @@ public class KeyboardManager {
         finally {
             unhandledKeyJustPressedInCurrentMode = false;
         }
+    }
+
+    /** Plays the notes queued by key presses, in order, so a command key hides a note
+     *  that an earlier non-command key in the same tick had shown. */
+    public void drainUnhandledKeyPressTips(AnimationPlayer animationPlayer) {
+        while (!unhandledKeyTips.isEmpty()) {
+            UnhandledKeyTip tip = unhandledKeyTips.removeFirst();
+            if (tip.show())
+                animationPlayer.start(tip.animationName());
+            else
+                animationPlayer.stop(tip.animationName());
+        }
+    }
+
+    private static boolean isCtrlKey(Key key) {
+        return key.equals(Key.leftctrl) || key.equals(Key.rightctrl);
+    }
+
+    /**
+     * A key that does not run a command is eaten, and the mode's note is shown.
+     * A command key hides that note. Ctrl itself is never eaten: a chord must still
+     * reach the focused program. A key that a combo only ignores, such as a letter
+     * during a copy's wait, is not a command.
+     */
+    private PressKeyEventProcessingSet noteNonFunctionKey(Key key,
+                                                          PressKeyEventProcessingSet processingSet) {
+        Mode mode = comboWatcher.getMutatedMode();
+        if (mode == null)
+            return processingSet;
+        String animation = mode.unhandledKeyPressAnimation();
+        if (isCtrlKey(key) || isRealComboKey(processingSet)) {
+            queueUnhandledKeyTip(animation, false);
+            return processingSet;
+        }
+        if (!mode.eatUnhandledKeyPress() || processingSet.mustBeEaten())
+            return processingSet;
+        queueUnhandledKeyTip(animation, true);
+        logger.debug("Swallowing non-function key " + key);
+        return processingSet.withSwallowedNonFunctionKey();
+    }
+
+    private void queueUnhandledKeyTip(boolean show) {
+        Mode mode = comboWatcher.getMutatedMode();
+        queueUnhandledKeyTip(mode == null ? null : mode.unhandledKeyPressAnimation(), show);
+    }
+
+    private void queueUnhandledKeyTip(String animation, boolean show) {
+        if (animation != null)
+            unhandledKeyTips.add(new UnhandledKeyTip(animation, show));
+    }
+
+    /** True when some combo matched this press as one of its own keys, not merely
+     *  as an event a wait ignored. */
+    private static boolean isRealComboKey(PressKeyEventProcessingSet processingSet) {
+        for (Map.Entry<Combo, PressKeyEventProcessing> entry : processingSet.processingByCombo()
+                                                                            .entrySet()) {
+            if (!entry.getValue().isPartOfComboSequence())
+                continue;
+            ComboSequenceMatch match = processingSet.matchByCombo().get(entry.getKey());
+            if (match == null || !match.lastEventAbsorbedByWait())
+                return true;
+        }
+        return false;
     }
 
     /**
