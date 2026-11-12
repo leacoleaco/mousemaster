@@ -59,9 +59,15 @@ class AppMenuTest {
         assertTrue(chrome.matches(new App("chrome.exe")));
         assertFalse(chrome.matches(new App("notepad.exe")));
         assertFalse(chrome.matches(null));
-        assertEquals(List.of("刷新", "后退", "前进", "前一个标签页", "后一个标签页", "打开百度",
-                        "打开 Google", "恢复标签页", "打开历史"),
+        assertEquals(List.of("上一个标签页", "下一个标签页", "刷新", "恢复上一个关闭的页面",
+                        "打开 Google", "打开百度", "后退", "前进", "历史"),
                 chrome.items().stream().map(AppMenuConfiguration.Item::label).toList());
+        assertEquals(List.of("d", "f", "r", "x", "g", "b", "e", "w", "z"),
+                chrome.items().stream()
+                      .map(AppMenuConfiguration.Item::tag)
+                      .filter(tag -> tag != null)
+                      .map(Key::name)
+                      .toList());
     }
 
     @Test
@@ -75,17 +81,18 @@ class AppMenuTest {
             menus.move(1);
         }
         assertEquals(List.of(
-                "+f5 -f5",
-                "+leftalt +leftarrow -leftarrow -leftalt",
-                "+leftalt +rightarrow -rightarrow -leftalt",
                 "+leftctrl +rightshift +tab -tab -rightshift -leftctrl",
                 "+leftctrl +tab -tab -leftctrl",
-                "+leftctrl +t -t -leftctrl wait-200 'https://www.baidu.com/' wait-50 +del -del +enter -enter",
-                "+leftctrl +t -t -leftctrl wait-200 'https://www.google.com/' wait-50 +del -del +enter -enter",
+                "+f5 -f5",
                 "+leftctrl +rightshift +t -t -rightshift -leftctrl",
+                "+leftctrl +t -t -leftctrl wait-200 'https://www.google.com/' wait-50 +del -del +enter -enter",
+                "+leftctrl +t -t -leftctrl wait-200 'https://www.baidu.com/' wait-50 +del -del +enter -enter",
+                "+leftalt +leftarrow -leftarrow -leftalt",
+                "+leftalt +rightarrow -rightarrow -leftalt",
                 "+leftctrl +h -h -leftctrl"), outputs);
         // Down from the last item wraps to the first.
-        assertEquals("+f5 -f5", output(menus.selectedMacro()));
+        assertEquals("+leftctrl +rightshift +tab -tab -rightshift -leftctrl",
+                output(menus.selectedMacro()));
     }
 
     /** What the real command runner did: the macros it queued and the modes it entered. */
@@ -132,33 +139,45 @@ class AppMenuTest {
         ran.runner.setAppMenus(menus);
         menus.modeChanged(menuMode);
 
-        // w is the fourth row. No second key is needed.
-        ran.runner.run(byTag, key("w"));
+        // The letter on the row runs it. No second key is needed.
+        ran.runner.run(byTag, key("d"));
         assertEquals(List.of("+leftctrl +rightshift +tab -tab -rightshift -leftctrl"), ran.macros);
-        assertEquals(List.of("app-menu-done-mode"), ran.modes);
-
-        // t and b are tag keys, but the menu has no tenth row. e is not a tag key.
-        // None of them runs anything, and the menu stays open.
-        ran.runner.run(byTag, key("t"));
+        ran.runner.run(byTag, key("f"));
+        assertEquals("+leftctrl +tab -tab -leftctrl", ran.macros.getLast());
+        ran.runner.run(byTag, key("r"));
+        assertEquals("+f5 -f5", ran.macros.getLast());
+        ran.runner.run(byTag, key("x"));
+        assertEquals("+leftctrl +rightshift +t -t -rightshift -leftctrl", ran.macros.getLast());
+        ran.runner.run(byTag, key("g"));
+        assertEquals("+leftctrl +t -t -leftctrl wait-200 'https://www.google.com/' wait-50 +del -del +enter -enter",
+                ran.macros.getLast());
+        ran.runner.run(byTag, key("b"));
+        assertEquals("+leftctrl +t -t -leftctrl wait-200 'https://www.baidu.com/' wait-50 +del -del +enter -enter",
+                ran.macros.getLast());
         ran.runner.run(byTag, key("e"));
-        ran.runner.run(byTag, null);
-        assertEquals(1, ran.macros.size());
-        assertEquals(1, ran.modes.size());
-
+        assertEquals("+leftalt +leftarrow -leftarrow -leftalt", ran.macros.getLast());
+        ran.runner.run(byTag, key("w"));
+        assertEquals("+leftalt +rightarrow -rightarrow -leftalt", ran.macros.getLast());
         ran.runner.run(byTag, key("z"));
         assertEquals("+leftctrl +h -h -leftctrl", ran.macros.getLast());
-        assertEquals(List.of("app-menu-done-mode", "app-menu-done-mode"), ran.modes);
+        assertEquals(9, ran.modes.size());
+
+        // c is not one of Chrome's letters, and a key that was not pressed does nothing.
+        ran.runner.run(byTag, key("c"));
+        ran.runner.run(byTag, null);
+        assertEquals(9, ran.macros.size());
+        assertEquals(9, ran.modes.size());
 
         // A program with no menu has no tags. g there only closes the note.
         front[0] = new App("notepad.exe");
         menus.modeChanged(configuration.modeMap().get("normal-mode"));
         menus.modeChanged(menuMode);
         ran.runner.run(byTag, key("f"));
-        assertEquals(2, ran.macros.size());
-        assertEquals(2, ran.modes.size());
+        assertEquals(9, ran.macros.size());
+        assertEquals(9, ran.modes.size());
         ran.runner.run(new Command.RunSelectedMenuItem("app-menu-done-mode"), key("g"));
-        assertEquals(2, ran.macros.size());
-        assertEquals(3, ran.modes.size());
+        assertEquals(9, ran.macros.size());
+        assertEquals(10, ran.modes.size());
     }
 
     @Test
@@ -169,9 +188,12 @@ class AppMenuTest {
         String html = menus.html();
         assertTrue(html.contains("class=title>Chrome</td>"));
         assertTrue(html.contains("字母 直接执行"));
-        List<String> tags = List.of("F", "C", "A", "W", "V", "R", "X", "Q", "Z");
-        List<String> labels = List.of("刷新", "后退", "前进", "前一个标签页", "后一个标签页",
-                "打开百度", "打开 Google", "恢复标签页", "打开历史");
+        assertFalse(html.contains("e k 上"));
+        assertFalse(html.contains("d j 下"));
+        assertFalse(html.contains("g / "));
+        List<String> tags = List.of("D", "F", "R", "X", "G", "B", "E", "W", "Z");
+        List<String> labels = List.of("上一个标签页", "下一个标签页", "刷新", "恢复上一个关闭的页面",
+                "打开 Google", "打开百度", "后退", "前进", "历史");
         int from = 0;
         for (int row = 0; row < tags.size(); row++) {
             int tag = html.indexOf(">" + tags.get(row) + "</td>", from);
@@ -179,22 +201,27 @@ class AppMenuTest {
             assertTrue(tag > 0 && label > tag, tags.get(row) + " " + labels.get(row));
             from = label;
         }
-        // The first row is highlighted until a tag is pressed.
-        assertTrue(html.contains("class=itemon bgcolor=\"#7AA2F7\">刷新</td>"));
+        assertTrue(html.contains("class=itemon bgcolor=\"#7AA2F7\">上一个标签页</td>"));
+        assertFalse(html.contains("&nbsp;</td>"));
 
-        assertTrue(menus.selectTag(key("w")));
-        assertTrue(menus.html().contains("class=itemon bgcolor=\"#7AA2F7\">前一个标签页</td>"));
+        assertTrue(menus.selectTag(key("d")));
         assertEquals("+leftctrl +rightshift +tab -tab -rightshift -leftctrl",
                 output(menus.selectedMacro()));
+        assertTrue(menus.selectTag(key("g")));
+        assertTrue(menus.html().contains("class=itemon bgcolor=\"#7AA2F7\">打开 Google</td>"));
+        assertTrue(menus.selectTag(key("b")));
+        assertTrue(menus.html().contains("class=itemon bgcolor=\"#7AA2F7\">打开百度</td>"));
+        assertTrue(menus.selectTag(key("r")));
+        assertEquals("+f5 -f5", output(menus.selectedMacro()));
+        assertTrue(menus.selectTag(key("e")));
+        assertEquals("+leftalt +leftarrow -leftarrow -leftalt", output(menus.selectedMacro()));
+        assertTrue(menus.selectTag(key("w")));
+        assertEquals("+leftalt +rightarrow -rightarrow -leftalt", output(menus.selectedMacro()));
         assertTrue(menus.selectTag(key("z")));
-        assertEquals("+leftctrl +h -h -leftctrl", output(menus.selectedMacro()));
-        // t and b are tag keys, but the menu has no tenth row. e is not a tag key.
-        assertFalse(menus.selectTag(key("t")));
-        assertFalse(menus.selectTag(key("e")));
+        assertTrue(menus.html().contains("class=itemon bgcolor=\"#7AA2F7\">历史</td>"));
+        assertFalse(menus.selectTag(key("c")));
         assertFalse(menus.selectTag(null));
         assertEquals("+leftctrl +h -h -leftctrl", output(menus.selectedMacro()));
-        assertTrue(menus.selectTag(key("f")));
-        assertEquals("+f5 -f5", output(menus.selectedMacro()));
     }
 
     @Test
@@ -220,10 +247,11 @@ class AppMenuTest {
         assertFalse(menus.isEmpty());
 
         // The highlight starts over each time the menu opens.
-        menus.selectTag(key("c"));
+        menus.selectTag(key("g"));
         menus.modeChanged(configuration.modeMap().get("normal-mode"));
         menus.modeChanged(configuration.modeMap().get(AppMenus.MODE));
-        assertEquals("+f5 -f5", output(menus.selectedMacro()));
+        assertEquals("+leftctrl +rightshift +tab -tab -rightshift -leftctrl",
+                output(menus.selectedMacro()));
 
         front[0] = null;
         menus.modeChanged(configuration.modeMap().get("normal-mode"));

@@ -224,7 +224,9 @@ public class CommandRunner {
                     modeController.switchMode(activateWindowByTag.modeAfter());
             }
             case SelectMenuItem selectMenuItem -> {
-                if (appMenus != null)
+                // A key that runs a row does only that. d stays "down" for a menu that
+                // gives the key to no row.
+                if (appMenus != null && !appMenus.hasTag(eventKey))
                     appMenus.move(selectMenuItem.delta());
             }
             case RunMenuItemByTag runMenuItemByTag -> {
@@ -232,7 +234,8 @@ public class CommandRunner {
                     runSelectedMenuItem(runMenuItemByTag.modeAfter());
             }
             case RunSelectedMenuItem runSelectedMenuItem -> {
-                if (appMenus != null)
+                // g confirms, unless the open menu uses g for one of its rows.
+                if (appMenus != null && !appMenus.hasTag(eventKey))
                     runSelectedMenuItem(runSelectedMenuItem.modeAfter());
             }
             // @formatter:on

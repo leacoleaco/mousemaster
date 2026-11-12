@@ -4483,7 +4483,7 @@ public class ConfigurationParser {
 
     /**
      * app-menu.<app alias>.title=<what the menu is headed with>
-     * app-menu.<app alias>.item.<name>=<label> -> <macro output>
+     * app-menu.<app alias>.item.<name>=[<key>:] <label> -> <macro output>
      * The items of a menu are in the order of the file. Choosing one plays its output,
      * which is written like the output of a macro.
      */
@@ -4524,7 +4524,28 @@ public class ConfigurationParser {
                 if (split.length != 2 || split[0].isBlank() || split[1].isBlank())
                     throw new IllegalArgumentException(
                             "Invalid menu item " + propertyValue +
-                            ": expected <label> -> <macro output>");
+                            ": expected <label> -> <macro output>, or <key>: <label> -> <macro output>");
+                String label = split[0].strip();
+                Key tag = null;
+                int colon = label.indexOf(':');
+                if (colon >= 0) {
+                    // <key>: <label> -> <macro>. The key runs this row at once.
+                    String keyName = label.substring(0, colon).strip();
+                    label = label.substring(colon + 1).strip();
+                    if (keyName.isEmpty() || label.isEmpty())
+                        throw new IllegalArgumentException(
+                                "Invalid menu item " + propertyValue +
+                                ": expected <key>: <label> -> <macro output>");
+                    List<Key> keys = parseKeyList(keyName, keyAliases, keyResolver);
+                    if (keys.size() != 1)
+                        throw new IllegalArgumentException(
+                                "A row's key must be exactly one key, not " + keyName);
+                    tag = keys.getFirst();
+                    Key rowKey = tag;
+                    if (items.stream().anyMatch(item -> rowKey.equals(item.tag())))
+                        throw new IllegalArgumentException(
+                                "The key " + rowKey.name() + " already runs another row");
+                }
                 String outputString = split[1];
                 Set<String> negatedNames = Macro.negatedNamesUsedInOutput(outputString);
                 if (!negatedNames.isEmpty())
@@ -4537,7 +4558,7 @@ public class ConfigurationParser {
                     outputAliasAllKeys.put(aliasName, keyAliases.get(aliasName).keys());
                 Macro macro = Macro.of(menuName + "." + itemName, outputString, keyAliases,
                         keyResolver, Map.of(), outputAliasAllKeys);
-                items.add(new AppMenuConfiguration.Item(itemName, split[0].strip(), macro));
+                items.add(new AppMenuConfiguration.Item(itemName, label, tag, macro));
             } catch (IllegalArgumentException e) {
                 IllegalArgumentException e2 =
                         new IllegalArgumentException("[" + propertyKey + "] " + e.getMessage());

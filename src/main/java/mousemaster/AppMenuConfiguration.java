@@ -11,7 +11,8 @@ import java.util.Set;
 public record AppMenuConfiguration(String name, Set<App> apps, String title,
                                    List<Item> items) {
 
-    public record Item(String name, String label, Macro macro) {
+    /** {@code tag} is the key that runs this item at once. Null when the row has no key. */
+    public record Item(String name, String label, Key tag, Macro macro) {
     }
 
     public boolean matches(App app) {

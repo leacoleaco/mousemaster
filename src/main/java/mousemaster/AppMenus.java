@@ -52,18 +52,30 @@ public final class AppMenus implements ModeListener {
             menu = AppMenu.empty(app == null ? null : app.executableName());
             return;
         }
-        menu = AppMenu.of(configuration.title(),
-                configuration.items().stream().map(AppMenuConfiguration.Item::label).toList(),
-                tagKeys);
+        List<AppMenuConfiguration.Item> items = configuration.items();
+        List<String> labels = items.stream().map(AppMenuConfiguration.Item::label).toList();
+        // A menu that gives rows their own keys uses those. One that doesn't takes the
+        // mode's keys from the top down.
+        boolean ownKeys = items.stream().anyMatch(item -> item.tag() != null);
+        if (ownKeys)
+            menu = AppMenu.withTags(configuration.title(), labels,
+                    items.stream().map(AppMenuConfiguration.Item::tag).toList());
+        else
+            menu = AppMenu.of(configuration.title(), labels, tagKeys);
+    }
+
+    /** Whether the open menu runs this key itself. */
+    public boolean hasTag(Key key) {
+        return menu.rowOf(key) >= 0;
     }
 
     public void move(int delta) {
         menu = menu.move(delta);
     }
 
-    /** Moves the highlight to the item this key tags. False when the key tags no item. */
+    /** Moves the highlight to the item this key runs. False when the key runs no item. */
     public boolean selectTag(Key key) {
-        int row = MenuTags.row(tagKeys, key, menu.tagCount());
+        int row = menu.rowOf(key);
         if (row < 0)
             return false;
         menu = menu.select(row);
