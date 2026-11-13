@@ -68,6 +68,9 @@ public class WindowsUiAutomation implements UiAutomation {
     private static final int TEXT_UNIT_CHARACTER = 0;
     private static final int TEXT_UNIT_WORD = 2;
     private static final int TEXT_UNIT_LINE = 3;
+    private static final int TEXT_UNIT_PARAGRAPH = 4;
+    /** A paragraph longer than this is too much to pick words from. */
+    private static final int TEXT_LIMIT_PARAGRAPH = 4_000;
     private static final int TEXT_PATTERN_RANGE_ENDPOINT_END = 1;
     /** The control cannot select text. A failed query is treated the same way. */
     private static final int SUPPORTED_TEXT_SELECTION_NONE = 0;
@@ -825,6 +828,120 @@ public class WindowsUiAutomation implements UiAutomation {
             if (range != null)
                 range.Release();
             pattern.Release();
+        }
+    }
+
+    /**
+     * The paragraph at the pointer, read from the control's text pattern like
+     * {@link #startCopyText}, on the same thread. Nothing is selected and the clipboard
+     * is not written. Null where there is no text pattern.
+     */
+    @Override
+    public Future<String> startReadText() {
+        try {
+            ensureInitialized();
+            if (automation == null)
+                return CompletableFuture.completedFuture(null);
+            WinDef.POINT point = new WinDef.POINT();
+            if (!User32.INSTANCE.GetCursorPos(point))
+                return CompletableFuture.completedFuture(null);
+            int x = point.x;
+            int y = point.y;
+            return queryExecutor.submit(() -> {
+                initializeBackgroundCom();
+                try {
+                    String text = readTextAt(x, y);
+                    if (text == null)
+                        logger.info("No text pattern at {},{} to read a paragraph from", x, y);
+                    else
+                        logger.info("Read {} characters at {},{} from the text pattern",
+                                text.length(), x, y);
+                    return text;
+                }
+                catch (Throwable t) {
+                    logger.warn("Reading the paragraph under the pointer failed", t);
+                    return null;
+                }
+            });
+        }
+        catch (RuntimeException e) {
+            logger.warn("Reading the paragraph under the pointer failed", e);
+            return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    private static String readTextAt(int x, int y) {
+        UIAutomation uia = new UIAutomation(automation);
+        UIAutomationElement element = uia.elementFromPoint(x, y);
+        if (element == null)
+            return null;
+        int self = Kernel32.INSTANCE.GetCurrentProcessId();
+        if (element.processId() == self) {
+            element.Release();
+            return null;
+        }
+        UIAutomationTreeWalker walker = uia.rawViewWalker();
+        try {
+            for (int depth = 0; element != null && depth < TEXT_PATTERN_PARENT_LIMIT; depth++) {
+                if (element.processId() != self) {
+                    String text = readElementText(element, x, y);
+                    if (text != null)
+                        return text;
+                }
+                if (walker == null)
+                    return null;
+                UIAutomationElement parent = walker.parent(element);
+                element.Release();
+                element = parent;
+            }
+            return null;
+        }
+        finally {
+            if (element != null)
+                element.Release();
+            if (walker != null)
+                walker.Release();
+        }
+    }
+
+    /**
+     * A control that has no paragraphs answers with a larger unit, up to the whole
+     * document. Past what can be picked from, the line is read instead.
+     */
+    private static String readElementText(UIAutomationElement element, int x, int y) {
+        UIAutomationTextPattern pattern = element.textPattern();
+        if (pattern == null)
+            return null;
+        try {
+            String paragraph = rangeText(pattern, x, y, TEXT_UNIT_PARAGRAPH,
+                    TEXT_LIMIT_PARAGRAPH + 1);
+            if (paragraph != null && !paragraph.isBlank() &&
+                paragraph.length() <= TEXT_LIMIT_PARAGRAPH)
+                return paragraph;
+            String line = rangeText(pattern, x, y, TEXT_UNIT_LINE, TEXT_LIMIT_LINE);
+            if (line != null && !line.isBlank())
+                return line;
+            if (paragraph == null || paragraph.isBlank())
+                return null;
+            return paragraph.substring(0, Math.min(paragraph.length(), TEXT_LIMIT_PARAGRAPH));
+        }
+        finally {
+            pattern.Release();
+        }
+    }
+
+    private static String rangeText(UIAutomationTextPattern pattern, int x, int y, int unit,
+                                    int limit) {
+        UIAutomationTextRange range = pattern.rangeFromPoint(x, y);
+        if (range == null)
+            return null;
+        try {
+            if (!range.expandToEnclosingUnit(unit))
+                return null;
+            return range.text(limit);
+        }
+        finally {
+            range.Release();
         }
     }
 

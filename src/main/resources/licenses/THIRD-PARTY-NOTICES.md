@@ -12,9 +12,13 @@ shown.
 | [SLF4J](https://www.slf4j.org) | 2.0.15 | (C) QOS.ch Sarl | MIT |
 | [Gson](https://github.com/google/gson) | 2.12.1 | (C) Google Inc. | Apache-2.0 |
 | [jsoup](https://jsoup.org) | 1.19.1 | (C) Jonathan Hedley | MIT |
+| [jieba](https://github.com/fxsjy/jieba) word list (`dict.txt`, reduced) | — | (C) 2013 Sun Junyi | MIT |
 
-The text of every license shown accompanies this file, SLF4J's and jsoup's MIT texts as
-MIT-SLF4J.txt and MIT-jsoup.txt.
+The text of every license shown accompanies this file, SLF4J's, jsoup's and jieba's MIT texts as
+MIT-SLF4J.txt, MIT-jsoup.txt and MIT-jieba.txt.
+
+`chinese-words.txt`, the list the word picker cuts Chinese text with, is jieba's dictionary
+without its part-of-speech column and its rarest and longest words, with a few words added.
 
 Qt and QtJambi are embedded unmodified. Their source is available from
 https://code.qt.io/cgit/qt/qtbase.git and https://github.com/OmixVisualization/qtjambi.

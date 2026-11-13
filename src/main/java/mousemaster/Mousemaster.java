@@ -24,6 +24,7 @@ public class Mousemaster {
     private AnimationPlayer animationPlayer;
     private KeyboardManager keyboardManager;
     private IndicatorManager indicatorManager;
+    private CopyTools copyTools;
     private HintManager hintManager;
     private ZoomManager zoomManager;
     private ModeController modeController;
@@ -330,6 +331,38 @@ public class Mousemaster {
         AppMenus appMenus =
                 new AppMenus(configuration.appMenus(), platform.activeAppFinder()::activeApp);
         indicatorManager.setAppMenus(appMenus);
+        // The tools of the configuration being replaced may still have a window open.
+        if (copyTools != null)
+            copyTools.shutdown();
+        copyTools = new CopyTools(new CopyTools.Pointer() {
+            @Override
+            public int x() {
+                return mouseManager.x();
+            }
+
+            @Override
+            public int y() {
+                return mouseManager.y();
+            }
+
+            @Override
+            public void moveTo(int x, int y) {
+                mouseManager.moveTo(x, y);
+            }
+
+            @Override
+            public boolean jumping() {
+                return mouseManager.jumping();
+            }
+
+            @Override
+            public void halt() {
+                mouseManager.haltMovement();
+            }
+        }, screenManager, platform.screenTools(), platform.uiAutomation(),
+                commandRunner.copyToolsOutput());
+        indicatorManager.setCopyTools(copyTools);
+        commandRunner.setCopyTools(copyTools);
         zoomManager = new ZoomManager(screenManager, hintManager, platform.overlay());
         // ComboWatcher is the sole broadcaster to ModeListeners: it broadcasts
         // on mode switch (delegated from ModeController) and on mode mutation.
@@ -339,7 +372,7 @@ public class Mousemaster {
         // the indicator so the menu text exists on the first frame of their mode.
         modeListeners = new ArrayList<>(
                 List.of(platform, mouseManager, hintManager, zoomManager, windowSwitcher,
-                        appMenus, indicatorManager));
+                        appMenus, copyTools, indicatorManager));
         if (tray != null && tray.isActive())
             modeListeners.add(tray);
         comboWatcher.setModeListeners(modeListeners);

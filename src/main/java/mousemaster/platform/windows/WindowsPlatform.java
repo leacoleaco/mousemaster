@@ -37,6 +37,7 @@ public class WindowsPlatform implements Platform {
     private final WindowsMouseController mouse = new WindowsMouseController(this::mousePositionSet);
     private final WindowsOverlay overlay = new WindowsOverlay(mouse);
     private final UiAutomation uiAutomation = new WindowsUiAutomation();
+    private final WindowsScreenTools screenTools = new WindowsScreenTools();
     private final Vision vision = new Vision(overlay);
     private final ActiveAppFinder activeAppFinder = new WindowsActiveAppFinder();
     private final Console console = new WindowsConsole();
@@ -479,6 +480,11 @@ public class WindowsPlatform implements Platform {
     @Override
     public UiAutomation uiAutomation() {
         return uiAutomation;
+    }
+
+    @Override
+    public mousemaster.platform.ScreenTools screenTools() {
+        return screenTools;
     }
 
     @Override

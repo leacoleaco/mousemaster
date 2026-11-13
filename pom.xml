@@ -337,6 +337,9 @@
                                 <gzip src="${project.build.outputDirectory}/keyboard-layouts.json"
                                       destfile="${project.build.outputDirectory}/keyboard-layouts.json.gz"/>
                                 <delete file="${project.build.outputDirectory}/keyboard-layouts.json"/>
+                                <gzip src="${project.build.outputDirectory}/chinese-words.txt"
+                                      destfile="${project.build.outputDirectory}/chinese-words.txt.gz"/>
+                                <delete file="${project.build.outputDirectory}/chinese-words.txt"/>
                             </target>
                         </configuration>
                     </execution>

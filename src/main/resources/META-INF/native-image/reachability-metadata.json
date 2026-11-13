@@ -9444,6 +9444,16 @@
     {
       "type": {
         "lambda": {
+          "declaringClass": "mousemaster.platform.windows.WindowsScreenTools",
+          "interfaces": [
+            "com.sun.jna.platform.win32.WinUser$WindowProc"
+          ]
+        }
+      }
+    },
+    {
+      "type": {
+        "lambda": {
           "declaringClass": "mousemaster.platform.windows.WindowsPlatform",
           "interfaces": [
             "com.sun.jna.platform.win32.WinUser$LowLevelKeyboardProc"

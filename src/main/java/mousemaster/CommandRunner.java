@@ -19,6 +19,7 @@ public class CommandRunner {
     private AnimationPlayer animationPlayer;
     private WindowSwitcher windowSwitcher;
     private AppMenus appMenus;
+    private CopyTools copyTools;
     private final UiAimPlayer uiAimPlayer;
     /** The item asked to leave activation mode once its keys and its click have finished. */
     private boolean leaveActivationWhenReady;
@@ -80,13 +81,51 @@ public class CommandRunner {
                 if (animationPlayer != null)
                     animationPlayer.start("copiedhintanimation");
             }
+
+            @Override
+            public void copyQuietly() {
+                sendChord(Key.ofCharacter("c"));
+            }
         });
     }
 
     public void update(double delta) {
         copyTextPlayer.update(delta);
+        if (copyTools != null)
+            copyTools.update(delta);
         uiAimPlayer.update(delta);
         leaveActivationIfReady(delta);
+    }
+
+    public void setCopyTools(CopyTools copyTools) {
+        this.copyTools = copyTools;
+    }
+
+    /** What the copy tools ask of the rest of the program. */
+    public CopyTools.Output copyToolsOutput() {
+        return new CopyTools.Output() {
+            @Override
+            public void copyText(CopyText.Kind kind) {
+                copyTextPlayer.start(kind);
+            }
+
+            @Override
+            public void selectLineAndCopy() {
+                copyTextPlayer.startClicks(CopyText.Kind.LINE);
+            }
+
+            @Override
+            public void showCopied() {
+                if (animationPlayer != null)
+                    animationPlayer.start("copiedhintanimation");
+            }
+
+            @Override
+            public void leave() {
+                if (modeController != null)
+                    modeController.switchMode(ACTIVATION_MODE);
+            }
+        };
     }
 
     public void setModeController(ModeController modeController) {
@@ -255,6 +294,37 @@ public class CommandRunner {
                 // g confirms, unless the open menu uses g for one of its rows.
                 if (appMenus != null && !appMenus.hasTag(eventKey))
                     runSelectedMenuItem(runSelectedMenuItem.modeAfter());
+            }
+            case SelectCopyItem selectCopyItem -> {
+                // A key that runs a row does only that.
+                if (copyTools != null && !copyTools.hasMenuTag(eventKey))
+                    copyTools.moveMenu(selectCopyItem.delta());
+            }
+            case RunCopyItem runCopyItem -> {
+                if (copyTools != null) {
+                    copyTools.run(runCopyItem.item());
+                    modeController.switchMode(runCopyItem.modeAfter());
+                }
+            }
+            case RunSelectedCopyItem runSelectedCopyItem -> {
+                RunCopyItem selected = copyTools == null || copyTools.hasMenuTag(eventKey) ?
+                        null : copyTools.selectedMenuItem();
+                if (selected != null) {
+                    copyTools.run(selected.item());
+                    modeController.switchMode(selected.modeAfter());
+                }
+            }
+            case CopyToolKey copyToolKey -> {
+                if (copyTools != null)
+                    copyTools.key(eventKey);
+            }
+            case CopyToolUndo copyToolUndo -> {
+                if (copyTools != null)
+                    copyTools.undo();
+            }
+            case CopyToolConfirm copyToolConfirm -> {
+                if (copyTools != null && copyTools.confirm())
+                    modeController.switchMode(copyToolConfirm.modeAfter());
             }
             // @formatter:on
         }

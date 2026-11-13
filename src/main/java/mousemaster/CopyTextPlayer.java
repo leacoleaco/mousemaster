@@ -46,9 +46,14 @@ public final class CopyTextPlayer {
 
         /** The text is already on the clipboard. Show the same confirmation as {@link #copy()}. */
         void showCopied();
+
+        /** The chord of {@link #copy()} with no confirmation: the caller reads the clipboard next. */
+        default void copyQuietly() {
+            copy();
+        }
     }
 
-    private enum Action { PRESS, RELEASE, SELECT_ALL, COPY }
+    private enum Action { PRESS, RELEASE, SELECT_ALL, COPY, COPY_QUIETLY }
 
     private final Output output;
     private final List<Action> actions = new ArrayList<>();
@@ -76,6 +81,21 @@ public final class CopyTextPlayer {
         logger.debug("Copy text at pointer: " + kind);
     }
 
+    /**
+     * Selects with clicks straight away, without asking the control for its text first,
+     * and sends the copy chord with no confirmation. For a caller that already found
+     * nothing to read and wants what the program itself copies.
+     */
+    public void startClicks(Command.CopyText.Kind kind) {
+        output.releaseLeft();
+        output.haltMovement();
+        pending = null;
+        copyFuture = null;
+        actions.clear();
+        scheduleClicks(kind, Action.COPY_QUIETLY);
+        logger.debug("Select with clicks at pointer: " + kind);
+    }
+
     public void update(double delta) {
         if (pending != null) {
             readingKind = pending;
@@ -90,7 +110,7 @@ public final class CopyTextPlayer {
                 output.showCopied();
                 return;
             }
-            scheduleClicks(kind);
+            scheduleClicks(kind, Action.COPY);
         }
         else if (copyFuture != null)
             return;
@@ -104,6 +124,7 @@ public final class CopyTextPlayer {
                 case RELEASE -> output.releaseLeft();
                 case SELECT_ALL -> output.selectAll();
                 case COPY -> output.copy();
+                case COPY_QUIETLY -> output.copyQuietly();
             }
             if (next >= actions.size())
                 return;
@@ -121,7 +142,7 @@ public final class CopyTextPlayer {
         }
     }
 
-    private void scheduleClicks(Command.CopyText.Kind kind) {
+    private void scheduleClicks(Command.CopyText.Kind kind, Action copy) {
         int clicks = switch (kind) {
             case WORD -> 2;
             case LINE -> 3;
@@ -133,7 +154,7 @@ public final class CopyTextPlayer {
         }
         if (kind == Command.CopyText.Kind.ALL)
             actions.add(Action.SELECT_ALL);
-        actions.add(Action.COPY);
+        actions.add(copy);
         next = 0;
         remaining = 0;
     }
@@ -143,7 +164,7 @@ public final class CopyTextPlayer {
             case PRESS -> HOLD_SECONDS;
             case RELEASE -> next == Action.PRESS ? BETWEEN_CLICKS_SECONDS : BEFORE_KEYS_SECONDS;
             case SELECT_ALL -> BEFORE_KEYS_SECONDS;
-            case COPY -> 0;
+            case COPY, COPY_QUIETLY -> 0;
         };
     }
 }

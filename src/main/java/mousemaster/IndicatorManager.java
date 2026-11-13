@@ -32,6 +32,7 @@ public class IndicatorManager implements ModeListener {
     private double frameWait;
     private WindowSwitcher windowSwitcher;
     private AppMenus appMenus;
+    private CopyTools copyTools;
 
     public IndicatorManager(Overlay overlay, AnimationPlayer animationPlayer,
                             HintManager hintManager, Supplier<App> activeApp) {
@@ -47,6 +48,10 @@ public class IndicatorManager implements ModeListener {
 
     public void setAppMenus(AppMenus appMenus) {
         this.appMenus = appMenus;
+    }
+
+    public void setCopyTools(CopyTools copyTools) {
+        this.copyTools = copyTools;
     }
 
     public boolean animating() {
@@ -207,7 +212,7 @@ public class IndicatorManager implements ModeListener {
 
     /** A menu's rows are not part of the configuration. They are filled in when it is drawn. */
     private IndicatorConfiguration withMenus(IndicatorConfiguration indicator) {
-        if (windowSwitcher == null && appMenus == null)
+        if (windowSwitcher == null && appMenus == null && copyTools == null)
             return indicator;
         boolean changed = false;
         Map<String, IndicatorLayerConfiguration> layers = new LinkedHashMap<>();
@@ -221,6 +226,12 @@ public class IndicatorManager implements ModeListener {
                 expanded = expanded.replace(WindowMenu.PLACEHOLDER, windowSwitcher.html());
             if (expanded != null && appMenus != null && expanded.contains(AppMenu.PLACEHOLDER))
                 expanded = expanded.replace(AppMenu.PLACEHOLDER, appMenus.html());
+            if (expanded != null && copyTools != null &&
+                expanded.contains(CopyTools.MENU_PLACEHOLDER))
+                expanded = expanded.replace(CopyTools.MENU_PLACEHOLDER, copyTools.menuHtml());
+            if (expanded != null && copyTools != null &&
+                expanded.contains(TextPicker.PLACEHOLDER))
+                expanded = expanded.replace(TextPicker.PLACEHOLDER, copyTools.textPickerHtml());
             if (expanded != null && !expanded.equals(text)) {
                 layer = layer.builder().text(expanded).build();
                 changed = true;

@@ -171,6 +171,8 @@ public class ConfigurationParser {
                 new Property<>("activate-window", Map.of()),
                 new Property<>("select-menu-item", Map.of()),
                 new Property<>("run-menu-item", Map.of()),
+                new Property<>("copy-menu", Map.of()),
+                new Property<>("copy-tool", Map.of()),
                 new Property<>("release", Map.of()),
                 new Property<>("toggle", Map.of()),
                 new Property<>("start-wheel", Map.of()),
@@ -715,6 +717,16 @@ public class ConfigurationParser {
                                              })
                                              .filter(Objects::nonNull)
                                              .forEach(referencedModes::add);
+            Stream.concat(mode.comboMap.copyMenu.builder.values().stream(),
+                          mode.comboMap.copyTool.builder.values().stream())
+                  .flatMap(Collection::stream)
+                  .map(command -> switch (command) {
+                      case RunCopyItem run -> run.modeAfter();
+                      case CopyToolConfirm confirm -> confirm.modeAfter();
+                      default -> null;
+                  })
+                  .filter(Objects::nonNull)
+                  .forEach(referencedModes::add);
             if (mode.modeAfterUnhandledKeyPress.builder.get() != null)
                 referencedModes.add(mode.modeAfterUnhandledKeyPress.builder.get());
             if (mode.hintMesh.builder.modeAfterSelection() != null)
@@ -2326,6 +2338,104 @@ public class ConfigurationParser {
                     setCommand(mode.comboMap.copyText.builder, propertyValue,
                             new Command.CopyText(kind), propertyKey, defaultComboMoveDuration,
                             keyAliases, appAliases, keyResolver, allVariableNames);
+                }
+            }
+            case "copy-menu" -> {
+                String usage = "copy-menu requires what it does: copy-menu.select.<previous|next>, " +
+                               "copy-menu.run, or copy-menu.<text|word|all|screenshot|long-screenshot>.<mode>";
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.copyMenu.parseReferenceOr(propertyKey, propertyValue,
+                            ignored -> {
+                                throw new IllegalArgumentException(usage);
+                            },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(usage);
+                else if (keyMatcher.group(group4).equals("select")) {
+                    // copy-menu.select.<previous|next>=<combos>: move the highlight.
+                    String direction = keyMatcher.group(group5);
+                    if (direction == null)
+                        throw new IllegalArgumentException(
+                                "copy-menu.select requires a direction: copy-menu.select.<previous|next>");
+                    int delta = switch (direction) {
+                        case "previous" -> -1;
+                        case "next" -> 1;
+                        default -> throw new IllegalArgumentException(
+                                "Unknown copy-menu.select direction: " + direction +
+                                " (expected previous or next)");
+                    };
+                    setCommand(mode.comboMap.copyMenu.builder, propertyValue,
+                            new SelectCopyItem(delta), propertyKey, defaultComboMoveDuration,
+                            keyAliases, appAliases, keyResolver, allVariableNames);
+                }
+                else if (keyMatcher.group(group4).equals("run")) {
+                    // copy-menu.run=<combos>: run the highlighted row.
+                    if (keyMatcher.group(group5) != null)
+                        throw new IllegalArgumentException(
+                                "copy-menu.run takes no mode: each row names the mode it switches to");
+                    setCommand(mode.comboMap.copyMenu.builder, propertyValue,
+                            new RunSelectedCopyItem(), propertyKey, defaultComboMoveDuration,
+                            keyAliases, appAliases, keyResolver, allVariableNames);
+                }
+                else {
+                    // copy-menu.<item>.<mode>=<key>: a row, its key, and the mode it switches to.
+                    CopyItem item = CopyItem.fromPropertyName(keyMatcher.group(group4));
+                    if (item == null)
+                        throw new IllegalArgumentException(
+                                "Unknown copy-menu item: " + keyMatcher.group(group4) +
+                                " (expected text, word, all, screenshot or long-screenshot)");
+                    String modeAfter = keyMatcher.group(group5);
+                    if (modeAfter == null)
+                        throw new IllegalArgumentException(
+                                "copy-menu." + item.propertyName() +
+                                " requires the mode to enter once it ran: copy-menu." +
+                                item.propertyName() + ".<mode>");
+                    modeReferences.add(checkModeReference(modeAfter));
+                    List<Key> tagKeys = parseTagKeys(propertyValue, keyAliases, keyResolver);
+                    if (tagKeys.size() != 1)
+                        throw new IllegalArgumentException(
+                                "Invalid copy-menu key " + propertyValue +
+                                ": a row has exactly one key");
+                    setTagCommand(mode.comboMap.copyMenu.builder, tagKeys,
+                            new RunCopyItem(item, tagKeys.getFirst(), modeAfter), propertyKey,
+                            defaultComboMoveDuration);
+                }
+            }
+            case "copy-tool" -> {
+                String usage = "copy-tool requires what it does: copy-tool.keys, copy-tool.undo, " +
+                               "or copy-tool.confirm.<mode>";
+                if (keyMatcher.group(group3) == null)
+                    mode.comboMap.copyTool.parseReferenceOr(propertyKey, propertyValue,
+                            ignored -> {
+                                throw new IllegalArgumentException(usage);
+                            },
+                            childPropertiesByParentProperty, nonRootPropertyKeys);
+                else if (keyMatcher.group(group4) == null)
+                    throw new IllegalArgumentException(usage);
+                else switch (keyMatcher.group(group4)) {
+                    case "keys" -> {
+                        // copy-tool.keys=<keys>: the letters of the tags, or the two corners.
+                        List<Key> keys = parseTagKeys(propertyValue, keyAliases, keyResolver);
+                        setTagCommand(mode.comboMap.copyTool.builder, keys,
+                                new CopyToolKey(keys), propertyKey, defaultComboMoveDuration);
+                    }
+                    case "undo" -> setCommand(mode.comboMap.copyTool.builder, propertyValue,
+                            new CopyToolUndo(), propertyKey, defaultComboMoveDuration,
+                            keyAliases, appAliases, keyResolver, allVariableNames);
+                    case "confirm" -> {
+                        String modeAfter = keyMatcher.group(group5);
+                        if (modeAfter == null)
+                            throw new IllegalArgumentException(
+                                    "copy-tool.confirm requires the mode to enter once it is done: copy-tool.confirm.<mode>");
+                        modeReferences.add(checkModeReference(modeAfter));
+                        setCommand(mode.comboMap.copyTool.builder, propertyValue,
+                                new CopyToolConfirm(modeAfter), propertyKey,
+                                defaultComboMoveDuration, keyAliases, appAliases, keyResolver,
+                                allVariableNames);
+                    }
+                    default -> throw new IllegalArgumentException(
+                            "Unknown copy-tool property: " + keyMatcher.group(group4) +
+                            " (expected keys, undo or confirm)");
                 }
             }
             case "filter-ui-hints" -> {
@@ -5483,6 +5593,8 @@ public class ConfigurationParser {
         Property<Map<Combo, List<Command>>> activateWindow;
         Property<Map<Combo, List<Command>>> selectMenuItem;
         Property<Map<Combo, List<Command>>> runMenuItem;
+        Property<Map<Combo, List<Command>>> copyMenu;
+        Property<Map<Combo, List<Command>>> copyTool;
 
         public ComboMapConfigurationBuilder(String modeName,
                                             Map<PropertyKey, Property<?>> propertyByKey) {
@@ -5527,6 +5639,8 @@ public class ConfigurationParser {
             activateWindow = new ComboMapProperty("activate-window", modeName, propertyByKey);
             selectMenuItem = new ComboMapProperty("select-menu-item", modeName, propertyByKey);
             runMenuItem = new ComboMapProperty("run-menu-item", modeName, propertyByKey);
+            copyMenu = new ComboMapProperty("copy-menu", modeName, propertyByKey);
+            copyTool = new ComboMapProperty("copy-tool", modeName, propertyByKey);
         }
 
           private static class ComboMapProperty extends Property<Map<Combo, List<Command>>> {
@@ -5587,6 +5701,8 @@ public class ConfigurationParser {
             add(commandsByCombo, activateWindow.builder);
             add(commandsByCombo, selectMenuItem.builder);
             add(commandsByCombo, runMenuItem.builder);
+            add(commandsByCombo, copyMenu.builder);
+            add(commandsByCombo, copyTool.builder);
             add(commandsByCombo, to.builder);
             add(commandsByCombo, startMove.builder);
             add(commandsByCombo, stopMove.builder);

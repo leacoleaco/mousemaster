@@ -35,6 +35,14 @@ public interface ExtendedUser32 extends User32 {
 
     boolean CloseClipboard();
 
+    /** The handle stays the clipboard's: lock it to read, never free it. */
+    Pointer GetClipboardData(int format);
+
+    boolean IsClipboardFormatAvailable(int format);
+
+    /** Changes every time the clipboard's content does. */
+    int GetClipboardSequenceNumber();
+
     int MOUSEEVENTF_MOVE = 0x0001;
     int MOUSEEVENTF_LEFTDOWN = 0x0002;
     int MOUSEEVENTF_LEFTUP = 0x0004;

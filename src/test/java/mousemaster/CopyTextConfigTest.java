@@ -22,14 +22,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CopyTextConfigTest {
 
     @Test
-    void yCopiesTextAndNoLongerOpensTheScreenGrid() throws Exception {
+    void yOpensTheCopyMenuAndNoLongerOpensTheScreenGrid() throws Exception {
         Configuration configuration = configuration();
 
         assertNull(configuration.modeMap().get("grid-mode"));
-        assertEquals(EnumSet.allOf(Command.CopyText.Kind.class),
-                copyKinds(configuration.modeMap().get("normal-mode")));
-        assertEquals(EnumSet.allOf(Command.CopyText.Kind.class),
-                copyKinds(configuration.modeMap().get("zoom-mode")));
+        // The word, the line and everything are no longer y, yy and yyy: they are rows
+        // of the menu y opens.
+        for (String modeName : List.of("normal-mode", "zoom-mode")) {
+            Mode mode = configuration.modeMap().get(modeName);
+            assertEquals(EnumSet.noneOf(Command.CopyText.Kind.class), copyKinds(mode), modeName);
+            assertTrue(switchesTo(mode, "copy-menu-mode"), modeName);
+        }
+        EnumSet<Command.CopyItem> rows = EnumSet.noneOf(Command.CopyItem.class);
+        for (List<Command> commands : configuration.modeMap().get("copy-menu-mode").comboMap()
+                                                   .commandsByCombo().values())
+            for (Command command : commands)
+                if (command instanceof Command.RunCopyItem row)
+                    rows.add(row.item());
+        assertEquals(EnumSet.allOf(Command.CopyItem.class), rows);
         assertTrue(switchesTo(configuration.modeMap().get("normal-mode"), "window-mode"));
         assertEquals(false, switchesTo(configuration.modeMap().get("normal-mode"), "grid-mode"));
     }

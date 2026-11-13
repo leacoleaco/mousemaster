@@ -185,4 +185,70 @@ public sealed interface Command {
      */
     record RunSelectedMenuItem(String modeAfter) implements Command {}
 
+    /** What a row of the copy menu does. The rows are drawn in this order. */
+    enum CopyItem {
+        /** Read the text at the pointer and open the word picker on it. */
+        TEXT("text", "复制一段文字"),
+        WORD("word", "复制光标下单词"),
+        ALL("all", "复制全部"),
+        SCREENSHOT("screenshot", "截图"),
+        LONG_SCREENSHOT("long-screenshot", "截长图");
+
+        private final String propertyName;
+        private final String label;
+
+        CopyItem(String propertyName, String label) {
+            this.propertyName = propertyName;
+            this.label = label;
+        }
+
+        /** The name in the configuration, such as {@code long-screenshot}. */
+        public String propertyName() {
+            return propertyName;
+        }
+
+        public String label() {
+            return label;
+        }
+
+        /** Null when no item bears that name. */
+        public static CopyItem fromPropertyName(String propertyName) {
+            for (CopyItem item : values())
+                if (item.propertyName.equals(propertyName))
+                    return item;
+            return null;
+        }
+    }
+
+    /** Move the highlight in the copy menu. Negative is up. */
+    record SelectCopyItem(int delta) implements Command {}
+
+    /**
+     * Run that row of the copy menu, then switch to {@code modeAfter}. {@code tagKey}
+     * is the key that runs the row, and the letter drawn in front of it.
+     */
+    record RunCopyItem(CopyItem item, Key tagKey, String modeAfter) implements Command {}
+
+    /** Run the highlighted row of the copy menu, then switch to that row's mode. */
+    record RunSelectedCopyItem() implements Command {}
+
+    /**
+     * The key just pressed goes to the copy tool that is open: a letter of a tag in the
+     * word picker, the tag of a corner in a screenshot. In the picker the tags are made
+     * of these keys, and in a screenshot the first two are the corners where the region
+     * begins and ends.
+     */
+    record CopyToolKey(List<Key> keys) implements Command {}
+
+    /** Take back the last thing typed into the copy tool that is open. */
+    record CopyToolUndo() implements Command {}
+
+    /**
+     * Finish the step the open copy tool is at, then switch to {@code modeAfter}: copy
+     * what the word picker marks, copy the region of a screenshot, fix the region of a
+     * long screenshot, or copy the long screenshot. Nothing happens, and the mode stays,
+     * while the tool is not ready for it.
+     */
+    record CopyToolConfirm(String modeAfter) implements Command {}
+
 }

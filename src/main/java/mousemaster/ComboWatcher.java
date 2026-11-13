@@ -1208,7 +1208,12 @@ public class ComboWatcher {
                              c instanceof Command.DeselectHintKey ||
                              c instanceof Command.DeselectAllHintKeys ||
                              c instanceof Command.ActivateWindowByTag ||
-                             c instanceof Command.RunMenuItemByTag;
+                             c instanceof Command.RunMenuItemByTag ||
+                             c instanceof Command.RunCopyItem ||
+                             c instanceof Command.RunSelectedCopyItem ||
+                             c instanceof Command.CopyToolKey ||
+                             c instanceof Command.CopyToolUndo ||
+                             c instanceof Command.CopyToolConfirm;
                 if (ignoreSwitchModeAndHintCommands &&
                     commands.stream()
                             .anyMatch(switchModeOrHintPredicate)) {

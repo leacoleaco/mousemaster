@@ -76,6 +76,11 @@ public interface Platform extends ModeListener {
 
     UiAutomation uiAutomation();
 
+    /** The screen's pixels, the clipboard and the windows of the screenshot tools. */
+    default mousemaster.platform.ScreenTools screenTools() {
+        return mousemaster.platform.ScreenTools.NONE;
+    }
+
     Vision vision();
 
     ActiveAppFinder activeAppFinder();

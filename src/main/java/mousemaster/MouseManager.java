@@ -394,6 +394,15 @@ public class MouseManager implements ModeListener, MousePositionListener {
         mover.moved((int) position.x(), (int) position.y());
     }
 
+    /** Where the pointer is, in screen pixels. */
+    public int x() {
+        return mover.x();
+    }
+
+    public int y() {
+        return mover.y();
+    }
+
     public boolean jumping() {
         return mover.jumping();
     }

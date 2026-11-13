@@ -72,6 +72,16 @@ public interface UiAutomation {
         return CompletableFuture.completedFuture(false);
     }
 
+    /**
+     * The paragraph of text at the pointer, or its line when the paragraph is too long
+     * to pick words from. Nothing is selected and the clipboard is left alone.
+     * The future completes away from the thread that reads the keyboard.
+     * It is null when the pointer is not over text the platform can read.
+     */
+    default Future<String> startReadText() {
+        return CompletableFuture.completedFuture(null);
+    }
+
     record UiElement(Rectangle rectangle, Role role, Control control, String name) {
 
         public UiElement(Rectangle rectangle, Role role, Control control) {

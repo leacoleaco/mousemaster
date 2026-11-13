@@ -8,7 +8,8 @@ public class Licenses {
 
     private static final String[] documents =
             {"THIRD-PARTY-NOTICES.md", "LGPL-3.0.txt", "GPL-3.0.txt", "LGPL-2.1.txt",
-             "Apache-2.0.txt", "EPL-1.0.txt", "MIT-SLF4J.txt", "MIT-jsoup.txt"};
+             "Apache-2.0.txt", "EPL-1.0.txt", "MIT-SLF4J.txt", "MIT-jsoup.txt",
+             "MIT-jieba.txt"};
 
     public static void print() throws IOException {
         for (String document : documents) {

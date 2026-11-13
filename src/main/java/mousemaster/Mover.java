@@ -511,6 +511,15 @@ public class Mover {
         }
     }
 
+    /** Where the pointer was last reported, or last put. */
+    public int x() {
+        return x;
+    }
+
+    public int y() {
+        return y;
+    }
+
     public void moved(int x, int y) {
         this.x = x;
         this.y = y;
