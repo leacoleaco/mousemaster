@@ -90,13 +90,22 @@ public final class AppMenus implements ModeListener {
         return menu.html();
     }
 
-    /** The keys of the highlighted item, ready to be played. Null when there is no menu. */
+    /** The keys of the highlighted item, ready to be played. Null when the item sends none. */
     public ResolvedMacro selectedMacro() {
         if (configuration == null || menu.isEmpty())
             return null;
         Macro macro = configuration.items().get(menu.selected()).macro();
+        if (macro == null || macro.output().parallels().isEmpty())
+            return null;
         // No combo matched here, so an alias in the output stands for all of its keys.
         return macro.resolve(new AliasResolution(Map.of(), macro.outputAliasAllKeys()));
+    }
+
+    /** Where the highlighted item puts the pointer. Null when it only sends keys. */
+    public UiAim selectedAim() {
+        if (configuration == null || menu.isEmpty())
+            return null;
+        return configuration.items().get(menu.selected()).aim();
     }
 
 }

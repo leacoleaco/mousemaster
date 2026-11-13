@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * a opens the menu of the program in front. The shipped configuration gives Chrome one.
- * The rows of that menu, and of the window list, are tagged with the menutag letters.
+ * a opens the menu of the program in front. The shipped configuration gives Chrome
+ * and Cursor one each. The rows of a menu, and of the window list, are tagged.
  */
 class AppMenuTest {
 
@@ -53,8 +53,11 @@ class AppMenuTest {
     @Test
     void chromeMenuListsTheNineItemsInOrder() throws Exception {
         Configuration configuration = shipped();
-        assertEquals(1, configuration.appMenus().size());
-        AppMenuConfiguration chrome = configuration.appMenus().getFirst();
+        assertEquals(2, configuration.appMenus().size());
+        AppMenuConfiguration chrome = configuration.appMenus().stream()
+                .filter(menu -> menu.name().equals("chrome"))
+                .findFirst()
+                .orElseThrow();
         assertEquals("Chrome", chrome.title());
         assertTrue(chrome.matches(new App("chrome.exe")));
         assertFalse(chrome.matches(new App("notepad.exe")));
@@ -68,6 +71,47 @@ class AppMenuTest {
                       .filter(tag -> tag != null)
                       .map(Key::name)
                       .toList());
+        assertTrue(chrome.items().stream().allMatch(item -> item.aim() == null));
+    }
+
+    @Test
+    void cursorMenuClosesSearchesAndPointsAtPanels() throws Exception {
+        Configuration configuration = shipped();
+        AppMenuConfiguration cursor = configuration.appMenus().stream()
+                .filter(menu -> menu.name().equals("cursor"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Cursor", cursor.title());
+        assertTrue(cursor.matches(new App("Cursor.exe")));
+        assertTrue(cursor.matches(new App("cursor.exe")));
+        assertFalse(cursor.matches(new App("chrome.exe")));
+        assertEquals(List.of("关闭当前编辑窗", "搜索", "New Agent", "Terminal", "Git", "项目"),
+                cursor.items().stream().map(AppMenuConfiguration.Item::label).toList());
+        assertEquals(List.of("x", "f", "e", "c", "d", "s"),
+                cursor.items().stream().map(item -> item.tag().name()).toList());
+
+        AppMenus menus = new AppMenus(configuration.appMenus(), () -> new App("Cursor.exe"));
+        menus.modeChanged(configuration.modeMap().get(AppMenus.MODE));
+        assertTrue(menus.selectTag(key("x")));
+        assertEquals("+leftctrl +w -w -leftctrl", output(menus.selectedMacro()));
+        assertNull(menus.selectedAim());
+        assertTrue(menus.selectTag(key("f")));
+        assertEquals("+leftctrl +f -f -leftctrl", output(menus.selectedMacro()));
+        assertNull(menus.selectedAim());
+        assertTrue(menus.selectTag(key("e")));
+        assertNull(menus.selectedMacro());
+        assertEquals(new UiAim(UiAim.Kind.CLICK, "New Agent"), menus.selectedAim());
+        assertTrue(menus.selectTag(key("c")));
+        assertNull(menus.selectedMacro());
+        assertEquals(new UiAim(UiAim.Kind.POINT, "Terminal"), menus.selectedAim());
+        assertTrue(menus.selectTag(key("d")));
+        assertEquals("+leftctrl +rightshift +g -g -rightshift -leftctrl",
+                output(menus.selectedMacro()));
+        assertEquals(new UiAim(UiAim.Kind.POINT, "Source Control"), menus.selectedAim());
+        assertTrue(menus.selectTag(key("s")));
+        assertEquals("+leftctrl +rightshift +e -e -rightshift -leftctrl",
+                output(menus.selectedMacro()));
+        assertEquals(new UiAim(UiAim.Kind.POINT, "Files Explorer"), menus.selectedAim());
     }
 
     @Test

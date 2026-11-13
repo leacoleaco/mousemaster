@@ -425,9 +425,9 @@ class HandMoveComboTest {
     private static final List<String> MENU_TAGS =
             List.of("f", "c", "a", "w", "v", "r", "x", "q", "z", "t", "b");
 
-    /** The letters Chrome writes on its rows. d and g are also move and confirm. */
+    /** The letters a program menu can run. d and g are also move and confirm. */
     private static final List<String> APP_MENU_TAGS =
-            List.of("d", "f", "r", "x", "g", "b", "e", "w", "z");
+            List.of("d", "f", "r", "x", "g", "b", "e", "w", "z", "c", "s");
 
     private boolean ranTag(Class<? extends Command> tagCommand) {
         return ranCommands.stream().anyMatch(tagCommand::isInstance);

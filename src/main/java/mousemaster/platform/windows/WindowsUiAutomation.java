@@ -80,6 +80,8 @@ public class WindowsUiAutomation implements UiAutomation {
 
     private static Pointer automation;
     private static UIAutomationCondition cachedCondition;
+    /** Every control in the window, not only the ones a hint can click. */
+    private static UIAutomationCondition controlViewCondition;
     private static UIAutomationCacheRequest cachedCacheRequest;
     private static final Set<Integer> preWarmedProcessIds = new HashSet<>();
 
@@ -151,6 +153,9 @@ public class WindowsUiAutomation implements UiAutomation {
             for (int clickPatternPropertyId : CLICK_PATTERN_PROPERTY_IDS)
                 cachedCacheRequest.addProperty(clickPatternPropertyId);
         }
+        controlViewCondition = uia.controlViewCondition();
+        if (controlViewCondition == null)
+            logger.warn("Failed to create the control view condition");
     }
 
     /**
@@ -258,15 +263,14 @@ public class WindowsUiAutomation implements UiAutomation {
     }
 
     /**
-     * Queries UI elements from the given window and all visible windows on the same thread
-     * (e.g. popup menus are separate windows on the same thread).
+     * The foreground window and the popups that belong with it.
      * Thread-windows that aren't owned by the foreground window and aren't a popup on a
      * monitor the foreground window covers are skipped. Without this filter,
      * Chromium- and Gecko-based browsers which share a UI thread across multiple top-level
      * browser windows, would surface elements from unrelated browser windows on other
      * monitors and scatter hints onto the wrong screen.
      */
-    private static List<UiElement> queryUiElementsOfWindowAndChildren(HWND foregroundHwnd) {
+    private static List<HWND> windowsOf(HWND foregroundHwnd) {
         int threadId = User32.INSTANCE.GetWindowThreadProcessId(foregroundHwnd, null);
         long foregroundKey = Pointer.nativeValue(foregroundHwnd.getPointer());
         Set<Long> foregroundMonitors = monitorsIntersectingWindow(foregroundHwnd);
@@ -279,14 +283,19 @@ public class WindowsUiAutomation implements UiAutomation {
                 windows.add(hwnd);
             return true;
         }, null);
+        return windows;
+    }
+
+    private static List<UiElement> queryUiElementsOfWindowAndChildren(HWND foregroundHwnd) {
+        List<HWND> windows = windowsOf(foregroundHwnd);
         List<UiElement> uiElements = new ArrayList<>();
         long before = System.nanoTime();
         for (HWND window : windows) {
             queryUiElementsOfWindow(window, uiElements);
         }
         logger.debug("Found {} UI elements in HWND {} with {} windows in {}ms",
-                uiElements.size(), foregroundKey, windows.size(),
-                (long) ((System.nanoTime() - before) / 1e6));
+                uiElements.size(), Pointer.nativeValue(foregroundHwnd.getPointer()),
+                windows.size(), (long) ((System.nanoTime() - before) / 1e6));
         return uiElements;
     }
 
@@ -531,11 +540,89 @@ public class WindowsUiAutomation implements UiAutomation {
     }
 
     /**
+     * Every control of the foreground window whose center lies in that window.
+     * Panels that a hint would skip are kept: a menu item moves the pointer there.
+     */
+    private static UiAutomation.WindowControls queryControlView(HWND foreground) {
+        WinDef.RECT windowRect = WindowsOverlay.windowRectExcludingShadow(foreground);
+        Rectangle window = rectangle(windowRect);
+        if (window.width() <= 0 || window.height() <= 0)
+            return new UiAutomation.WindowControls(new Rectangle(0, 0, 0, 0), List.of());
+        preWarmUiElements(foreground);
+        List<UiElement> elements = new ArrayList<>();
+        long before = System.nanoTime();
+        UIAutomation uia = new UIAutomation(automation);
+        for (HWND hwnd : windowsOf(foreground)) {
+            UIAutomationElement root = null;
+            UIAutomationElementArray array = null;
+            try {
+                root = uia.elementFromHandle(hwnd);
+                if (root == null)
+                    continue;
+                array = root.findAllBuildCache(TreeScope_Descendants,
+                        controlViewCondition, cachedCacheRequest);
+                if (array == null)
+                    continue;
+                int length = array.getLength();
+                for (int i = 0; i < length; i++) {
+                    UIAutomationElement element = array.getElement(i);
+                    if (element == null)
+                        continue;
+                    try {
+                        WinDef.RECT rect = element.getCachedBoundingRectangle();
+                        if (rect == null)
+                            continue;
+                        int width = rect.right - rect.left;
+                        int height = rect.bottom - rect.top;
+                        if (width <= 0 || height <= 0 || width > 20_000 || height > 20_000)
+                            continue;
+                        Rectangle bounds = new Rectangle(rect.left, rect.top, width, height);
+                        if (!window.contains(bounds.center().x(), bounds.center().y()))
+                            continue;
+                        int controlTypeId = element.getCachedControlType();
+                        UiElement.Control control =
+                                UiElement.Control.fromWindowsControlType(controlTypeId);
+                        elements.add(new UiElement(bounds,
+                                control == null ? null : control.role(),
+                                control,
+                                element.getCachedName()));
+                    }
+                    finally {
+                        element.Release();
+                    }
+                }
+            }
+            finally {
+                if (array != null)
+                    array.Release();
+                if (root != null)
+                    root.Release();
+            }
+        }
+        logger.debug("Found {} controls in the active window in {}ms",
+                elements.size(), (long) ((System.nanoTime() - before) / 1e6));
+        return new UiAutomation.WindowControls(window, elements);
+    }
+
+    /**
      * Starts an asynchronous UI element query on a background thread.
      */
     @Override
     public Future<List<UiElement>> startFindActiveWindowUiElements() {
         return startFindWindowUiElements(User32.INSTANCE.GetForegroundWindow());
+    }
+
+    @Override
+    public Future<UiAutomation.WindowControls> startFindActiveWindowControls() {
+        ensureInitialized();
+        HWND hwnd = User32.INSTANCE.GetForegroundWindow();
+        long hwndKey = hwnd != null ? Pointer.nativeValue(hwnd.getPointer()) : 0;
+        return queryExecutor.submit(() -> {
+            if (hwndKey == 0 || controlViewCondition == null || cachedCacheRequest == null)
+                return new UiAutomation.WindowControls(new Rectangle(0, 0, 0, 0), List.of());
+            initializeBackgroundCom();
+            return queryControlView(new HWND(new Pointer(hwndKey)));
+        });
     }
 
     @Override
@@ -753,6 +840,21 @@ public class WindowsUiAutomation implements UiAutomation {
             if (W32Errors.FAILED(hr) || element.getValue() == null)
                 return null;
             return new UIAutomationElement(element.getValue());
+        }
+
+        // IUIAutomation::get_ControlViewCondition — vtable index 18.
+        // 16 is get_RawViewWalker and 20 is CreateCacheRequest.
+        UIAutomationCondition controlViewCondition() {
+            PointerByReference condition = new PointerByReference();
+            WinNT.HRESULT hr = (WinNT.HRESULT) _invokeNativeObject(18,
+                    new Object[]{getPointer(), condition},
+                    WinNT.HRESULT.class);
+            if (W32Errors.FAILED(hr) || condition.getValue() == null) {
+                logger.warn("get_ControlViewCondition failed: 0x{}",
+                        Integer.toHexString(hr.intValue()));
+                return null;
+            }
+            return new UIAutomationCondition(condition.getValue());
         }
 
         // IUIAutomation::get_RawViewWalker — vtable index 16

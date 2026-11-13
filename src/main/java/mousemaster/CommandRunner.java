@@ -19,12 +19,15 @@ public class CommandRunner {
     private AnimationPlayer animationPlayer;
     private WindowSwitcher windowSwitcher;
     private AppMenus appMenus;
+    private final UiAimPlayer uiAimPlayer;
 
     public CommandRunner(MouseManager mouseManager, HintManager hintManager,
                          Platform platform) {
         this.mouseManager = mouseManager;
         this.hintManager = hintManager;
         this.platform = platform;
+        this.uiAimPlayer = new UiAimPlayer(mouseManager, platform,
+                () -> macroPlayer != null && macroPlayer.macroInProgress());
         this.copyTextPlayer = new CopyTextPlayer(new CopyTextPlayer.Output() {
             @Override
             public void releaseLeft() {
@@ -72,6 +75,7 @@ public class CommandRunner {
 
     public void update(double delta) {
         copyTextPlayer.update(delta);
+        uiAimPlayer.update(delta);
     }
 
     public void setModeController(ModeController modeController) {
@@ -250,6 +254,9 @@ public class CommandRunner {
         ResolvedMacro macro = appMenus.selectedMacro();
         if (macro != null && macroPlayer != null)
             macroPlayer.submit(macro);
+        UiAim aim = appMenus.selectedAim();
+        if (aim != null)
+            uiAimPlayer.start(aim, macro != null);
         modeController.switchMode(modeAfter);
     }
 

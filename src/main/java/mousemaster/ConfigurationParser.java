@@ -4485,7 +4485,8 @@ public class ConfigurationParser {
      * app-menu.<app alias>.title=<what the menu is headed with>
      * app-menu.<app alias>.item.<name>=[<key>:] <label> -> <macro output>
      * The items of a menu are in the order of the file. Choosing one plays its output,
-     * which is written like the output of a macro.
+     * which is written like the output of a macro. {@code click 'Name'} and
+     * {@code point 'Name'} move the pointer onto a control instead of, or after, the keys.
      */
     private static List<AppMenuConfiguration> parseAppMenus(List<String> properties,
                                                            Map<String, KeyAlias> keyAliases,
@@ -4493,6 +4494,10 @@ public class ConfigurationParser {
                                                            KeyResolver keyResolver) {
         Pattern appMenuKeyPattern =
                 Pattern.compile("app-menu\\.([^.]+)\\.(title|item\\.([^.]+))");
+        // click 'Name' presses that button. point 'Name' moves into that panel.
+        // Either may follow the keys that show the panel.
+        Pattern menuAimPattern =
+                Pattern.compile("(?i)(^|\\s)(click|point)\\s+'([^']*)'");
         Map<String, String> titleByName = new LinkedHashMap<>();
         Map<String, List<AppMenuConfiguration.Item>> itemsByName = new LinkedHashMap<>();
         for (String property : properties) {
@@ -4547,18 +4552,45 @@ public class ConfigurationParser {
                                 "The key " + rowKey.name() + " already runs another row");
                 }
                 String outputString = split[1];
-                Set<String> negatedNames = Macro.negatedNamesUsedInOutput(outputString);
-                if (!negatedNames.isEmpty())
+                Matcher aimMatcher = menuAimPattern.matcher(outputString);
+                StringBuilder keyOutput = new StringBuilder();
+                UiAim aim = null;
+                int aimCursor = 0;
+                while (aimMatcher.find()) {
+                    if (aim != null)
+                        throw new IllegalArgumentException(
+                                "A menu item can name only one control: " + propertyValue);
+                    String query = aimMatcher.group(3).strip();
+                    if (query.isEmpty())
+                        throw new IllegalArgumentException(
+                                "The control name is empty: " + propertyValue);
+                    UiAim.Kind aimKind = aimMatcher.group(2).equalsIgnoreCase("click")
+                            ? UiAim.Kind.CLICK : UiAim.Kind.POINT;
+                    aim = new UiAim(aimKind, query);
+                    keyOutput.append(outputString, aimCursor, aimMatcher.start());
+                    aimCursor = aimMatcher.end();
+                }
+                keyOutput.append(outputString.substring(aimCursor));
+                String keys = keyOutput.toString().strip().replaceAll("\\s+", " ");
+                Macro macro = null;
+                if (!keys.isEmpty()) {
+                    Set<String> negatedNames = Macro.negatedNamesUsedInOutput(keys);
+                    if (!negatedNames.isEmpty())
+                        throw new IllegalArgumentException(
+                                "Negated names " + negatedNames +
+                                " cannot be used in a menu item: it has no combo to take them from");
+                    Map<String, List<Key>> outputAliasAllKeys = new HashMap<>();
+                    for (String aliasName : Macro.aliasNamesUsedInOutput(keys,
+                            keyAliases.keySet()))
+                        outputAliasAllKeys.put(aliasName, keyAliases.get(aliasName).keys());
+                    macro = Macro.of(menuName + "." + itemName, keys, keyAliases,
+                            keyResolver, Map.of(), outputAliasAllKeys);
+                }
+                if (macro == null && aim == null)
                     throw new IllegalArgumentException(
-                            "Negated names " + negatedNames +
-                            " cannot be used in a menu item: it has no combo to take them from");
-                Map<String, List<Key>> outputAliasAllKeys = new HashMap<>();
-                for (String aliasName : Macro.aliasNamesUsedInOutput(outputString,
-                        keyAliases.keySet()))
-                    outputAliasAllKeys.put(aliasName, keyAliases.get(aliasName).keys());
-                Macro macro = Macro.of(menuName + "." + itemName, outputString, keyAliases,
-                        keyResolver, Map.of(), outputAliasAllKeys);
-                items.add(new AppMenuConfiguration.Item(itemName, label, tag, macro));
+                            "Invalid menu item " + propertyValue +
+                            ": expected <label> -> <macro output>, or click 'Name', or point 'Name'");
+                items.add(new AppMenuConfiguration.Item(itemName, label, tag, macro, aim));
             } catch (IllegalArgumentException e) {
                 IllegalArgumentException e2 =
                         new IllegalArgumentException("[" + propertyKey + "] " + e.getMessage());

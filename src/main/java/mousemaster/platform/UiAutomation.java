@@ -25,6 +25,21 @@ public interface UiAutomation {
      */
     Future<List<UiElement>> startFindUiElementsInArea(Rectangle area);
 
+    /**
+     * Controls of the active window, including panels that are only pointed at.
+     * The future completes away from the thread that reads the keyboard.
+     */
+    default Future<WindowControls> startFindActiveWindowControls() {
+        return CompletableFuture.completedFuture(
+                new WindowControls(new Rectangle(0, 0, 0, 0), List.of()));
+    }
+
+    /**
+     * The controls of one window, in screen pixels.
+     * A control that has no name has a null name.
+     */
+    record WindowControls(Rectangle window, List<UiElement> elements) {}
+
     /** How much of the text at the pointer to copy. */
     enum TextExtent {
         /** The word around the pointer. */
