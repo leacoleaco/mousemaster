@@ -165,8 +165,8 @@ public sealed interface Command {
 
     /**
      * Focus the window whose tag is the key just pressed, then switch to {@code modeAfter}.
-     * The first row is the active window and has no tag. The tags go to the rows after
-     * it on the first page, top to bottom, in this order. A key that tags no row does nothing.
+     * The tags go to the rows of the first page, top to bottom, in this order.
+     * A key that tags no row does nothing.
      */
     record ActivateWindowByTag(List<Key> tagKeys, String modeAfter) implements Command {}
 

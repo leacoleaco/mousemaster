@@ -30,10 +30,7 @@ public final class WindowSwitcher implements ModeListener {
     private SwitchableWindows windows = SwitchableWindows.NONE;
     private WindowMenu menu = WindowMenu.empty();
     private boolean listReady;
-    /**
-     * The keys that tag the rows after the active window, as the mode's tag command
-     * lists them. The first row is that window and has no key.
-     */
+    /** The keys that tag the rows of the first page, as the mode's tag command lists them. */
     private List<Key> tagKeys = List.of();
 
     public WindowSwitcher(Platform platform) {
@@ -63,10 +60,9 @@ public final class WindowSwitcher implements ModeListener {
     /**
      * Moves the highlight to the row this key tags. False when the key tags no row, or a
      * row that has scrolled out of sight: a tag that is not drawn chooses nothing.
-     * The active window is the first row and has no tag.
      */
     public boolean selectTag(Key key) {
-        int row = menu.rowOfTag(MenuTags.row(tagKeys, key, menu.tagCount()));
+        int row = MenuTags.row(tagKeys, key, menu.tagCount());
         if (row < 0 || !menu.shows(row))
             return false;
         menu = menu.select(row);

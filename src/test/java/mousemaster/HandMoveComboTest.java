@@ -249,13 +249,84 @@ class HandMoveComboTest {
     }
 
     @Test
-    void clicksStillWorkWhileShiftIsHeld() throws Exception {
+    void shiftGTogglesTheLeftButtonTheWayNDoes() throws Exception {
         load();
-        press("leftshift");
-        press("e");
+        assertTrue(press("g").mustBeEaten());
+        assertTrue(ran(new Command.PressLeft()));
+        assertFalse(ran(new Command.ToggleLeft()));
+        ranCommands.clear();
+        EatAndRegurgitates releaseG = release("g");
+        assertTrue(releaseG.mustBeEaten());
+        assertTrue(releaseG.regurgitates().isEmpty());
+        assertTrue(ran(new Command.ReleaseLeft()));
+
+        load();
+        press("k");
         ranCommands.clear();
         assertTrue(press("g").mustBeEaten());
         assertTrue(ran(new Command.PressLeft()));
+        ranCommands.clear();
+        releaseG = release("g");
+        assertTrue(releaseG.mustBeEaten());
+        assertTrue(releaseG.regurgitates().isEmpty());
+        assertTrue(ran(new Command.ReleaseLeft()));
+
+        for (String shift : List.of("leftshift", "rightshift")) {
+            load();
+            assertTrue(press(shift).mustBeEaten());
+            press("e");
+            ranCommands.clear();
+            assertTrue(press("g").mustBeEaten());
+            assertTrue(ran(new Command.ToggleLeft()));
+            assertFalse(ran(new Command.PressLeft()));
+            ranCommands.clear();
+            releaseG = release("g");
+            assertTrue(releaseG.mustBeEaten());
+            assertTrue(releaseG.regurgitates().isEmpty());
+            assertFalse(ran(new Command.ReleaseLeft()));
+            release(shift);
+
+            ranCommands.clear();
+            press(shift);
+            press("g");
+            assertTrue(ran(new Command.ToggleLeft()));
+            assertFalse(ran(new Command.PressLeft()));
+            ranCommands.clear();
+            releaseG = release("g");
+            assertTrue(releaseG.mustBeEaten());
+            assertTrue(releaseG.regurgitates().isEmpty());
+            assertFalse(ran(new Command.ReleaseLeft()));
+        }
+
+        load();
+        press("g");
+        press("leftshift");
+        ranCommands.clear();
+        releaseG = release("g");
+        assertTrue(releaseG.mustBeEaten());
+        assertTrue(releaseG.regurgitates().isEmpty());
+        assertTrue(ran(new Command.ReleaseLeft()));
+
+        load();
+        assertTrue(press("n").mustBeEaten());
+        assertTrue(ran(new Command.ToggleLeft()));
+        assertFalse(ran(new Command.PressLeft()));
+
+        for (String modeName : List.of("zoom-mode", "edge-mode")) {
+            load();
+            comboWatcher.modeChanged(modeMap.get(modeName));
+            ranCommands.clear();
+            press("leftshift");
+            ranCommands.clear();
+            assertTrue(press("g").mustBeEaten(), modeName);
+            assertTrue(ran(new Command.ToggleLeft()), modeName);
+            assertFalse(ran(new Command.PressLeft()), modeName);
+            ranCommands.clear();
+            releaseG = release("g");
+            assertTrue(releaseG.mustBeEaten(), modeName);
+            assertTrue(releaseG.regurgitates().isEmpty(), modeName);
+            assertFalse(ran(new Command.ReleaseLeft()), modeName);
+        }
     }
 
     @Test
