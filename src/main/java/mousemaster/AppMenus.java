@@ -108,4 +108,11 @@ public final class AppMenus implements ModeListener {
         return configuration.items().get(menu.selected()).aim();
     }
 
+    /** Whether the highlighted item leaves activation mode once it has finished. */
+    public boolean selectedThenIdle() {
+        if (configuration == null || menu.isEmpty())
+            return false;
+        return configuration.items().get(menu.selected()).thenIdle();
+    }
+
 }

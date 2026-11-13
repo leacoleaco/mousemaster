@@ -50,6 +50,11 @@ public final class UiAimPlayer {
         this.macroBusy = macroBusy;
     }
 
+    /** True while a click or a move is still being carried out. */
+    public boolean running() {
+        return phase != Phase.IDLE;
+    }
+
     /** {@code afterKeys} waits for the item's keys to finish and for the view to appear. */
     public void start(UiAim aim, boolean afterKeys) {
         release();

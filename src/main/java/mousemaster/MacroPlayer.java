@@ -137,6 +137,11 @@ public class MacroPlayer {
         return macroInProgress != null;
     }
 
+    /** A macro is playing, or one is waiting for the one ahead of it to finish. */
+    public boolean macroBusy() {
+        return macroInProgress != null || !macrosToExecute.isEmpty();
+    }
+
     public void breakMacro() {
         if (!keysPressedByMacro.isEmpty()) {
             List<ResolvedMacroMove> releases = new ArrayList<>();

@@ -20,6 +20,16 @@ public class CommandRunner {
     private WindowSwitcher windowSwitcher;
     private AppMenus appMenus;
     private final UiAimPlayer uiAimPlayer;
+    /** The item asked to leave activation mode once its keys and its click have finished. */
+    private boolean leaveActivationWhenReady;
+    /** The action was still running the last time it was checked, so the pause starts after it. */
+    private boolean leaveActivationWaiting;
+    /** Let the program take focus before keys are passed through to it. */
+    private double leaveActivationIn;
+    private static final double LEAVE_ACTIVATION_SECONDS = 0.20;
+    private static final String ACTIVATION_MODE = "normal-mode";
+    private static final String APP_MENU_DONE_MODE = "app-menu-done-mode";
+    private static final String IDLE_MODE = "idle-mode";
 
     public CommandRunner(MouseManager mouseManager, HintManager hintManager,
                          Platform platform) {
@@ -76,6 +86,7 @@ public class CommandRunner {
     public void update(double delta) {
         copyTextPlayer.update(delta);
         uiAimPlayer.update(delta);
+        leaveActivationIfReady(delta);
     }
 
     public void setModeController(ModeController modeController) {
@@ -257,7 +268,44 @@ public class CommandRunner {
         UiAim aim = appMenus.selectedAim();
         if (aim != null)
             uiAimPlayer.start(aim, macro != null);
+        leaveActivationWhenReady = appMenus.selectedThenIdle();
+        leaveActivationWaiting = true;
+        leaveActivationIn = LEAVE_ACTIVATION_SECONDS;
         modeController.switchMode(modeAfter);
+    }
+
+    /**
+     * An item marked then-idle returns to idle mode, where keys are typed into the
+     * program. The key that ran the item is released in app-menu-done-mode first, so
+     * that letter is not typed. The switch waits until the item's keys and its click
+     * have finished, and then a moment more so the program can focus the place to type.
+     */
+    private void leaveActivationIfReady(double delta) {
+        if (!leaveActivationWhenReady || modeController == null)
+            return;
+        Mode mode = modeController.currentMode();
+        String name = mode == null ? null : mode.name();
+        if (name == null || name.equals(AppMenus.MODE) || name.equals(APP_MENU_DONE_MODE))
+            return;
+        if (!name.equals(ACTIVATION_MODE)) {
+            leaveActivationWhenReady = false;
+            return;
+        }
+        if ((macroPlayer != null && macroPlayer.macroBusy()) || uiAimPlayer.running()) {
+            leaveActivationWaiting = true;
+            leaveActivationIn = LEAVE_ACTIVATION_SECONDS;
+            return;
+        }
+        if (leaveActivationWaiting) {
+            leaveActivationWaiting = false;
+            leaveActivationIn = LEAVE_ACTIVATION_SECONDS;
+            return;
+        }
+        leaveActivationIn -= delta;
+        if (leaveActivationIn > 0)
+            return;
+        leaveActivationWhenReady = false;
+        modeController.switchMode(IDLE_MODE);
     }
 
     /** Ctrl+key on Windows, Command+key on macOS. Injected, so the hook does not eat it. */

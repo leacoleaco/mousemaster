@@ -4488,6 +4488,7 @@ public class ConfigurationParser {
      * which is written like the output of a macro. {@code click 'Name'} and
      * {@code point 'Name'} move the pointer onto a control instead of, or after, the keys.
      * {@code menu 'Menu' 'Item'} opens that menu and presses the item.
+     * {@code then-idle} leaves activation mode once the item has finished.
      */
     private static List<AppMenuConfiguration> parseAppMenus(List<String> properties,
                                                            Map<String, KeyAlias> keyAliases,
@@ -4498,8 +4499,10 @@ public class ConfigurationParser {
         // click 'Name' presses that button. point 'Name' moves into that panel.
         // menu 'Menu' 'Item' opens the menu and presses the item. Names may list
         // alternatives separated by |. Keys written before point are sent first.
+        // then-idle leaves activation mode once the keys and the click have finished.
         Pattern menuAimPattern =
                 Pattern.compile("(?i)(^|\\s)(click|point|menu)\\s+'([^']*)'(?:\\s+'([^']*)')?");
+        Pattern thenIdlePattern = Pattern.compile("(?i)(^|\\s)then-idle(?=\\s|$)");
         Map<String, String> titleByName = new LinkedHashMap<>();
         Map<String, List<AppMenuConfiguration.Item>> itemsByName = new LinkedHashMap<>();
         for (String property : properties) {
@@ -4584,6 +4587,19 @@ public class ConfigurationParser {
                 }
                 keyOutput.append(outputString.substring(aimCursor));
                 String keys = keyOutput.toString().strip().replaceAll("\\s+", " ");
+                boolean thenIdle = false;
+                Matcher thenIdleMatcher = thenIdlePattern.matcher(keys);
+                if (thenIdleMatcher.find()) {
+                    int thenIdleCount = 1;
+                    while (thenIdleMatcher.find())
+                        thenIdleCount++;
+                    if (thenIdleCount > 1)
+                        throw new IllegalArgumentException(
+                                "then-idle is written once: " + propertyValue);
+                    thenIdle = true;
+                    keys = thenIdlePattern.matcher(keys).replaceFirst("")
+                                          .strip().replaceAll("\\s+", " ");
+                }
                 Macro macro = null;
                 if (!keys.isEmpty()) {
                     Set<String> negatedNames = Macro.negatedNamesUsedInOutput(keys);
@@ -4602,7 +4618,8 @@ public class ConfigurationParser {
                     throw new IllegalArgumentException(
                             "Invalid menu item " + propertyValue +
                             ": expected <label> -> <macro output>, or click 'Name', or point 'Name', or menu 'Menu' 'Item'");
-                items.add(new AppMenuConfiguration.Item(itemName, label, tag, macro, aim));
+                items.add(new AppMenuConfiguration.Item(itemName, label, tag, macro, aim,
+                        thenIdle));
             } catch (IllegalArgumentException e) {
                 IllegalArgumentException e2 =
                         new IllegalArgumentException("[" + propertyKey + "] " + e.getMessage());
