@@ -69,31 +69,49 @@ class WindowMenuTest {
     }
 
     @Test
-    void rowsAreTaggedFromTheTop() {
+    void theActiveWindowShowsCurrentAndTheRestAreTagged() {
         WindowMenu menu = WindowMenu.of(
-                List.of(row("当前"), row("上一个"), row("更早"), row("最早")), keys("f", "c", "a"));
+                List.of(row("前面"), row("上一个"), row("更早"), row("最早"), row("更更早")),
+                keys("f", "c", "a"));
         assertEquals(3, menu.tagCount());
+        assertEquals(1, menu.rowOfTag(0));
+        assertEquals(3, menu.rowOfTag(2));
+        assertEquals(-1, menu.rowOfTag(-1));
+        assertEquals(-1, menu.rowOfTag(3));
         String html = menu.html();
         assertTrue(html.contains("字母 直接跳转"));
+        int current = html.indexOf(">当前</td>");
         int tagF = html.indexOf(">F</td>");
         int tagC = html.indexOf(">C</td>");
         int tagA = html.indexOf(">A</td>");
-        assertTrue(tagF > 0 && tagF < html.indexOf("当前"));
-        assertTrue(tagC > html.indexOf("当前") && tagC < html.indexOf("上一个"));
-        assertTrue(tagA > html.indexOf("上一个") && tagA < html.indexOf("更早"));
-        // The highlighted row draws its tag dark, and a row past the keys keeps the column.
-        assertTrue(html.contains("class=tagon bgcolor=\"#7AA2F7\" rowspan=2 valign=\"middle\" width=\"26\">C</td>"));
-        assertTrue(html.contains("class=tag rowspan=2 valign=\"middle\" width=\"26\">&nbsp;</td>"));
+        assertTrue(current > 0 && current < html.indexOf("前面"));
+        assertTrue(tagF > html.indexOf("前面") && tagF < html.indexOf("上一个"));
+        assertTrue(tagC > html.indexOf("上一个") && tagC < html.indexOf("更早"));
+        assertTrue(tagA > html.indexOf("更早") && tagA < html.indexOf("最早"));
+        // The highlight starts on the previous window, whose tag is drawn dark.
+        // The active window's label is only text, and a row past the keys keeps the column.
+        assertTrue(html.contains("class=tag rowspan=2 valign=\"middle\" width=\"40\" nowrap>当前</td>"));
+        assertTrue(html.contains("class=tagon bgcolor=\"#7AA2F7\" rowspan=2 valign=\"middle\" width=\"40\" nowrap>F</td>"));
+        assertTrue(html.contains("class=tag rowspan=2 valign=\"middle\" width=\"40\" nowrap>&nbsp;</td>"));
 
         assertEquals(2, menu.select(2).selected());
         assertEquals(0, menu.select(0).selected());
         assertEquals(1, menu.select(-1).selected());
-        assertEquals(1, menu.select(4).selected());
+        assertEquals(1, menu.select(5).selected());
         // Icons arriving later keep the tags and the highlight.
         WindowMenu withIcons = menu.select(2).withEntries(
-                List.of(row("当前"), row("上一个"), row("更早"), row("最早")));
+                List.of(row("前面"), row("上一个"), row("更早"), row("最早"), row("更更早")));
         assertEquals(3, withIcons.tagCount());
         assertEquals(2, withIcons.selected());
+        assertTrue(withIcons.html().contains(">当前</td>"));
+
+        // The only window is already in front: 当前, and no letter to press.
+        WindowMenu alone = WindowMenu.of(List.of(row("只有一个")), keys("f"));
+        assertEquals(0, alone.tagCount());
+        assertEquals(-1, alone.rowOfTag(0));
+        assertTrue(alone.html().contains(">当前</td>"));
+        assertFalse(alone.html().contains(">F</td>"));
+        assertFalse(alone.html().contains("字母"));
     }
 
     @Test
@@ -103,8 +121,12 @@ class WindowMenuTest {
                                              .toList();
         List<Key> manyKeys = keys("f", "c", "a", "w", "v", "r", "x", "q", "z", "t", "b",
                 "y", "u", "i", "o");
-        assertEquals(WindowMenu.VISIBLE_ROWS, WindowMenu.of(titles, manyKeys).tagCount());
+        assertEquals(WindowMenu.VISIBLE_ROWS - 1, WindowMenu.of(titles, manyKeys).tagCount());
         assertEquals(3, WindowMenu.of(titles, keys("f", "c", "a")).tagCount());
+        String firstPageHtml = WindowMenu.of(titles, manyKeys).html();
+        assertTrue(firstPageHtml.contains(">当前</td>"));
+        assertTrue(firstPageHtml.contains(">B</td>"));
+        assertFalse(firstPageHtml.contains(">Y</td>"));
         WindowMenu firstPage = WindowMenu.of(titles, keys("f", "c", "a"));
         assertTrue(firstPage.shows(0));
         assertTrue(firstPage.shows(WindowMenu.VISIBLE_ROWS - 1));

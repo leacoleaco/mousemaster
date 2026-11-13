@@ -9,77 +9,114 @@ import java.util.List;
  * is one, so confirming jumps there the way a single Alt-Tab does.
  * e moves up the list and d moves down. Both wrap.
  * Each row is its tag, then the program icon, centered on two lines: the window title,
- * then the process file name. The rows of the first page are tagged, top to bottom, and
- * pressing a tag jumps to the window of its row.
+ * then the process file name. The first row is the window already in front: it shows
+ * 当前 and takes no tag. The other rows of the first page are tagged, top to bottom,
+ * and pressing a tag jumps to the window of its row.
  */
 public final class WindowMenu {
 
     /** Left in the indicator text and replaced with {@link #html()} when the menu is drawn. */
     public static final String PLACEHOLDER = "[[window-menu]]";
 
+    /** Shown in the tag column of the active window. It is not a key. */
+    static final String ACTIVE_LABEL = "当前";
+
     /** The icon's size in the menu. The bitmap itself may be larger, so hidpi stays sharp. */
     static final int ICON_PX = 32;
     static final int VISIBLE_ROWS = 12;
     static final int MAX_TITLE_CHARS = 48;
+    /** Wide enough for {@link #ACTIVE_LABEL}. Every tagged row uses it so the icons line up. */
+    static final int TAG_COLUMN_PX = 40;
 
     private final List<WindowEntry> entries;
-    /** The tag of each of the first rows. Shorter than the list when the keys run out. */
+    /**
+     * The tag of each row after the active window, which is always the first entry.
+     * Shorter than that tail when the keys run out, or empty when the menu has no tags.
+     */
     private final List<String> tags;
+    /** True when the mode tags rows, so the active window can show {@link #ACTIVE_LABEL}. */
+    private final boolean tagged;
     private final int selected;
 
-    private WindowMenu(List<WindowEntry> entries, List<String> tags, int selected) {
+    private WindowMenu(List<WindowEntry> entries, List<String> tags, boolean tagged, int selected) {
         this.entries = entries;
         this.tags = tags;
+        this.tagged = tagged;
         this.selected = selected;
     }
 
     public static WindowMenu empty() {
-        return new WindowMenu(List.of(), List.of(), 0);
+        return new WindowMenu(List.of(), List.of(), false, 0);
     }
 
     public static WindowMenu of(List<WindowEntry> entries) {
         return of(entries, List.of());
     }
 
-    /** {@code tagKeys} tag the rows of the first page, in order. */
+    /**
+     * {@code tagKeys} tag the rows of the first page after the active window, in order.
+     * The active window is the first entry and is labeled {@link #ACTIVE_LABEL} instead.
+     */
     public static WindowMenu of(List<WindowEntry> entries, List<Key> tagKeys) {
         List<WindowEntry> copy = List.copyOf(entries);
         int selected = copy.size() > 1 ? 1 : 0;
-        return new WindowMenu(copy, MenuTags.labels(tagKeys, copy.size(), VISIBLE_ROWS),
-                selected);
+        boolean tagged = !tagKeys.isEmpty() && !copy.isEmpty();
+        return new WindowMenu(copy, jumpTags(copy.size(), tagKeys), tagged, selected);
+    }
+
+    /**
+     * Tags for the rows after the active window. Only rows that fit on the first page
+     * are tagged: the page also shows the active window, which takes no key.
+     */
+    private static List<String> jumpTags(int rowCount, List<Key> tagKeys) {
+        if (tagKeys.isEmpty() || rowCount <= 1)
+            return List.of();
+        int onFirstPage = Math.min(rowCount - 1, VISIBLE_ROWS - 1);
+        return MenuTags.labels(tagKeys, onFirstPage, onFirstPage);
     }
 
     /** Same highlight and tags, after icons have been filled in on the entries. */
     public WindowMenu withEntries(List<WindowEntry> entries) {
         List<WindowEntry> copy = List.copyOf(entries);
-        List<String> keptTags = tags.subList(0, Math.min(tags.size(), copy.size()));
         if (copy.isEmpty())
-            return new WindowMenu(copy, keptTags, 0);
+            return new WindowMenu(copy, List.of(), false, 0);
+        int slots = Math.max(0, copy.size() - 1);
+        List<String> keptTags = tags.subList(0, Math.min(tags.size(), slots));
         int index = Math.min(Math.max(selected, 0), copy.size() - 1);
-        return new WindowMenu(copy, keptTags, index);
+        return new WindowMenu(copy, keptTags, tagged, index);
     }
 
     public WindowMenu move(int delta) {
         if (entries.isEmpty() || delta == 0)
             return this;
         int next = Math.floorMod(selected + delta, entries.size());
-        return new WindowMenu(entries, tags, next);
+        return new WindowMenu(entries, tags, tagged, next);
     }
 
     /** The highlight on the row at {@code index}. Unchanged when there is no such row. */
     public WindowMenu select(int index) {
         if (index < 0 || index >= entries.size() || index == selected)
             return this;
-        return new WindowMenu(entries, tags, index);
+        return new WindowMenu(entries, tags, tagged, index);
     }
 
     public int selected() {
         return selected;
     }
 
-    /** How many rows have a tag, counted from the top. */
+    /** How many rows after the active window have a tag. */
     public int tagCount() {
         return tags.size();
+    }
+
+    /**
+     * The list row of the tag at {@code tagIndex}. Tags start on the row after the
+     * active window, so the first tag is row 1. -1 when {@code tagIndex} is not a tag.
+     */
+    public int rowOfTag(int tagIndex) {
+        if (tagIndex < 0 || tagIndex >= tags.size())
+            return -1;
+        return tagIndex + 1;
     }
 
     /**
@@ -127,8 +164,7 @@ public final class WindowMenu {
         if (start > 0)
             html.append("<tr><td class=more>上面还有 ").append(start).append(" 个</td></tr>");
         for (int index = start; index < end; index++)
-            appendRow(html, entries.get(index), index < tags.size() ? tags.get(index) : null,
-                    index == selected);
+            appendRow(html, entries.get(index), index, index == selected);
         if (end < entries.size())
             html.append("<tr><td class=more>下面还有 ")
                 .append(entries.size() - end)
@@ -137,16 +173,21 @@ public final class WindowMenu {
         return html.toString();
     }
 
-    private void appendRow(StringBuilder html, WindowEntry entry, String tag, boolean current) {
+    private void appendRow(StringBuilder html, WindowEntry entry, int index, boolean current) {
         String bg = current ? " bgcolor=\"#7AA2F7\"" : "";
         html.append("<tr><td class=row").append(bg)
             .append("><table cellspacing=0 cellpadding=0><tr>");
-        // Every row keeps the tag column once any row has a tag, so the icons line up.
-        if (!tags.isEmpty())
+        // Every row keeps the tag column once the menu tags rows, so the icons line up.
+        // The first row is the active window: 当前 is only a label, and it takes no key.
+        if (tagged) {
+            String tag = index == 0 ? ACTIVE_LABEL
+                    : (index - 1 < tags.size() ? tags.get(index - 1) : null);
             html.append("<td class=").append(current ? "tagon" : "tag").append(bg)
-                .append(" rowspan=2 valign=\"middle\" width=\"26\">")
+                .append(" rowspan=2 valign=\"middle\" width=\"").append(TAG_COLUMN_PX)
+                .append("\" nowrap>")
                 .append(tag == null ? "&nbsp;" : escape(tag))
                 .append("</td>");
+        }
         html.append("<td class=icon rowspan=2 valign=\"middle\" width=\"40\">");
         if (entry.iconSource() != null)
             html.append("<img src=\"").append(entry.iconSource())

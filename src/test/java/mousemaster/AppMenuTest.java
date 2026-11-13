@@ -307,36 +307,37 @@ class AppMenuTest {
         assertTrue(ran.modes.isEmpty());
 
         String html = switcher.html();
-        assertEquals(List.of("F", "C", "A", "W"),
+        assertTrue(html.contains(">当前</td>"));
+        assertEquals(List.of("F", "C", "A"),
                 List.of("F", "C", "A", "W", "V").stream()
                     .filter(tag -> html.contains(">" + tag + "</td>"))
                     .collect(Collectors.toList()));
 
-        // w is the fourth row. No second key is needed.
-        ran.runner.run(byTag, key("w"));
+        // a is the fourth window. The first window shows 当前 and has no letter.
+        ran.runner.run(byTag, key("a"));
         assertEquals(List.of(3), activated);
         assertEquals(List.of("window-switch-done-mode"), ran.modes);
         ran.runner.run(byTag, key("f"));
-        assertEquals(List.of(3, 0), activated);
+        assertEquals(List.of(3, 1), activated);
         assertEquals(2, ran.modes.size());
 
-        // v tags a fifth row, which this list does not have. e is not a tag key.
-        ran.runner.run(byTag, key("v"));
+        // w would tag a fifth window, which this list does not have. e is not a tag key.
+        ran.runner.run(byTag, key("w"));
         ran.runner.run(byTag, key("e"));
         ran.runner.run(byTag, null);
-        assertEquals(List.of(3, 0), activated);
+        assertEquals(List.of(3, 1), activated);
         assertEquals(2, ran.modes.size());
 
         // Windows refused the focus: the list stays open, with the highlight on that row.
         focusAllowed[0] = false;
-        ran.runner.run(byTag, key("a"));
-        assertEquals(List.of(3, 0, 2), activated);
+        ran.runner.run(byTag, key("c"));
+        assertEquals(List.of(3, 1, 2), activated);
         assertEquals(2, ran.modes.size());
         // e and d step from where the tag left the highlight.
         focusAllowed[0] = true;
         switcher.move(-1);
         assertTrue(switcher.activateSelected());
-        assertEquals(List.of(3, 0, 2, 1), activated);
+        assertEquals(List.of(3, 1, 2, 1), activated);
     }
 
     @Test
@@ -358,12 +359,12 @@ class AppMenuTest {
         assertFalse(html.contains(">F</td>"));
         assertTrue(html.contains(">B</td>"));
 
-        // f tags the first window, which is no longer drawn. b tags the eleventh, which is.
+        // f tags the second window, which is no longer drawn. b tags the twelfth, which is.
         ran.runner.run(byTag, key("f"));
         assertTrue(activated.isEmpty());
         assertTrue(ran.modes.isEmpty());
         ran.runner.run(byTag, key("b"));
-        assertEquals(List.of(10), activated);
+        assertEquals(List.of(11), activated);
         assertEquals(List.of("window-switch-done-mode"), ran.modes);
     }
 
