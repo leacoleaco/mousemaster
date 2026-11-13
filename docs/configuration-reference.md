@@ -908,6 +908,16 @@ before the other inputs and buttons. An element that is not an input or a button
 of those names comes next. The rest are labeled from the top of the window, each row from
 left to right. The first elements get the shortest labels.
 
+Elements that are close together can have tags that would be drawn on top of each other
+(`ui-accessibility` and `ui-vision`). Such tags swap labels with others so that two tags on
+each other begin with different keys, and each shows its first key followed by `..` (`S..`)
+instead of its whole label. Pressing that key hides the tags that begin with another key, the
+one that was on it among them, and the tags that are left show their whole label. A tag with a
+label of one key, or one that is on no other tag, shows its label as usual. Where more tags are
+piled up than there are labels that begin differently, some of them still begin with the same
+key. With `ui-other-windows`, the tags of the window under the pointer keep the labels they
+were shown with when the tags of the other windows arrive.
+
 A scan that finds no element leaves the mode showing nothing. The built-in virtual key
 `isoverlayempty` is pressed then, so a combo can leave the mode:
 

@@ -1699,7 +1699,11 @@ public class HintManager implements ModeListener, MousePositionListener {
         return overlapAwareHints;
     }
 
-    /** A swap of labels that moves a box onto another is undone by the next round's. */
+    /**
+     * A label of another length changes the width of a box, which can put it on another:
+     * the boxes are measured again after the labels are swapped. The rounds are counted in
+     * case each one's swaps keep putting boxes on others.
+     */
     private static final int maxUiHintRelabelRoundCount = 4;
 
     /** For each hint, the indexes of the hints whose boxes its box overlaps. */

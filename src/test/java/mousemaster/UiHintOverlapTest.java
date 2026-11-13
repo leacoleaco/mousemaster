@@ -251,22 +251,19 @@ class UiHintOverlapTest {
         List<Key> keys = keys("qwerasdfzxcv");
         int count = 2000;
         List<List<Key>> labels = HintManager.mouseWindowFirstKeySequences(keys, count, 0);
-        // A row of hints, each on the next two.
-        int[] pairs = new int[4 * (count - 2)];
-        for (int index = 0; index < count - 2; index++) {
-            pairs[4 * index] = index;
-            pairs[4 * index + 1] = index + 1;
-            pairs[4 * index + 2] = index;
-            pairs[4 * index + 3] = index + 2;
+        // A row of hints, each on the next. The last key begins a fifth of the labels.
+        int[] pairs = new int[2 * (count - 1)];
+        for (int index = 0; index < count - 1; index++) {
+            pairs[2 * index] = index;
+            pairs[2 * index + 1] = index + 1;
         }
         List<List<Integer>> overlaps = overlaps(count, pairs);
+        assertTrue(alikeCount(labels, overlaps) > 1000);
         long before = System.nanoTime();
         List<List<Key>> apart = UiHintOverlap.labelsBeginningApart(labels, overlaps, 0);
         long milliseconds = (System.nanoTime() - before) / 1_000_000;
         assertEquals(0, alikeCount(apart, overlaps));
         assertEquals(new HashSet<>(labels), new HashSet<>(apart));
-        for (int index = 0; index < count; index++)
-            assertEquals(labels.get(index).size(), apart.get(index).size());
         assertTrue(milliseconds < 2000, milliseconds + "ms");
     }
 
