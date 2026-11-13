@@ -198,10 +198,15 @@ class UnhandledKeySwallowTest {
         comboWatcher.modeChanged(modeMap.get("normal-mode"));
         animations.stop(TIP);
         ranCommands.clear();
-        assertFalse(press("c").mustBeEaten());
+        EatAndRegurgitates c = press("c");
+        assertTrue(c.mustBeEaten());
+        assertTrue(c.regurgitates().isEmpty());
         drain();
         assertFalse(animations.running(TIP));
-        release("c");
+        assertTrue(ranCommands.stream().anyMatch(command ->
+                command instanceof Command.MacroCommand macro &&
+                macro.macro().name().equals("copyselection")));
+        assertTrue(release("c").regurgitates().isEmpty());
 
         animations.stop(TIP);
         press("leftarrow");
