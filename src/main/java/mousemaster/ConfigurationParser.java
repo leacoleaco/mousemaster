@@ -338,6 +338,7 @@ public class ConfigurationParser {
         hintMeshTypeBuilder.visionDensity(6);
         hintMeshTypeBuilder.visionMinSize(0d);
         hintMeshTypeBuilder.visionRefine(0);
+        hintMeshTypeBuilder.uiOtherWindows(UiHintOtherWindows.NONE);
         return hintMesh;
     }
 
@@ -3660,6 +3661,7 @@ public class ConfigurationParser {
                     hintMeshBuilder.type().positionHistoryName(typeChange.positionHistoryName());
             });
             case "ui-order" -> ModePropertyHandler.of(prefix.append("type", "order"), v -> parseUiHintOrder("overlay.ui-order", v), v -> hintMeshBuilder.type().uiOrder(v));
+            case "ui-other-windows" -> ModePropertyHandler.of(prefix.append("type", "otherWindows"), v -> parseUiHintOtherWindows("overlay.ui-other-windows", v), v -> hintMeshBuilder.type().uiOtherWindows(v));
             case "vision-density" -> ModePropertyHandler.of(prefix.append("type", "density"), v -> parseUnsignedInteger(v, 1, Vision.densities), v -> hintMeshBuilder.type().visionDensity(v));
             case "vision-min-size" -> ModePropertyHandler.of(prefix.append("type", "minSize"), v -> parseDouble(v, true, 0, 1000), v -> hintMeshBuilder.type().visionMinSize(v));
             case "vision-refine" -> ModePropertyHandler.of(prefix.append("type", "refine"), v -> parseUnsignedInteger(v, 0, Vision.lastRefine), v -> hintMeshBuilder.type().visionRefine(v));
@@ -4311,6 +4313,18 @@ public class ConfigurationParser {
         };
     }
 
+    private static UiHintOtherWindows parseUiHintOtherWindows(String propertyKey,
+                                                              String propertyValue) {
+        return switch (propertyValue) {
+            case "none" -> UiHintOtherWindows.NONE;
+            case "active-screen" -> UiHintOtherWindows.ACTIVE_SCREEN;
+            case "all-screens" -> UiHintOtherWindows.ALL_SCREENS;
+            default -> throw new IllegalArgumentException(
+                    "Invalid property value in " + propertyKey + "=" + propertyValue +
+                    ": should be one of " + List.of("none", "active-screen", "all-screens"));
+        };
+    }
+
     private static HintCellSizing.HintCellSizingType parseHintCellSizingType(
             String propertyKey, String propertyValue) {
         return switch (propertyValue) {
@@ -4875,6 +4889,8 @@ public class ConfigurationParser {
                     builder.type().visionMinSize(parent.type().visionMinSize());
                 if (builder.type().visionRefine() == null)
                     builder.type().visionRefine(parent.type().visionRefine());
+                if (builder.type().uiOtherWindows() == null)
+                    builder.type().uiOtherWindows(parent.type().uiOtherWindows());
                 if (builder.type().positionHistoryName() == null)
                     builder.type().positionHistoryName(parent.type().positionHistoryName());
                 for (var parentEntry : parent.type()

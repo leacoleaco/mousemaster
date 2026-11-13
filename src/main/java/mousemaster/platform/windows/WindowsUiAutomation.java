@@ -19,9 +19,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 public class WindowsUiAutomation implements UiAutomation {
 
@@ -83,7 +87,8 @@ public class WindowsUiAutomation implements UiAutomation {
     /** Every control in the window, not only the ones a hint can click. */
     private static UIAutomationCondition controlViewCondition;
     private static UIAutomationCacheRequest cachedCacheRequest;
-    private static final Set<Integer> preWarmedProcessIds = new HashSet<>();
+    /** Read by both query threads. */
+    private static final Set<Integer> preWarmedProcessIds = ConcurrentHashMap.newKeySet();
 
     private static final ExecutorService queryExecutor =
             Executors.newSingleThreadExecutor(r -> {
@@ -91,7 +96,20 @@ public class WindowsUiAutomation implements UiAutomation {
                 t.setDaemon(true);
                 return t;
             });
-    private static volatile boolean backgroundComInitialized;
+    /**
+     * The windows the pointer is not on are scanned on a thread of their own. A scan that
+     * was cancelled still finishes the window it is in, which would otherwise hold up
+     * the next scan of the window under the pointer.
+     */
+    private static final ExecutorService otherWindowsQueryExecutor =
+            Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "uia-other-windows-query");
+                t.setDaemon(true);
+                return t;
+            });
+    /** COM is initialized once on each query thread. */
+    private static final ThreadLocal<Boolean> backgroundComInitialized =
+            ThreadLocal.withInitial(() -> false);
 
     private static Memory createBoolVariantTrue() {
         Memory variant = new Memory(16);
@@ -340,6 +358,16 @@ public class WindowsUiAutomation implements UiAutomation {
      * only kept where the click it performs would reach the element.
      */
     private static List<UiElement> queryUiElementsOfWindowsInArea(Rectangle area) {
+        return queryUiElementsOfWindowsInArea(area, Set.of(), () -> false);
+    }
+
+    /**
+     * The skipped windows are not walked, and still cover what is behind them. Once
+     * cancelled, no other window is walked: what was found is of no use to the caller.
+     */
+    private static List<UiElement> queryUiElementsOfWindowsInArea(Rectangle area,
+                                                                  Set<Long> skippedWindows,
+                                                                  BooleanSupplier cancelled) {
         int currentProcessId = Kernel32.INSTANCE.GetCurrentProcessId();
         IntByReference processId = new IntByReference();
         List<HWND> windows = new ArrayList<>();
@@ -370,8 +398,15 @@ public class WindowsUiAutomation implements UiAutomation {
         long before = System.nanoTime();
         int walkedWindows = 0;
         for (int windowIndex = 0; windowIndex < windows.size(); windowIndex++) {
+            if (cancelled.getAsBoolean()) {
+                logger.debug("Stopped looking for UI elements in area {} after {} of {} windows",
+                        area, walkedWindows, windows.size());
+                return uiElements;
+            }
             Rectangle windowRectangleInArea = windowRectanglesInArea.get(windowIndex);
             HWND window = windows.get(windowIndex);
+            if (skippedWindows.contains(Pointer.nativeValue(window.getPointer())))
+                continue;
             Point center = windowRectangleInArea.center();
             // Walking a window that holds nothing a hint could reach is where the query
             // spends its time. Its center says whether it is drawn over at all, each
@@ -627,10 +662,42 @@ public class WindowsUiAutomation implements UiAutomation {
 
     @Override
     public Future<List<UiElement>> startFindMouseWindowUiElements(int x, int y) {
+        return startFindWindowUiElements(mouseWindow(x, y));
+    }
+
+    /** The top-level window under the point, the active window where there is none. */
+    private static HWND mouseWindow(int x, int y) {
         HWND hwnd = WindowsOverlay.topLevelWindowAt(x, y);
-        if (hwnd == null)
-            hwnd = User32.INSTANCE.GetForegroundWindow();
-        return startFindWindowUiElements(hwnd);
+        return hwnd != null ? hwnd : User32.INSTANCE.GetForegroundWindow();
+    }
+
+    @Override
+    public Future<List<UiElement>> startFindOtherWindowsUiElements(int x, int y,
+                                                                   Rectangle area) {
+        ensureInitialized();
+        HWND hwnd = mouseWindow(x, y);
+        long hwndKey = hwnd != null ? Pointer.nativeValue(hwnd.getPointer()) : 0;
+        AtomicBoolean cancelled = new AtomicBoolean();
+        // FutureTask.cancel leaves a task that is running alone: the flag is what the
+        // scan reads between two windows.
+        FutureTask<List<UiElement>> task = new FutureTask<List<UiElement>>(() -> {
+            if (cachedCondition == null || cachedCacheRequest == null)
+                return List.of();
+            initializeBackgroundCom();
+            Set<Long> mouseWindows = new HashSet<>();
+            if (hwndKey != 0)
+                for (HWND window : windowsOf(new HWND(new Pointer(hwndKey))))
+                    mouseWindows.add(Pointer.nativeValue(window.getPointer()));
+            return queryUiElementsOfWindowsInArea(area, mouseWindows, cancelled::get);
+        }) {
+            @Override
+            public boolean cancel(boolean mayInterruptIfRunning) {
+                cancelled.set(true);
+                return super.cancel(mayInterruptIfRunning);
+            }
+        };
+        otherWindowsQueryExecutor.execute(task);
+        return task;
     }
 
     private Future<List<UiElement>> startFindWindowUiElements(HWND hwnd) {
@@ -815,10 +882,10 @@ public class WindowsUiAutomation implements UiAutomation {
     }
 
     private static void initializeBackgroundCom() {
-        if (backgroundComInitialized)
+        if (backgroundComInitialized.get())
             return;
         Ole32.INSTANCE.CoInitializeEx(Pointer.NULL, Ole32.COINIT_MULTITHREADED);
-        backgroundComInitialized = true;
+        backgroundComInitialized.set(true);
     }
 
     // COM wrappers

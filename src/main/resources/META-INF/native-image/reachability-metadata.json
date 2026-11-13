@@ -7260,7 +7260,9 @@
             "mousemaster.UiHintOrder",
             "int",
             "double",
-            "java.lang.String"
+            "java.lang.String",
+            "int",
+            "mousemaster.UiHintOtherWindows"
           ]
         },
         {
@@ -7284,7 +7286,15 @@
           "parameterTypes": []
         },
         {
+          "name": "otherWindows",
+          "parameterTypes": []
+        },
+        {
           "name": "positionHistoryName",
+          "parameterTypes": []
+        },
+        {
+          "name": "refine",
           "parameterTypes": []
         },
         {

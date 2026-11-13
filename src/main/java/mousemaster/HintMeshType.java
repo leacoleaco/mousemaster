@@ -8,7 +8,8 @@ import java.util.function.Function;
 public record HintMeshType(HintMeshTypeType type, Area area,
                            ScreenFilterMap<HintGridLayout> gridLayoutByFilter,
                            UiHintOrder order, int density, double minSize,
-                           String positionHistoryName, int refine) {
+                           String positionHistoryName, int refine,
+                           UiHintOtherWindows otherWindows) {
 
     public HintGridLayout layout(ScreenFilter filter) {
         HintGridLayout layout = gridLayoutByFilter.get(filter);
@@ -32,7 +33,8 @@ public record HintMeshType(HintMeshTypeType type, Area area,
             return new HintMeshType(type, hintMeshType.area, hintMeshType.gridLayoutByFilter,
                     hintMeshType.order, hintMeshType.density, hintMeshType.minSize,
                     positionHistoryName == null ? hintMeshType.positionHistoryName :
-                            positionHistoryName, hintMeshType.refine());
+                            positionHistoryName, hintMeshType.refine(),
+                    hintMeshType.otherWindows());
         }
 
     }
@@ -46,6 +48,7 @@ public record HintMeshType(HintMeshTypeType type, Area area,
         private Integer visionDensity;
         private Double visionMinSize;
         private Integer visionRefine;
+        private UiHintOtherWindows uiOtherWindows;
         private String positionHistoryName;
         private final ScreenFilterMapBuilder<HintGridLayoutBuilder, HintGridLayout>
                 gridLayoutByFilter;
@@ -89,6 +92,15 @@ public record HintMeshType(HintMeshTypeType type, Area area,
             return this;
         }
 
+        public UiHintOtherWindows uiOtherWindows() {
+            return uiOtherWindows;
+        }
+
+        public HintMeshTypeBuilder uiOtherWindows(UiHintOtherWindows uiOtherWindows) {
+            this.uiOtherWindows = uiOtherWindows;
+            return this;
+        }
+
         public UiHintOrder uiOrder() {
             return uiOrder;
         }
@@ -125,7 +137,8 @@ public record HintMeshType(HintMeshTypeType type, Area area,
             return new HintMeshType(type, area.build(),
                     gridLayoutByFilter.build(HintGridLayoutBuilder::build), uiOrder,
                     visionDensity, visionMinSize, positionHistoryName,
-                    visionRefine == null ? 0 : visionRefine);
+                    visionRefine == null ? 0 : visionRefine,
+                    uiOtherWindows == null ? UiHintOtherWindows.NONE : uiOtherWindows);
         }
     }
 

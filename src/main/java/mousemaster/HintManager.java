@@ -81,6 +81,17 @@ public class HintManager implements ModeListener, MousePositionListener {
     private UiElement.Role uiHintRoleFilter;
     private Point uiElementQueryOrderPoint;
     private Rectangle uiElementQueryArea;
+    /**
+     * Where the windows the pointer is not on are looked in, once the hints of the one it is
+     * on are shown. Null when the last query was of one window or one area only.
+     */
+    private Rectangle otherWindowsQueryArea;
+    /** Where the pointer was when the query of the window under it started. */
+    private Point otherWindowsQueryPoint;
+    private Future<List<UiElement>> pendingOtherWindowsQuery;
+    private List<UiElement> otherWindowsUiElements = List.of();
+    /** The other windows were to be looked in, and were not, or not to the end. */
+    private boolean otherWindowsQueryUnfinished;
 
     /**
      * It would be better to have an instance of Zoom instead of ZoomConfiguration
@@ -655,6 +666,8 @@ public class HintManager implements ModeListener, MousePositionListener {
             pendingUiHintQuery.future().cancel(false);
             pendingUiHintQuery = null;
         }
+        if (!sameUiElementQuery)
+            cancelOtherWindowsQuery();
         if (hintMeshConfiguration.type().type() == HintMeshTypeType.POSITION_HISTORY) {
             currentPositionHistory =
                     positionHistory(hintMeshConfiguration.type().positionHistoryName());
@@ -762,7 +775,9 @@ public class HintManager implements ModeListener, MousePositionListener {
             // back to the hints it showed with them.
             HintMeshState hintMeshState = sameUiElementQuery ? null : hintMeshStates.get(
                     new HintMeshKey(hintMeshConfiguration.type(), selectionKeys, newMode.zoom()));
+            // Hints shown without the other windows' are not the ones to come back to.
             boolean backToShownHints = hintMeshState != null && sameUiElementQueryArea &&
+                    !otherWindowsQueryUnfinished &&
                     buildHintMesh(hintMeshConfiguration, newMode.zoom(), newZoom,
                             newScreenFilter, lastUiElements, uiElementQueryArea,
                             uiElementQueryOrderPoint, screenManager.activeScreen())
@@ -912,8 +927,10 @@ public class HintManager implements ModeListener, MousePositionListener {
 
     public boolean hintMeshEmpty() {
         // A filter that keeps nothing is a choice, not an empty scan: stay in the mode
-        // so another filter key can be pressed.
-        return pendingUiHintQuery == null && hintMesh != null &&
+        // so another filter key can be pressed. A window with no element is not an empty
+        // scan either while the other windows are looked in.
+        return pendingUiHintQuery == null && pendingOtherWindowsQuery == null &&
+               hintMesh != null &&
                hintMesh.hints().isEmpty() && uiHintRoleFilter == null;
     }
 
@@ -953,6 +970,7 @@ public class HintManager implements ModeListener, MousePositionListener {
     }
 
     public void completePendingUiHintQuery() {
+        completePendingOtherWindowsQuery();
         if (pendingUiHintQuery == null || !pendingUiHintQuery.future().isDone())
             return;
         PendingUiHintQuery pending = pendingUiHintQuery;
@@ -973,6 +991,12 @@ public class HintManager implements ModeListener, MousePositionListener {
             return;
         }
         lastUiElements = uiElements;
+        // Started only now, so that it takes nothing from the scan of the window under the
+        // pointer, and before the hints are drawn, so that it runs while they are.
+        if (otherWindowsQueryArea != null)
+            pendingOtherWindowsQuery = uiAutomation.startFindOtherWindowsUiElements(
+                    (int) otherWindowsQueryPoint.x(), (int) otherWindowsQueryPoint.y(),
+                    otherWindowsQueryArea);
         noteVisionShown(currentMode, filteredUiElements(uiElements));
         // The query found other elements, which get other hints.
         if (hintMesh != null)
@@ -987,6 +1011,70 @@ public class HintManager implements ModeListener, MousePositionListener {
         activateHintMesh(currentMode, newHintMesh, hintMeshConfiguration, screenFilter,
                 currentZoom, false, true);
         overlay.runPendingHintMeshWork();
+    }
+
+    /**
+     * Adds the hints of the other windows to the ones shown. The hints of the window under
+     * the pointer keep their labels, and the keys already pressed stay pressed.
+     */
+    private void completePendingOtherWindowsQuery() {
+        if (pendingOtherWindowsQuery == null || !pendingOtherWindowsQuery.isDone())
+            return;
+        Future<List<UiElement>> done = pendingOtherWindowsQuery;
+        pendingOtherWindowsQuery = null;
+        List<UiElement> found;
+        try {
+            found = done.get();
+        }
+        catch (ExecutionException e) {
+            // The hints of the window under the pointer are shown and stay usable.
+            logger.error("UI element query of the other windows failed", e.getCause());
+            found = List.of();
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        otherWindowsQueryUnfinished = false;
+        double scale = screenManager.activeScreen().scale();
+        // Each window was looked in on its own: a control at the edge of one can sit on a
+        // control of the window under the pointer.
+        otherWindowsUiElements = found.stream()
+                .filter(element -> !UiAutomation.isTooCloseToExistingUiElements(
+                        lastUiElements, element.centerX(), element.centerY(), scale))
+                .toList();
+        if (hintMesh == null || hintJustSelected)
+            return;
+        HintMeshConfiguration hintMeshConfiguration = currentMode.hintMesh();
+        List<Key> selectedKeySequence = hintMesh.selectedKeySequence();
+        HintMesh newHintMesh = buildHintMesh(hintMeshConfiguration, currentMode.zoom(),
+                currentZoom, screenFilter, filteredUiElements(lastUiElements),
+                uiElementQueryArea, uiElementQueryOrderPoint, screenManager.activeScreen())
+                .builder()
+                .selectedKeySequence(selectedKeySequence)
+                .build();
+        // Not activateHintMesh: nothing was selected or entered, so the target stays.
+        hintMeshStates.compute(new HintMeshKey(hintMeshConfiguration.type(),
+                        hintMeshConfiguration.keysByFilter().get(screenFilter).selectionKeys(),
+                        currentMode.zoom()),
+                (key, hintMeshState) -> new HintMeshState(newHintMesh,
+                        hintMeshState == null ? lastSelectedHintPoint :
+                                hintMeshState.previousModeSelectedHintPoint,
+                        hintMeshState == null ? lastSelectedHintCell :
+                                hintMeshState.previousModeSelectedHintCell));
+        hintMesh = newHintMesh;
+        if (hintMesh.hints().isEmpty())
+            overlay.hideHintMesh();
+        else
+            overlay.setHintMesh(hintMesh, currentZoom, true);
+        overlay.runPendingHintMeshWork();
+    }
+
+    private void cancelOtherWindowsQuery() {
+        if (pendingOtherWindowsQuery == null)
+            return;
+        pendingOtherWindowsQuery.cancel(false);
+        pendingOtherWindowsQuery = null;
     }
 
     private ScreenFilter screenFilter(HintMeshConfiguration hintMeshConfiguration) {
@@ -1057,7 +1145,7 @@ public class HintManager implements ModeListener, MousePositionListener {
         if (type.type() != currentType.type() || !type.area().equals(currentType.area()))
             return false;
         if (type.type() == HintMeshTypeType.UI_ACCESSIBILITY)
-            return true;
+            return type.otherWindows() == currentType.otherWindows();
         return type.type() == HintMeshTypeType.UI_VISION &&
                type.density() == currentType.density() &&
                type.minSize() == currentType.minSize() &&
@@ -1073,14 +1161,27 @@ public class HintManager implements ModeListener, MousePositionListener {
     private Future<List<UiElement>> startUiElementQuery(HintMeshType type) {
         Area area = type.area();
         uiElementQueryArea = areaOverride != null ? areaOverride : areaRectangle(area);
+        cancelOtherWindowsQuery();
+        otherWindowsQueryArea = null;
+        otherWindowsUiElements = List.of();
+        otherWindowsQueryUnfinished = false;
         if (type.type() == HintMeshTypeType.UI_VISION)
             return vision.startFindElements(screenManager.screens(), uiElementQueryArea,
                     type.density(), type.minSize(), type.refine(),
                     type.refine() > 0 ? List.copyOf(visionOccupied) : List.of());
         if (area.size().source() == AreaSizeSource.MOUSE_WINDOW &&
             coversItsSource(area) &&
-            uiElementQueryArea.equals(overlay.mouseWindowRectangle(mouseX, mouseY)))
+            uiElementQueryArea.equals(overlay.mouseWindowRectangle(mouseX, mouseY))) {
+            if (type.otherWindows() != UiHintOtherWindows.NONE) {
+                // Looked in once the hints of the window under the pointer are shown.
+                otherWindowsQueryArea = type.otherWindows() == UiHintOtherWindows.ALL_SCREENS ?
+                        Rectangle.union(screenRectangles(screenManager.screens())) :
+                        screenManager.activeScreen().rectangle();
+                otherWindowsQueryPoint = new Point(mouseX, mouseY);
+                otherWindowsQueryUnfinished = true;
+            }
             return uiAutomation.startFindMouseWindowUiElements(mouseX, mouseY);
+        }
         return area.size().source() == AreaSizeSource.ACTIVE_WINDOW &&
                uiElementQueryArea.equals(overlay.activeWindowRectangle()) ?
                 uiAutomation.startFindActiveWindowUiElements() :
@@ -1386,8 +1487,17 @@ public class HintManager implements ModeListener, MousePositionListener {
                     labeledUiElements(uiElements, activeScreen.scale()) :
                     sortedUiElements(uiElements, type.order(),
                             activeScreen.scale(), orderPoint);
-            buildUiHints(hintMeshConfiguration, screenFilter, ordered,
-                    prefixLengths, hints);
+            List<Key> selectionKeys =
+                    hintMeshConfiguration.keysByFilter().get(screenFilter).selectionKeys();
+            // Two keys at least: a label is made longer by adding one of several keys.
+            if (type.type() == HintMeshTypeType.UI_ACCESSIBILITY &&
+                otherWindowsQueryArea != null && selectionKeys.size() >= 2)
+                buildMouseWindowFirstUiHints(selectionKeys, ordered,
+                        labeledUiElements(filteredUiElements(otherWindowsUiElements),
+                                activeScreen.scale()), hints);
+            else
+                buildUiHints(hintMeshConfiguration, screenFilter, ordered,
+                        prefixLengths, hints);
             hintMesh.hints(hints)
                     .prefixLength(prefixLengths.size() == 1 ?
                             prefixLengths.iterator().next() : -1)
@@ -1547,6 +1657,97 @@ public class HintManager implements ModeListener, MousePositionListener {
                     -1, -1, keySequence, element.rectangle(), element.role(),
                     element.control()));
         }
+    }
+
+    /**
+     * The hints of the window under the pointer, then those of the other windows, which
+     * are found later and may still be missing.
+     */
+    private static void buildMouseWindowFirstUiHints(List<Key> selectionKeys,
+                                                     List<UiElement> mouseWindowUiElements,
+                                                     List<UiElement> otherWindowsUiElements,
+                                                     List<Hint> hints) {
+        List<List<Key>> keySequences = mouseWindowFirstKeySequences(selectionKeys,
+                mouseWindowUiElements.size(), otherWindowsUiElements.size());
+        int hintIndex = 0;
+        for (List<UiElement> uiElements :
+                List.of(mouseWindowUiElements, otherWindowsUiElements))
+            for (UiElement element : uiElements)
+                hints.add(new Hint(element.centerX(), element.centerY(), -1, -1,
+                        keySequences.get(hintIndex++), element.rectangle(), element.role(),
+                        element.control()));
+    }
+
+    /**
+     * The labels of {@code firstCount} hints followed by those of {@code otherCount} hints
+     * that are found later. No label is the beginning of another.
+     * <p>
+     * The first hints are labeled as they would be alone with one key fewer: no label of
+     * theirs begins with the last key, which is kept for the other hints. Their labels do
+     * not depend on {@code otherCount}, so they stay as they are when the other hints
+     * arrive. The other hints take the labels left free, the shortest first: the last key,
+     * and the labels the first hints did not use. Where there are too few, a free label is
+     * made longer by one key, which gives one label per key. One key out of twelve leaves
+     * room for 144 labels of three keys: a fixed number of labels, however many, would
+     * leave the other windows of a busy screen labels of four and five keys.
+     */
+    static List<List<Key>> mouseWindowFirstKeySequences(List<Key> keys, int firstCount,
+                                                        int otherCount) {
+        int keyCount = keys.size();
+        List<List<Integer>> singleKeyLabels = new ArrayList<>(keyCount);
+        for (int keyIndex = 0; keyIndex < keyCount - 1; keyIndex++)
+            singleKeyLabels.add(List.of(keyIndex));
+        List<List<Integer>> labels = lengthenedLabels(singleKeyLabels, keyCount, firstCount);
+        List<List<Integer>> freeLabels =
+                new ArrayList<>(labels.subList(firstCount, labels.size()));
+        freeLabels.add(List.of(keyCount - 1));
+        List<List<Key>> keySequences = new ArrayList<>(firstCount + otherCount);
+        for (List<List<Integer>> hintLabels : List.of(labels.subList(0, firstCount),
+                lengthenedLabels(freeLabels, keyCount, otherCount).subList(0, otherCount)))
+            for (List<Integer> label : hintLabels)
+                keySequences.add(label.stream().map(keys::get).toList());
+        return keySequences;
+    }
+
+    private static final Comparator<List<Integer>> labelKeyOrder = (label, otherLabel) -> {
+        for (int index = 0; index < Math.min(label.size(), otherLabel.size()); index++) {
+            int order = Integer.compare(label.get(index), otherLabel.get(index));
+            if (order != 0)
+                return order;
+        }
+        return Integer.compare(label.size(), otherLabel.size());
+    };
+
+    /**
+     * At least {@code count} labels, the shortest first, made from those given: while
+     * there are too few, the last of the shortest labels is replaced with one label per
+     * key that begins with it. This is how {@link #hintKeySequence} labels hints that are
+     * not on a grid: the last keys begin the long labels.
+     */
+    private static List<List<Integer>> lengthenedLabels(List<List<Integer>> labels,
+                                                        int keyCount, int count) {
+        TreeMap<Integer, TreeSet<List<Integer>>> labelsByLength = new TreeMap<>();
+        for (List<Integer> label : labels)
+            labelsByLength.computeIfAbsent(label.size(),
+                    length -> new TreeSet<>(labelKeyOrder)).add(label);
+        int labelCount = labels.size();
+        while (labelCount < count) {
+            Map.Entry<Integer, TreeSet<List<Integer>>> shortest = labelsByLength.firstEntry();
+            List<Integer> beginning = shortest.getValue().pollLast();
+            if (shortest.getValue().isEmpty())
+                labelsByLength.remove(shortest.getKey());
+            TreeSet<List<Integer>> longerLabels = labelsByLength.computeIfAbsent(
+                    beginning.size() + 1, length -> new TreeSet<>(labelKeyOrder));
+            for (int keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+                List<Integer> longerLabel = new ArrayList<>(beginning);
+                longerLabel.add(keyIndex);
+                longerLabels.add(longerLabel);
+            }
+            labelCount += keyCount - 1;
+        }
+        List<List<Integer>> lengthened = new ArrayList<>(labelCount);
+        labelsByLength.values().forEach(lengthened::addAll);
+        return lengthened;
     }
 
     /**
@@ -2232,6 +2433,8 @@ public class HintManager implements ModeListener, MousePositionListener {
     private void finalizeHintSelection(Hint hint, List<Key> newSelectedKeySequence) {
         HintMeshConfiguration hintMeshConfiguration = currentMode.hintMesh();
         hintJustSelected = true;
+        // The hints of the other windows have nothing left to be added to.
+        cancelOtherWindowsQuery();
         logger.trace("Hint " + keyRedactor.keys(hint.keySequence()) + " selected");
         if (hintMeshConfiguration.visible())
             overlay.animateHintMatch(hint);

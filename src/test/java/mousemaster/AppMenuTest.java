@@ -232,7 +232,7 @@ class AppMenuTest {
     void typingItemsLeaveActivationAfterTheyFinish() throws Exception {
         Configuration configuration = shipped();
         Mode normal = configuration.modeMap().get("normal-mode");
-        AppMenus menus = new AppMenus(configuration.appMenus(), () -> new App("chrome.exe"));
+        AppMenus menus = new AppMenus(configuration.appMenus(), () -> new App("Cursor.exe"));
         menus.modeChanged(configuration.modeMap().get(AppMenus.MODE));
         List<String> switched = new ArrayList<>();
         Mode[] current = {configuration.modeMap().get("app-menu-done-mode")};
@@ -263,18 +263,18 @@ class AppMenuTest {
             }
         });
 
-        // The address is still being typed, and the key that ran the row is still down.
-        assertTrue(menus.selectTag(key("b")));
-        runner.run(new Command.RunMenuItemByTag(List.of(key("b")), "app-menu-done-mode"), key("b"));
+        // New Agent is still being clicked, and the key that ran the row is still down.
+        assertTrue(menus.selectTag(key("e")));
+        runner.run(new Command.RunMenuItemByTag(List.of(key("e")), "app-menu-done-mode"), key("e"));
         runner.update(1);
         assertEquals(List.of("app-menu-done-mode"), switched);
 
-        // The key is up, but the address has not been submitted yet.
+        // The key is up, but the click has not finished yet.
         current[0] = normal;
         runner.update(1);
         assertEquals(List.of("app-menu-done-mode"), switched);
 
-        // Enter has been sent. Activation stays for a moment, then keys pass through.
+        // The click has landed. Activation stays for a moment, then keys pass through.
         busy[0] = false;
         runner.update(0.05);
         runner.update(0.05);
@@ -284,8 +284,8 @@ class AppMenuTest {
 
         // A row that does not ask to type stays in activation mode.
         current[0] = configuration.modeMap().get(AppMenus.MODE);
-        assertTrue(menus.selectTag(key("r")));
-        runner.run(new Command.RunMenuItemByTag(List.of(key("r")), "app-menu-done-mode"), key("r"));
+        assertTrue(menus.selectTag(key("x")));
+        runner.run(new Command.RunMenuItemByTag(List.of(key("x")), "app-menu-done-mode"), key("x"));
         current[0] = normal;
         busy[0] = false;
         runner.update(1);
@@ -320,10 +320,10 @@ class AppMenuTest {
         assertEquals("+leftctrl +rightshift +tab -tab -rightshift -leftctrl",
                 output(menus.selectedMacro()));
         assertTrue(menus.selectTag(key("g")));
-        assertTrue(menus.selectedThenIdle());
+        assertFalse(menus.selectedThenIdle());
         assertTrue(menus.html().contains("class=itemon bgcolor=\"#7AA2F7\">打开 Google</td>"));
         assertTrue(menus.selectTag(key("b")));
-        assertTrue(menus.selectedThenIdle());
+        assertFalse(menus.selectedThenIdle());
         assertTrue(menus.html().contains("class=itemon bgcolor=\"#7AA2F7\">打开百度</td>"));
         assertTrue(menus.selectTag(key("r")));
         assertFalse(menus.selectedThenIdle());

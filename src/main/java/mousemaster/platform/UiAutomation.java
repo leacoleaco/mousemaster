@@ -26,6 +26,18 @@ public interface UiAutomation {
     Future<List<UiElement>> startFindUiElementsInArea(Rectangle area);
 
     /**
+     * Elements of the windows {@link #startFindMouseWindowUiElements} leaves out: every
+     * visible window that intersects the area, except the top-level window under the point
+     * and its popups. Cropped to the area, and elements a window in front covers are left
+     * out. The scan does not hold up a scan of the window under the pointer, and
+     * cancelling the future stops it at the next window.
+     */
+    default Future<List<UiElement>> startFindOtherWindowsUiElements(int x, int y,
+                                                                    Rectangle area) {
+        return CompletableFuture.completedFuture(List.of());
+    }
+
+    /**
      * Controls of the active window, including panels that are only pointed at.
      * The future completes away from the thread that reads the keyboard.
      */

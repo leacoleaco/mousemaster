@@ -839,6 +839,8 @@ windows the elements are looked for in:
 - `all-screens`: Every visible window on every connected screen
 - `active-window`: The active window, and its popups (menus, dropdowns, dialogs). A popup
   is hinted even where it extends past the window.
+- `mouse-window`: The top-level window under the pointer, and its popups, whether or not it
+  is the active window
 - `last-selected-hint-cell`: The cell of the last selected hint, the element of a UI hint
 - `last-overlay-area`: The area of the overlay before this mode, e.g. a grid shrunk by `shrink-overlay`
 
@@ -858,6 +860,27 @@ ui-hint-mode.overlay.area-width-percent=0.33
 ui-hint-mode.overlay.area-height-percent=0.33
 ui-hint-mode.overlay.area-center=mouse
 ```
+
+**`ui-other-windows`** adds the hints of the other windows to those of `area=mouse-window`
+(default `none`): `active-screen` for the windows that show on the screen with the mouse
+cursor, `all-screens` for those of every screen. One window is scanned much faster than a
+screen of them, so the hints of the window under the pointer are shown as soon as they are
+found, exactly as without this property, and a hint can be selected straight away. The other
+windows are scanned after that, on a thread of their own, and their hints are added when the
+scan is over. An element covered by another window gets no hint, as with the regions
+above. Selecting a hint or leaving the mode stops the scan.
+
+```properties
+ui-hint-mode.overlay.area=mouse-window
+ui-hint-mode.overlay.ui-other-windows=active-screen
+```
+
+The hints shown first keep their labels when the others arrive, and the keys already pressed
+stay pressed. To make this possible the last key of `selection-keys` begins no label of the
+window under the pointer: it is kept for the other windows, whose labels are the ones left
+free, the shortest first. `isoverlayempty` is pressed once every window was scanned and none
+has an element. The property is ignored with another `area`, with an `area` that is scaled or
+moved, and with `overlay.type=ui-vision`. On macOS no other window is scanned.
 
 **`ui-order`** is the order the elements are labeled in, the first ones getting the shortest labels
 (default `top-to-bottom`): an edge (`top-to-bottom`, `bottom-to-top`, `left-to-right`,
