@@ -80,6 +80,40 @@ class UiAimTest {
     }
 
     @Test
+    void findClicksFindInTheEditMenu() {
+        UiAim aim = new UiAim(UiAim.Kind.MENU, "Edit|编辑", "Find|查找");
+        List<UiElement> bar = List.of(
+                element("File", Control.MENU_ITEM, 3913, -2430, 81, 77),
+                element("Edit", Control.MENU_ITEM, 3992, -2430, 88, 77),
+                element("Selection", Control.MENU_ITEM, 4077, -2430, 155, 77));
+        assertEquals(new Rectangle(3992, -2430, 88, 77), aim.locate(WINDOW, bar).rectangle());
+        List<UiElement> open = List.of(
+                element("Edit", Control.MENU_ITEM, 3992, -2430, 88, 77),
+                element("Find Ctrl+F", Control.MENU_ITEM, 4001, -2016, 689, 59),
+                element("Find", Control.GROUP, 4001, -2002, 279, 32),
+                element("Find in Files Ctrl+Shift+F", Control.MENU_ITEM, 4001, -1874, 689, 59),
+                element("查找下一个", Control.MENU_ITEM, 4001, -1600, 689, 59));
+        UiElement find = aim.locateItem(WINDOW, open);
+        assertEquals("Find Ctrl+F", find.name());
+        assertEquals(Control.MENU_ITEM, find.control());
+    }
+
+    @Test
+    void findUsesTheChineseMenuNames() {
+        UiAim aim = new UiAim(UiAim.Kind.MENU, "Edit|编辑", "Find|查找");
+        List<UiElement> bar = List.of(
+                element("文件", Control.MENU_ITEM, 3913, -2430, 81, 77),
+                element("编辑", Control.MENU_ITEM, 3992, -2430, 88, 77));
+        assertEquals("编辑", aim.locate(WINDOW, bar).name());
+        List<UiElement> open = List.of(
+                element("编辑", Control.MENU_ITEM, 3992, -2430, 88, 77),
+                element("查找 Ctrl+F", Control.MENU_ITEM, 4001, -2016, 689, 59),
+                element("在文件中查找 Ctrl+Shift+F", Control.MENU_ITEM, 4001, -1874, 689, 59));
+        assertEquals("查找 Ctrl+F", aim.locateItem(WINDOW, open).name());
+        assertNull(aim.locateItem(WINDOW, bar));
+    }
+
+    @Test
     void aMissingControlIsNotInvented() {
         assertNull(new UiAim(UiAim.Kind.CLICK, "New Agent").locate(WINDOW, List.of()));
         assertNull(new UiAim(UiAim.Kind.POINT, "Terminal")

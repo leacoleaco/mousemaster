@@ -4487,6 +4487,7 @@ public class ConfigurationParser {
      * The items of a menu are in the order of the file. Choosing one plays its output,
      * which is written like the output of a macro. {@code click 'Name'} and
      * {@code point 'Name'} move the pointer onto a control instead of, or after, the keys.
+     * {@code menu 'Menu' 'Item'} opens that menu and presses the item.
      */
     private static List<AppMenuConfiguration> parseAppMenus(List<String> properties,
                                                            Map<String, KeyAlias> keyAliases,
@@ -4495,9 +4496,10 @@ public class ConfigurationParser {
         Pattern appMenuKeyPattern =
                 Pattern.compile("app-menu\\.([^.]+)\\.(title|item\\.([^.]+))");
         // click 'Name' presses that button. point 'Name' moves into that panel.
-        // Either may follow the keys that show the panel.
+        // menu 'Menu' 'Item' opens the menu and presses the item. Names may list
+        // alternatives separated by |. Keys written before point are sent first.
         Pattern menuAimPattern =
-                Pattern.compile("(?i)(^|\\s)(click|point)\\s+'([^']*)'");
+                Pattern.compile("(?i)(^|\\s)(click|point|menu)\\s+'([^']*)'(?:\\s+'([^']*)')?");
         Map<String, String> titleByName = new LinkedHashMap<>();
         Map<String, List<AppMenuConfiguration.Item>> itemsByName = new LinkedHashMap<>();
         for (String property : properties) {
@@ -4561,12 +4563,22 @@ public class ConfigurationParser {
                         throw new IllegalArgumentException(
                                 "A menu item can name only one control: " + propertyValue);
                     String query = aimMatcher.group(3).strip();
-                    if (query.isEmpty())
+                    String menuItem = aimMatcher.group(4) == null
+                            ? null : aimMatcher.group(4).strip();
+                    if (query.isEmpty() || (menuItem != null && menuItem.isEmpty()))
                         throw new IllegalArgumentException(
                                 "The control name is empty: " + propertyValue);
-                    UiAim.Kind aimKind = aimMatcher.group(2).equalsIgnoreCase("click")
-                            ? UiAim.Kind.CLICK : UiAim.Kind.POINT;
-                    aim = new UiAim(aimKind, query);
+                    boolean menu = aimMatcher.group(2).equalsIgnoreCase("menu");
+                    if (menu && (menuItem == null || menuItem.isEmpty()))
+                        throw new IllegalArgumentException(
+                                "A menu names the menu and the item, as menu 'Edit' 'Find': " +
+                                propertyValue);
+                    if (!menu && menuItem != null)
+                        throw new IllegalArgumentException(
+                                "click and point name one control: " + propertyValue);
+                    aim = menu ? new UiAim(UiAim.Kind.MENU, query, menuItem)
+                            : new UiAim(aimMatcher.group(2).equalsIgnoreCase("click")
+                                    ? UiAim.Kind.CLICK : UiAim.Kind.POINT, query);
                     keyOutput.append(outputString, aimCursor, aimMatcher.start());
                     aimCursor = aimMatcher.end();
                 }
@@ -4589,7 +4601,7 @@ public class ConfigurationParser {
                 if (macro == null && aim == null)
                     throw new IllegalArgumentException(
                             "Invalid menu item " + propertyValue +
-                            ": expected <label> -> <macro output>, or click 'Name', or point 'Name'");
+                            ": expected <label> -> <macro output>, or click 'Name', or point 'Name', or menu 'Menu' 'Item'");
                 items.add(new AppMenuConfiguration.Item(itemName, label, tag, macro, aim));
             } catch (IllegalArgumentException e) {
                 IllegalArgumentException e2 =

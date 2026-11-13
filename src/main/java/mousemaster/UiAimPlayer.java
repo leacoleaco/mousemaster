@@ -24,8 +24,10 @@ public final class UiAimPlayer {
     private static final double RETRY_SECONDS = 0.25;
     /** How long the button stays down. */
     private static final double HOLD_SECONDS = 0.04;
+    /** After the menu bar is clicked, let the menu open before its command is looked up. */
+    private static final double MENU_OPEN_SECONDS = 0.25;
 
-    private enum Phase { IDLE, SETTLE, QUERY, ARRIVE, HOLD }
+    private enum Phase { IDLE, SETTLE, QUERY, ARRIVE, HOLD, OPEN }
 
     private final MouseManager mouseManager;
     private final Platform platform;
@@ -34,6 +36,9 @@ public final class UiAimPlayer {
     private UiAim aim;
     private boolean afterKeys;
     private int attempts;
+    /** 0 opens the menu, 1 presses the command, 2 closes the menu when the command is missing. */
+    private int menuStep;
+    private UiElement menuBar;
     private Phase phase = Phase.IDLE;
     private double remaining;
     private Future<UiAutomation.WindowControls> future;
@@ -50,11 +55,14 @@ public final class UiAimPlayer {
         release();
         this.aim = aim;
         this.afterKeys = afterKeys;
-        this.attempts = afterKeys ? 2 : 1;
+        this.attempts = aim.kind() == UiAim.Kind.MENU || afterKeys ? 2 : 1;
+        this.menuStep = 0;
+        this.menuBar = null;
         this.future = null;
         this.phase = Phase.SETTLE;
         this.remaining = afterKeys ? AFTER_KEYS_SECONDS : 0;
-        logger.debug("Aim " + aim.kind().name().toLowerCase() + " " + aim.name());
+        logger.debug("Aim " + aim.kind().name().toLowerCase() + " " + aim.name()
+                     + (aim.item() == null ? "" : " " + aim.item()));
     }
 
     public void update(double delta) {
@@ -91,16 +99,24 @@ public final class UiAimPlayer {
                 if (element == null) {
                     attempts--;
                     if (attempts > 0) {
-                        logger.debug("No " + aim.name() + " yet, looking again");
+                        logger.debug("No " + wanted() + " yet, looking again");
                         phase = Phase.SETTLE;
                         remaining = RETRY_SECONDS;
                         return;
                     }
-                    logger.info("No control named " + aim.name() + " to " +
+                    if (menuStep == 1 && menuBar != null) {
+                        logger.info("No menu item " + aim.item() + ", closing the menu");
+                        menuStep = 2;
+                        moveTo(menuBar);
+                        return;
+                    }
+                    logger.info("No control named " + wanted() + " to " +
                                 aim.kind().name().toLowerCase());
                     phase = Phase.IDLE;
                     return;
                 }
+                if (aim.kind() == UiAim.Kind.MENU && menuStep == 0)
+                    menuBar = element;
                 moveTo(element);
             }
             case ARRIVE -> {
@@ -116,14 +132,33 @@ public final class UiAimPlayer {
                 if (remaining > 0)
                     return;
                 release();
+                if (aim.kind() == UiAim.Kind.MENU && menuStep == 0) {
+                    menuStep = 1;
+                    attempts = 2;
+                    phase = Phase.OPEN;
+                    remaining = MENU_OPEN_SECONDS;
+                    return;
+                }
                 phase = Phase.IDLE;
+            }
+            case OPEN -> {
+                remaining -= delta;
+                if (remaining > 0)
+                    return;
+                beginQuery();
             }
         }
     }
 
+    private String wanted() {
+        if (aim.kind() == UiAim.Kind.MENU && menuStep >= 1 && aim.item() != null)
+            return aim.item();
+        return aim.name();
+    }
+
     private void beginQuery() {
         if (platform == null || platform.uiAutomation() == null) {
-            logger.info("No control named " + aim.name() + " to " +
+            logger.info("No control named " + wanted() + " to " +
                         aim.kind().name().toLowerCase());
             phase = Phase.IDLE;
             return;
@@ -148,6 +183,8 @@ public final class UiAimPlayer {
         }
         if (controls == null)
             return null;
+        if (aim.kind() == UiAim.Kind.MENU && menuStep >= 1)
+            return aim.locateItem(controls.window(), controls.elements());
         return aim.locate(controls.window(), controls.elements());
     }
 
@@ -159,12 +196,13 @@ public final class UiAimPlayer {
         Point center = element.rectangle().center();
         int x = (int) center.x();
         int y = (int) center.y();
-        String label = element.name() == null ? aim.name() : element.name();
-        logger.info((aim.kind() == UiAim.Kind.CLICK ? "Clicking " : "Moving the pointer to ") +
+        String label = element.name() == null ? wanted() : element.name();
+        boolean click = aim.kind() != UiAim.Kind.POINT;
+        logger.info((click ? "Clicking " : "Moving the pointer to ") +
                     label + " at " + x + "," + y);
         mouseManager.haltMovement();
         mouseManager.moveTo(x, y);
-        if (aim.kind() == UiAim.Kind.POINT) {
+        if (!click) {
             phase = Phase.IDLE;
             return;
         }

@@ -10,9 +10,10 @@ import java.util.List;
  * Where a menu item puts the pointer, found by the control's accessibility name.
  * {@link Kind#CLICK} presses the named button. {@link Kind#POINT} moves into the
  * named panel: a tab or a toolbar of that name is the panel's edge, and the pointer
- * goes to the area just below it.
+ * goes to the area just below it. {@link Kind#MENU} presses a menu-bar item, then
+ * the command that appears under it. A command keeps its label when its shortcut changes.
  */
-public record UiAim(Kind kind, String name) {
+public record UiAim(Kind kind, String name, String item) {
 
     /** A named region large enough to land in, such as a file tree. */
     private static final int BODY_MIN_WIDTH = 160;
@@ -20,24 +21,41 @@ public record UiAim(Kind kind, String name) {
     /** The body of a panel under its tab, as opposed to the tab itself. */
     private static final int PANEL_MIN_WIDTH = 300;
     private static final int PANEL_MIN_HEIGHT = 150;
+    /** Menu-bar items sit in this band under the top of the window. */
+    private static final int MENU_BAR_BAND = 120;
 
     public enum Kind {
         /** Press the left button on the control. */
         CLICK,
         /** Move the pointer into the control and leave it there. */
-        POINT
+        POINT,
+        /** Open a menu, then press the command in it. */
+        MENU
+    }
+
+    public UiAim(Kind kind, String name) {
+        this(kind, name, null);
     }
 
     public UiAim {
         if (name == null || name.isBlank())
             throw new IllegalArgumentException("A control needs a name");
         name = name.strip();
+        if (item != null)
+            item = item.strip();
+        if (kind == Kind.MENU) {
+            if (item == null || item.isBlank())
+                throw new IllegalArgumentException("A menu needs the menu and the item");
+        }
+        else if (item != null)
+            throw new IllegalArgumentException("Only a menu names two controls");
     }
 
     /**
      * The control to act on, or null when the window has none.
      * {@code window} is the foreground window, in screen pixels. It decides which
-     * tree is the file explorer when the explorer is not named.
+     * tree is the file explorer when the explorer is not named. For a menu, this is
+     * the menu-bar item; the command under it is {@link #locateItem}.
      */
     public UiElement locate(Rectangle window, List<UiElement> elements) {
         if (elements == null || elements.isEmpty())
@@ -45,7 +63,97 @@ public record UiAim(Kind kind, String name) {
         return switch (kind) {
             case CLICK -> click(elements);
             case POINT -> point(window, elements);
+            case MENU -> menuItem(window, elements, name, true);
         };
+    }
+
+    /** The command shown after the menu-bar item has been opened. */
+    public UiElement locateItem(Rectangle window, List<UiElement> elements) {
+        if (kind != Kind.MENU || elements == null || elements.isEmpty())
+            return null;
+        return menuItem(window, elements, item, false);
+    }
+
+    /**
+     * A menu entry whose label is one of {@code alternatives}, separated by {@code |}.
+     * The menu bar is the matching entry at the top of the window. The command is the
+     * matching entry below that. {@code Find} matches {@code Find Ctrl+F} and not
+     * {@code Find in Files}.
+     */
+    private static UiElement menuItem(Rectangle window, List<UiElement> elements,
+                                     String alternatives, boolean menuBar) {
+        int bandBottom = window == null || window.isEmpty()
+                ? Integer.MIN_VALUE : window.y() + MENU_BAR_BAND;
+        UiElement best = null;
+        int bestTop = Integer.MAX_VALUE;
+        for (UiElement element : elements) {
+            if (element.control() != Control.MENU_ITEM)
+                continue;
+            if (!menuLabel(element.name(), alternatives))
+                continue;
+            Rectangle rectangle = element.rectangle();
+            if (rectangle.width() < 8 || rectangle.height() < 8)
+                continue;
+            boolean inBar = bandBottom != Integer.MIN_VALUE && rectangle.y() <= bandBottom;
+            if (menuBar != inBar && bandBottom != Integer.MIN_VALUE)
+                continue;
+            if (rectangle.y() < bestTop) {
+                best = element;
+                bestTop = rectangle.y();
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The accessible name is the label, or the label followed by its shortcut,
+     * as in {@code Find Ctrl+F}. {@code alternatives} lists labels separated by {@code |}.
+     */
+    static boolean menuLabel(String accessibleName, String alternatives) {
+        if (accessibleName == null || alternatives == null)
+            return false;
+        String label = accessibleName.strip();
+        int tab = label.indexOf('\t');
+        if (tab >= 0)
+            label = label.substring(0, tab).strip();
+        label = label.replaceFirst("(?i)\\s*\\(&[a-z0-9]\\)$", "").strip();
+        for (String alternative : alternatives.split("\\|")) {
+            String query = alternative.strip();
+            if (query.isEmpty())
+                continue;
+            if (label.equalsIgnoreCase(query))
+                return true;
+            if (label.length() <= query.length()
+                    || !label.regionMatches(true, 0, query, 0, query.length())
+                    || label.charAt(query.length()) != ' ')
+                continue;
+            if (isShortcut(label.substring(query.length() + 1).strip()))
+                return true;
+        }
+        return false;
+    }
+
+    /** {@code Ctrl+F}, {@code Ctrl+Shift+F}, {@code Shift+Alt+A}. Not further words. */
+    private static boolean isShortcut(String text) {
+        String[] parts = text.split("\\+");
+        if (parts.length < 2)
+            return false;
+        for (int index = 0; index < parts.length - 1; index++) {
+            if (!isModifier(parts[index].strip()))
+                return false;
+        }
+        String key = parts[parts.length - 1].strip();
+        return !key.isEmpty() && !key.contains(" ");
+    }
+
+    private static boolean isModifier(String word) {
+        return word.equalsIgnoreCase("ctrl")
+                || word.equalsIgnoreCase("control")
+                || word.equalsIgnoreCase("alt")
+                || word.equalsIgnoreCase("shift")
+                || word.equalsIgnoreCase("cmd")
+                || word.equalsIgnoreCase("win")
+                || word.equalsIgnoreCase("option");
     }
 
     private UiElement click(List<UiElement> elements) {

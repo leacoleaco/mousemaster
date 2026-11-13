@@ -85,7 +85,7 @@ class AppMenuTest {
         assertTrue(cursor.matches(new App("Cursor.exe")));
         assertTrue(cursor.matches(new App("cursor.exe")));
         assertFalse(cursor.matches(new App("chrome.exe")));
-        assertEquals(List.of("关闭当前编辑窗", "搜索", "New Agent", "Terminal", "Git", "项目"),
+        assertEquals(List.of("关闭当前编辑器", "查找", "New Agent", "Terminal", "Git", "项目"),
                 cursor.items().stream().map(AppMenuConfiguration.Item::label).toList());
         assertEquals(List.of("x", "f", "e", "c", "d", "s"),
                 cursor.items().stream().map(item -> item.tag().name()).toList());
@@ -93,11 +93,11 @@ class AppMenuTest {
         AppMenus menus = new AppMenus(configuration.appMenus(), () -> new App("Cursor.exe"));
         menus.modeChanged(configuration.modeMap().get(AppMenus.MODE));
         assertTrue(menus.selectTag(key("x")));
-        assertEquals("+leftctrl +w -w -leftctrl", output(menus.selectedMacro()));
+        assertEquals("+leftctrl +f4 -f4 -leftctrl", output(menus.selectedMacro()));
         assertNull(menus.selectedAim());
         assertTrue(menus.selectTag(key("f")));
-        assertEquals("+leftctrl +f -f -leftctrl", output(menus.selectedMacro()));
-        assertNull(menus.selectedAim());
+        assertNull(menus.selectedMacro());
+        assertEquals(new UiAim(UiAim.Kind.MENU, "Edit|编辑", "Find|查找"), menus.selectedAim());
         assertTrue(menus.selectTag(key("e")));
         assertNull(menus.selectedMacro());
         assertEquals(new UiAim(UiAim.Kind.CLICK, "New Agent"), menus.selectedAim());
