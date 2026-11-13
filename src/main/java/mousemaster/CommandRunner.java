@@ -226,11 +226,14 @@ public class CommandRunner {
             case FilterUiHints filterUiHints -> hintManager.filterUiHints(filterUiHints.role());
             case CopyText copyText -> copyTextPlayer.start(copyText.kind());
             case SelectWindow selectWindow -> {
-                if (windowSwitcher != null)
+                // A key that jumps to a row does only that. d stays "down" when it tags none.
+                if (windowSwitcher != null && !windowSwitcher.hasTag(eventKey))
                     windowSwitcher.move(selectWindow.delta());
             }
             case ActivateSelectedWindow activateSelectedWindow -> {
-                if (windowSwitcher != null && windowSwitcher.activateSelected())
+                // g confirms, unless it is the letter of one of the rows.
+                if (windowSwitcher != null && !windowSwitcher.hasTag(eventKey) &&
+                    windowSwitcher.activateSelected())
                     modeController.switchMode(activateSelectedWindow.modeAfter());
             }
             case ActivateWindowByTag activateWindowByTag -> {

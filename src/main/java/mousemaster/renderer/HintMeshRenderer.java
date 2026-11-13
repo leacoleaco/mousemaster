@@ -1402,18 +1402,16 @@ public final class HintMeshRenderer {
             maxHintCenterY = Math.max(maxHintCenterY, hint.centerY());
         }
         List<Hint> hints = hintMeshWindow.hints;
-        // A grid of one hint (the screen selection hint) has no neighboring cells: its box grows
-        // to fit its text and its label centers on its ink, as a non-grid hint's does.
-        boolean isHintPartOfTiledGrid = isHintPartOfGrid && hints.size() != 1;
+        HintLayoutMetrics layoutMetrics =
+                hintLayoutMetrics(hints, hintMesh, style, screenScale, qtScaleFactor);
+        boolean isHintPartOfTiledGrid = layoutMetrics.isHintPartOfTiledGrid();
         int minHintLeft = Integer.MAX_VALUE;
         int minHintTop = Integer.MAX_VALUE;
         int maxHintRight = Integer.MIN_VALUE;
         int maxHintBottom = Integer.MIN_VALUE;
         boolean hasSelectedKeys = !hintMesh.selectedKeySequence().isEmpty();
-        // Background prefix is on a different layer.
-        boolean hasForegroundPrefixKeys = !style.prefixInBackground() && hintMesh.prefixLength() != -1;
-        HintFontStyle prefixFontStyle = hasForegroundPrefixKeys ? style.prefixFontStyle() : null;
-        QtHintFontStyle labelFontStyle = QtHintFont.qtHintFontStyle(style.fontStyle(), prefixFontStyle, screenScale, lastSelectedHintBoxHexColor);
+        boolean hasForegroundPrefixKeys = hasForegroundPrefixKeys(hintMesh, style);
+        QtHintFontStyle labelFontStyle = layoutMetrics.labelFontStyle();
         Map<GradientColor, Rectangle> boxGradientAreaByColor = new HashMap<>();
         Map<GradientColor, QBrush> solidBoxBrushByColor = new HashMap<>();
         List<Hint> savedHints = hintMesh.savedHints();
@@ -1434,8 +1432,6 @@ public final class HintMeshRenderer {
         GradientColor prefixBoxBorderColor = gradientColor(style.prefixBoxBorderColor());
         Rectangle prefixBoxBorderGradientArea =
                 gradientArea(prefixBoxBorderColor.area(), hintMeshWindow, hintMesh);
-        int boxHorizontalPadding = scaledLength(style.boxHorizontalPadding(), screenScale);
-        int boxVerticalPadding = scaledLength(style.boxVerticalPadding(), screenScale);
         int boxBorderThickness = scaledLength(style.boxBorderThickness(), screenScale);
         int boxBorderLength = scaledLength(style.boxBorderLength(), screenScale);
         int boxBorderRadius = scaledLength(style.boxBorderRadius(), screenScale);
@@ -1476,18 +1472,7 @@ public final class HintMeshRenderer {
                 subDecorationStyles.add(decorationStyle(style.decorations().get(2),
                         screenScale, hintMeshWindow, hintMesh));
         }
-        Map<String, Integer> xAdvancesByString = new HashMap<>();
-        int hintKeyMaxXAdvance = 0;
-        List<Key> labelOverride = style.labelOverride();
-        boolean labelOverridden = labelOverride != null && !labelOverride.isEmpty();
-        for (Hint hint : hints) {
-            for (Key key : labelOverridden ? labelOverride : hint.keySequence()) {
-                hintKeyMaxXAdvance = Math.max(hintKeyMaxXAdvance,
-                        xAdvancesByString.computeIfAbsent(key.hintLabel(),
-                                labelFontStyle.defaultStyle().metrics()::horizontalAdvance));
-            }
-        }
-//            hintKeyMaxXAdvance = metrics.maxWidth();
+        boolean labelOverridden = labelOverridden(style);
         List<HintBox> hintBoxes = new ArrayList<>();
         List<HintLabel> hintLabels = new ArrayList<>();
         List<HintLabel> unsavedHintLabels = new ArrayList<>();
@@ -1500,59 +1485,14 @@ public final class HintMeshRenderer {
             boolean hintSaved = savedHints.contains(hint);
             if (!selectable && !hintSaved)
                 continue;
-            List<Key> labelKeys = labelOverridden ? labelOverride : hint.keySequence();
-            int totalXAdvance = labelFontStyle.defaultStyle()
-                                              .metrics()
-                                              .horizontalAdvance(labelKeys
-                                                                     .stream()
-                                                                     .map(Key::hintLabel)
-                                                                     .collect(
-                                                                             Collectors.joining()));
-            int lineHeight = labelFontStyle.defaultStyle().metrics().height();
-            // A cell is in pixels, as the padding and the grid's own cell are, but metrics are
-            // in the points Qt draws text in.
-            double advancePixels = totalXAdvance * qtScaleFactor;
-            double lineHeightPixels = lineHeight * qtScaleFactor;
-            // A grid cell is used as-is so boxes tile perfectly. Text that overflows is handled
-            // by the label layer.
-            double cellWidth = (isHintPartOfGrid ? hint.cellWidth() : advancePixels) +
-                               2 * boxHorizontalPadding;
-            double cellHeight = (isHintPartOfGrid ? hint.cellHeight() : lineHeightPixels) +
-                                2 * boxVerticalPadding;
-            double layoutCenterX = hint.centerX() +
-                    (isHintPartOfGrid ? 0 : style.hintCenterOffsetX());
-            int x = hintRoundedX(layoutCenterX, cellWidth, qtScaleFactor);
-            int y = hintRoundedY(hint.centerY(), cellHeight, qtScaleFactor);
-            int fullBoxWidth = (int) (cellWidth / qtScaleFactor);
-            int fullBoxHeight = (int) (cellHeight / qtScaleFactor);
-            if (isHintPartOfGrid) {
-                // Size each box by its rounded cell boundaries so columns and rows tile exactly and
-                // the last column/row reaches the cell's edge. Otherwise the grid falls a pixel short
-                // of the cell it is cropped into, and the uncovered strip shows as a seam on the
-                // right/bottom during the transition.
-                fullBoxWidth = hintRoundedRight(hint.centerX(), cellWidth, qtScaleFactor) - x;
-                fullBoxHeight = hintRoundedBottom(hint.centerY(), cellHeight, qtScaleFactor) - y;
-            }
-            List<Key> prefix = (labelOverridden || hintMesh.prefixLength() == -1) ?
-                    List.of() : hint.keySequence().subList(0,
-                    hintMesh.prefixLength());
-            List<Key> suffix = labelOverridden ? labelKeys :
-                    hint.keySequence().subList(prefix.size(), hint.keySequence().size());
-            HintLabel hintLabel =
-                    HintLabel.of(
-                            labelOverridden ? labelKeys :
-                                    (style.prefixInBackground() ? suffix : hint.keySequence()),
-                            xAdvancesByString, fullBoxWidth,
-                            fullBoxHeight, totalXAdvance,
-                            labelOverridden ? -1 :
-                                    (style.prefixInBackground() ? -1 : hintMesh.prefixLength()),
-                            hintSaved ? savedLabelFontStyle : labelFontStyle,
-                            hintKeyMaxXAdvance,
-                            labelOverridden || !selectable ? -1 :
-                                    (hintMesh.selectedKeySequence().size() - 1
-                                    - (style.prefixInBackground() && hintMesh.prefixLength() != -1 ? prefix.size() : 0)),
-                            style.fontStyle().defaultFontStyle().verticalAlignment(),
-                            isHintPartOfTiledGrid, qtScaleFactor);
+            HintBoxLayout boxLayout = hintBoxLayout(layoutMetrics, hint,
+                    hintSaved ? savedLabelFontStyle : labelFontStyle, selectable,
+                    collapsed(hint, hintMesh));
+            HintLabel hintLabel = boxLayout.label();
+            int x = boxLayout.x();
+            int y = boxLayout.y();
+            int boxWidth = boxLayout.width();
+            int boxHeight = boxLayout.height();
             hintLabels.add(hintLabel);
             if (hintSaved)
                 savedHintLabels.add(hintLabel);
@@ -1563,7 +1503,8 @@ public final class HintMeshRenderer {
             boolean gridRightEdge = !isHintPartOfGrid || !selectable || hint.centerX() == maxHintCenterX || style.boxWidthPercent() != 1;
             boolean gridBottomEdge = !isHintPartOfGrid || !selectable || hint.centerY() == maxHintCenterY || style.boxHeightPercent() != 1;
             HintGroup hintGroup = hintMesh.prefixLength() == -1 ? meshGroup :
-                    hintGroupByPrefix.get(prefix);
+                    hintGroupByPrefix.get(labelOverridden ? List.<Key>of() :
+                            hint.keySequence().subList(0, hintMesh.prefixLength()));
             HintBox hintBox =
                     new HintBox(hint, boxBorderLength,
                             boxBorderThickness,
@@ -1578,23 +1519,6 @@ public final class HintMeshRenderer {
                             boxBorderRadius
                     );
             hintBoxes.add(hintBox);
-            int scaledBoxWidth = style.boxWidthPercent() == 1 ? fullBoxWidth : Math.max(
-                    (int) (fullBoxWidth * style.boxWidthPercent()),
-                    (int) ((advancePixels + 2 * boxHorizontalPadding) / qtScaleFactor));
-            int scaledBoxHeight = style.boxHeightPercent() == 1 ? fullBoxHeight : Math.max(
-                    (int) (fullBoxHeight * style.boxHeightPercent()),
-                    (int) ((lineHeightPixels + 2 * boxVerticalPadding) / qtScaleFactor));
-            boolean boxSizedByLabel =
-                    !isHintPartOfGrid && hintLabel.tightHintBoxWidth >= scaledBoxWidth;
-            int boxWidth = isHintPartOfTiledGrid ? scaledBoxWidth :
-                    Math.max(hintLabel.tightHintBoxWidth, scaledBoxWidth);
-            int boxHeight = isHintPartOfTiledGrid ? scaledBoxHeight :
-                    Math.max(hintLabel.tightHintBoxHeight, scaledBoxHeight);
-            hintLabel.left = boxSizedByLabel ? hintLabel.tightHintBoxLeft :
-                    (fullBoxWidth - boxWidth) / 2;
-            hintLabel.top = (fullBoxHeight - boxHeight) / 2;
-            x += hintLabel.left;
-            y += hintLabel.top;
             // Not sure why required, but this help having the grid match the screen
             // right and bottom borders (pixel perfect).
             if (x + boxWidth == hintMeshWindow.window.x() + hintMeshWindow.window.width() - 1)
@@ -1950,6 +1874,183 @@ public final class HintMeshRenderer {
                 (beforeLayers - beforeGroups) / 1_000_000,
                 (System.nanoTime() - beforeLayers) / 1_000_000);
         return hintBoxes;
+    }
+
+    /** What the box of a hint and its label are laid out from: the same for every hint of a mesh
+     *  on a screen. */
+    private record HintLayoutMetrics(HintMesh hintMesh, HintMeshStyle style,
+                                     QtHintFontStyle labelFontStyle,
+                                     Map<String, Integer> xAdvancesByString,
+                                     int hintKeyMaxXAdvance, boolean isHintPartOfGrid,
+                                     boolean isHintPartOfTiledGrid, int boxHorizontalPadding,
+                                     int boxVerticalPadding, double qtScaleFactor) {
+    }
+
+    /** The label of a hint and the box it is drawn in, in points: x and y are on the desktop. */
+    private record HintBoxLayout(HintLabel label, int x, int y, int width, int height) {
+    }
+
+    /** Stands for the keys a collapsed label leaves out. */
+    private static final Key collapsedLabelEnd = new Key(null, null, "..");
+
+    /**
+     * A hint whose box would sit on another's shows the first key of its label only. Once a key
+     * is selected the hints that do not begin with it are hidden, and the others show their
+     * whole label.
+     */
+    static boolean collapsed(Hint hint, HintMesh hintMesh) {
+        return hint.overlapped() && hint.keySequence().size() > 1 &&
+               hintMesh.selectedKeySequence().isEmpty() && hintMesh.prefixLength() == -1;
+    }
+
+    private static boolean labelOverridden(HintMeshStyle style) {
+        return style.labelOverride() != null && !style.labelOverride().isEmpty();
+    }
+
+    /** A background prefix is on a different layer. */
+    private static boolean hasForegroundPrefixKeys(HintMesh hintMesh, HintMeshStyle style) {
+        return !style.prefixInBackground() && hintMesh.prefixLength() != -1;
+    }
+
+    private HintLayoutMetrics hintLayoutMetrics(List<Hint> hints, HintMesh hintMesh,
+                                                HintMeshStyle style, double screenScale,
+                                                double qtScaleFactor) {
+        boolean isHintPartOfGrid = hints.getFirst().cellWidth() != -1;
+        // A grid of one hint (the screen selection hint) has no neighboring cells: its box grows
+        // to fit its text and its label centers on its ink, as a non-grid hint's does.
+        boolean isHintPartOfTiledGrid = isHintPartOfGrid && hints.size() != 1;
+        QtHintFontStyle labelFontStyle = QtHintFont.qtHintFontStyle(style.fontStyle(),
+                hasForegroundPrefixKeys(hintMesh, style) ? style.prefixFontStyle() : null,
+                screenScale, lastSelectedHintBoxHexColor);
+        Map<String, Integer> xAdvancesByString = new HashMap<>();
+        int hintKeyMaxXAdvance = 0;
+        boolean labelOverridden = labelOverridden(style);
+        for (Hint hint : hints) {
+            for (Key key : labelOverridden ? style.labelOverride() : hint.keySequence()) {
+                hintKeyMaxXAdvance = Math.max(hintKeyMaxXAdvance,
+                        xAdvancesByString.computeIfAbsent(key.hintLabel(),
+                                labelFontStyle.defaultStyle().metrics()::horizontalAdvance));
+            }
+        }
+        return new HintLayoutMetrics(hintMesh, style, labelFontStyle, xAdvancesByString,
+                hintKeyMaxXAdvance, isHintPartOfGrid, isHintPartOfTiledGrid,
+                scaledLength(style.boxHorizontalPadding(), screenScale),
+                scaledLength(style.boxVerticalPadding(), screenScale), qtScaleFactor);
+    }
+
+    /**
+     * The label of a hint and the box it is drawn in. labelFontStyle is the label's own, which
+     * is another one for a saved hint. A collapsed label is cut to its first key.
+     */
+    private HintBoxLayout hintBoxLayout(HintLayoutMetrics metrics, Hint hint,
+                                        QtHintFontStyle labelFontStyle, boolean selectable,
+                                        boolean collapsed) {
+        HintMesh hintMesh = metrics.hintMesh();
+        HintMeshStyle style = metrics.style();
+        boolean isHintPartOfGrid = metrics.isHintPartOfGrid();
+        boolean isHintPartOfTiledGrid = metrics.isHintPartOfTiledGrid();
+        double qtScaleFactor = metrics.qtScaleFactor();
+        boolean labelOverridden = labelOverridden(style);
+        collapsed = collapsed && !labelOverridden;
+        List<Key> labelKeys = labelOverridden ? style.labelOverride() :
+                collapsed ? List.of(hint.keySequence().getFirst(), collapsedLabelEnd) :
+                        hint.keySequence();
+        QFontMetrics fontMetrics = metrics.labelFontStyle().defaultStyle().metrics();
+        if (collapsed)
+            metrics.xAdvancesByString().computeIfAbsent(collapsedLabelEnd.hintLabel(),
+                    fontMetrics::horizontalAdvance);
+        int totalXAdvance = fontMetrics.horizontalAdvance(labelKeys.stream()
+                                                                   .map(Key::hintLabel)
+                                                                   .collect(Collectors.joining()));
+        int lineHeight = fontMetrics.height();
+        // A cell is in pixels, as the padding and the grid's own cell are, but metrics are
+        // in the points Qt draws text in.
+        double advancePixels = totalXAdvance * qtScaleFactor;
+        double lineHeightPixels = lineHeight * qtScaleFactor;
+        // A grid cell is used as-is so boxes tile perfectly. Text that overflows is handled
+        // by the label layer.
+        double cellWidth = (isHintPartOfGrid ? hint.cellWidth() : advancePixels) +
+                           2 * metrics.boxHorizontalPadding();
+        double cellHeight = (isHintPartOfGrid ? hint.cellHeight() : lineHeightPixels) +
+                            2 * metrics.boxVerticalPadding();
+        double layoutCenterX = hint.centerX() +
+                (isHintPartOfGrid ? 0 : style.hintCenterOffsetX());
+        int x = hintRoundedX(layoutCenterX, cellWidth, qtScaleFactor);
+        int y = hintRoundedY(hint.centerY(), cellHeight, qtScaleFactor);
+        int fullBoxWidth = (int) (cellWidth / qtScaleFactor);
+        int fullBoxHeight = (int) (cellHeight / qtScaleFactor);
+        if (isHintPartOfGrid) {
+            // Size each box by its rounded cell boundaries so columns and rows tile exactly and
+            // the last column/row reaches the cell's edge. Otherwise the grid falls a pixel short
+            // of the cell it is cropped into, and the uncovered strip shows as a seam on the
+            // right/bottom during the transition.
+            fullBoxWidth = hintRoundedRight(hint.centerX(), cellWidth, qtScaleFactor) - x;
+            fullBoxHeight = hintRoundedBottom(hint.centerY(), cellHeight, qtScaleFactor) - y;
+        }
+        List<Key> prefix = (labelOverridden || hintMesh.prefixLength() == -1) ?
+                List.of() : hint.keySequence().subList(0,
+                hintMesh.prefixLength());
+        List<Key> suffix = labelOverridden ? labelKeys :
+                hint.keySequence().subList(prefix.size(), hint.keySequence().size());
+        HintLabel hintLabel =
+                HintLabel.of(
+                        labelOverridden || collapsed ? labelKeys :
+                                (style.prefixInBackground() ? suffix : hint.keySequence()),
+                        metrics.xAdvancesByString(), fullBoxWidth,
+                        fullBoxHeight, totalXAdvance,
+                        labelOverridden ? -1 :
+                                (style.prefixInBackground() ? -1 : hintMesh.prefixLength()),
+                        labelFontStyle,
+                        metrics.hintKeyMaxXAdvance(),
+                        labelOverridden || !selectable ? -1 :
+                                (hintMesh.selectedKeySequence().size() - 1
+                                - (style.prefixInBackground() && hintMesh.prefixLength() != -1 ? prefix.size() : 0)),
+                        style.fontStyle().defaultFontStyle().verticalAlignment(),
+                        isHintPartOfTiledGrid, qtScaleFactor);
+        int scaledBoxWidth = style.boxWidthPercent() == 1 ? fullBoxWidth : Math.max(
+                (int) (fullBoxWidth * style.boxWidthPercent()),
+                (int) ((advancePixels + 2 * metrics.boxHorizontalPadding()) / qtScaleFactor));
+        int scaledBoxHeight = style.boxHeightPercent() == 1 ? fullBoxHeight : Math.max(
+                (int) (fullBoxHeight * style.boxHeightPercent()),
+                (int) ((lineHeightPixels + 2 * metrics.boxVerticalPadding()) / qtScaleFactor));
+        boolean boxSizedByLabel =
+                !isHintPartOfGrid && hintLabel.tightHintBoxWidth >= scaledBoxWidth;
+        int boxWidth = isHintPartOfTiledGrid ? scaledBoxWidth :
+                Math.max(hintLabel.tightHintBoxWidth, scaledBoxWidth);
+        int boxHeight = isHintPartOfTiledGrid ? scaledBoxHeight :
+                Math.max(hintLabel.tightHintBoxHeight, scaledBoxHeight);
+        hintLabel.left = boxSizedByLabel ? hintLabel.tightHintBoxLeft :
+                (fullBoxWidth - boxWidth) / 2;
+        hintLabel.top = (fullBoxHeight - boxHeight) / 2;
+        return new HintBoxLayout(hintLabel, x + hintLabel.left, y + hintLabel.top, boxWidth,
+                boxHeight);
+    }
+
+    /**
+     * The rectangle of the box each hint of the mesh would be drawn in with its whole label, in
+     * screen pixels. A hint on no screen has none.
+     */
+    public Map<Hint, Rectangle> hintBoxRectangles(HintMesh hintMesh, Set<Screen> screens) {
+        Map<Hint, Rectangle> rectangles = new HashMap<>();
+        for (Map.Entry<Screen, List<Hint>> entry :
+                hintsByScreen(hintMesh.hints(), screens).entrySet()) {
+            Screen screen = entry.getKey();
+            List<Hint> hints = entry.getValue();
+            double qtScaleFactor = qtScaleFactor(screen.scale());
+            HintLayoutMetrics metrics = hintLayoutMetrics(hints, hintMesh,
+                    hintMesh.styleByFilter().get(ScreenFilter.of(screen)), screen.scale(),
+                    qtScaleFactor);
+            for (Hint hint : hints) {
+                HintBoxLayout boxLayout = hintBoxLayout(metrics, hint, metrics.labelFontStyle(),
+                        hint.startsWith(hintMesh.selectedKeySequence()), false);
+                rectangles.put(hint, new Rectangle(
+                        (int) Math.round(boxLayout.x() * qtScaleFactor),
+                        (int) Math.round(boxLayout.y() * qtScaleFactor),
+                        (int) Math.round(boxLayout.width() * qtScaleFactor),
+                        (int) Math.round(boxLayout.height() * qtScaleFactor)));
+            }
+        }
+        return rectangles;
     }
 
     /** A decoration label is not drawn where a label already is. Labels are centered in their box, so
@@ -2363,7 +2464,8 @@ public final class HintMeshRenderer {
                             hint.centerY() - minHintCenterY, hint.cellWidth(),
                             hint.cellHeight(), hint.keySequence(),
                             trimmedRectangle(hint.elementRectangle(), minHintCenterX,
-                                    minHintCenterY), hint.role(), hint.control()))
+                                    minHintCenterY), hint.role(), hint.control(),
+                            hint.overlapped()))
                     .toList();
     }
 
@@ -2391,7 +2493,8 @@ public final class HintMeshRenderer {
         int bottom = hintRoundedBottom(hint.centerY(), cellHeight, qtScaleFactor);
         return new Hint((left + right) / 2d * qtScaleFactor, (top + bottom) / 2d * qtScaleFactor,
                 (right - left) * qtScaleFactor, (bottom - top) * qtScaleFactor,
-                hint.keySequence(), hint.elementRectangle(), hint.role(), hint.control());
+                hint.keySequence(), hint.elementRectangle(), hint.role(), hint.control(),
+                hint.overlapped());
     }
 
     private static boolean looksTheSameAnywhere(HintMesh hintMesh) {

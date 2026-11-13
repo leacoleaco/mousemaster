@@ -1490,15 +1490,21 @@ public class HintManager implements ModeListener, MousePositionListener {
             List<Key> selectionKeys =
                     hintMeshConfiguration.keysByFilter().get(screenFilter).selectionKeys();
             // Two keys at least: a label is made longer by adding one of several keys.
+            // The hints whose labels do not depend on the hints after them.
+            int firstHintCount;
             if (type.type() == HintMeshTypeType.UI_ACCESSIBILITY &&
-                otherWindowsQueryArea != null && selectionKeys.size() >= 2)
+                otherWindowsQueryArea != null && selectionKeys.size() >= 2) {
                 buildMouseWindowFirstUiHints(selectionKeys, ordered,
                         labeledUiElements(filteredUiElements(otherWindowsUiElements),
                                 activeScreen.scale()), hints);
-            else
+                firstHintCount = ordered.size();
+            }
+            else {
                 buildUiHints(hintMeshConfiguration, screenFilter, ordered,
                         prefixLengths, hints);
-            hintMesh.hints(hints)
+                firstHintCount = hints.size();
+            }
+            hintMesh.hints(overlapAwareUiHints(hintMeshConfiguration, hints, firstHintCount))
                     .prefixLength(prefixLengths.size() == 1 ?
                             prefixLengths.iterator().next() : -1)
                     .area(uiArea)
@@ -1657,6 +1663,102 @@ public class HintManager implements ModeListener, MousePositionListener {
                     -1, -1, keySequence, element.rectangle(), element.role(),
                     element.control()));
         }
+    }
+
+    /**
+     * The UI hints, relabeled and marked where their boxes overlap. Two hints whose boxes
+     * overlap are given labels that begin with different keys, so that the first key
+     * pressed hides one of them, and both are marked as overlapped: they show that first
+     * key only until it is pressed.
+     * <p>
+     * The first {@code firstHintCount} hints are relabeled as they would be alone, and the
+     * hints after them are relabeled around them: the hints of the window under the pointer
+     * keep their labels when those of the other windows arrive.
+     */
+    private List<Hint> overlapAwareUiHints(HintMeshConfiguration hintMeshConfiguration,
+                                           List<Hint> hints, int firstHintCount) {
+        if (!hintMeshConfiguration.visible() || hints.size() < 2 ||
+            hints.getFirst().keySequence().isEmpty())
+            return hints;
+        UiHintLayout layout = uiHintsBeginningApart(hintMeshConfiguration,
+                hints.subList(0, firstHintCount), 0);
+        if (layout != null && firstHintCount < hints.size()) {
+            List<Hint> firstHintsApart = new ArrayList<>(layout.hints());
+            firstHintsApart.addAll(hints.subList(firstHintCount, hints.size()));
+            layout = uiHintsBeginningApart(hintMeshConfiguration, firstHintsApart,
+                    firstHintCount);
+        }
+        if (layout == null)
+            return hints;
+        List<Hint> overlapAwareHints = new ArrayList<>(hints.size());
+        for (int hintIndex = 0; hintIndex < hints.size(); hintIndex++) {
+            Hint hint = layout.hints().get(hintIndex);
+            overlapAwareHints.add(layout.overlaps().get(hintIndex).isEmpty() ? hint :
+                    hint.labeled(hint.keySequence(), true));
+        }
+        return overlapAwareHints;
+    }
+
+    /** A swap of labels that moves a box onto another is undone by the next round's. */
+    private static final int maxUiHintRelabelRoundCount = 4;
+
+    /** For each hint, the indexes of the hints whose boxes its box overlaps. */
+    private record UiHintLayout(List<Hint> hints, List<List<Integer>> overlaps) {
+    }
+
+    /**
+     * The hints, with labels swapped until two hints whose boxes overlap begin with
+     * different keys. A box is as wide as its label, so the boxes are laid out again after
+     * the labels are swapped. The first {@code fixedCount} hints keep their labels. Null
+     * when the overlay does not lay hints out.
+     */
+    private UiHintLayout uiHintsBeginningApart(HintMeshConfiguration hintMeshConfiguration,
+                                               List<Hint> hints, int fixedCount) {
+        for (int round = 0; ; round++) {
+            List<Rectangle> boxes = hintBoxes(hintMeshConfiguration, hints);
+            if (boxes == null)
+                return null;
+            List<List<Integer>> overlaps = UiHintOverlap.overlaps(boxes);
+            List<List<Key>> labels = hints.stream().map(Hint::keySequence).toList();
+            List<List<Key>> apartLabels = round == maxUiHintRelabelRoundCount ? labels :
+                    UiHintOverlap.labelsBeginningApart(labels, overlaps, fixedCount);
+            if (apartLabels.equals(labels))
+                return new UiHintLayout(hints, overlaps);
+            hints = labeledHints(hints, apartLabels);
+        }
+    }
+
+    private static List<Hint> labeledHints(List<Hint> hints, List<List<Key>> labels) {
+        List<Hint> labeledHints = new ArrayList<>(hints.size());
+        for (int hintIndex = 0; hintIndex < hints.size(); hintIndex++) {
+            Hint hint = hints.get(hintIndex);
+            List<Key> label = labels.get(hintIndex);
+            labeledHints.add(label.equals(hint.keySequence()) ? hint :
+                    hint.labeled(label, hint.overlapped()));
+        }
+        return labeledHints;
+    }
+
+    /**
+     * The box each hint is drawn in when it shows its whole label, in screen pixels: null
+     * for a hint on no screen, and no list at all when the overlay does not lay hints out.
+     */
+    private List<Rectangle> hintBoxes(HintMeshConfiguration hintMeshConfiguration,
+                                      List<Hint> hints) {
+        if (hints.isEmpty())
+            return List.of();
+        Map<Hint, Rectangle> hintBoxRectangles = overlay.hintBoxRectangles(
+                new HintMeshBuilder().visible(true)
+                                     .styleByFilter(hintMeshConfiguration.styleByFilter())
+                                     .hints(hints)
+                                     .prefixLength(-1)
+                                     .build());
+        if (hintBoxRectangles == null)
+            return null;
+        List<Rectangle> boxes = new ArrayList<>(hints.size());
+        for (Hint hint : hints)
+            boxes.add(hintBoxRectangles.get(hint));
+        return boxes;
     }
 
     /**

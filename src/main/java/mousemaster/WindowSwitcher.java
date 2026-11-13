@@ -58,6 +58,14 @@ public final class WindowSwitcher implements ModeListener {
     }
 
     /**
+     * Whether this key is the letter of one of the rows. A row that has scrolled out of
+     * sight still counts: the letter chooses nothing, and it does not move or confirm.
+     */
+    public boolean hasTag(Key key) {
+        return MenuTags.row(tagKeys, key, menu.tagCount()) >= 0;
+    }
+
+    /**
      * Moves the highlight to the row this key tags. False when the key tags no row, or a
      * row that has scrolled out of sight: a tag that is not drawn chooses nothing.
      */

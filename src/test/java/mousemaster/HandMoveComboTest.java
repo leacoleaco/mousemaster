@@ -65,7 +65,10 @@ class HandMoveComboTest {
                     return;
                 String modeName = switch (command) {
                     case Command.SwitchMode switchMode -> switchMode.modeName();
-                    case Command.ActivateSelectedWindow activate -> activate.modeAfter();
+                    // g confirms, unless the letter is a window-list row. The row wins.
+                    case Command.ActivateSelectedWindow activate ->
+                            eventKey != null && MENU_TAGS.contains(eventKey.name()) ?
+                                    null : activate.modeAfter();
                     case Command.RunSelectedMenuItem runItem -> runItem.modeAfter();
                     // As if the pressed letter tagged a row.
                     case Command.ActivateWindowByTag byTag -> byTag.modeAfter();
@@ -347,6 +350,18 @@ class HandMoveComboTest {
         assertTrue(ran(new Command.SwitchMode("window-switch-mode")));
         assertFalse(ran(new Command.StartMoveLeft()));
 
+        // The s that opens the list is not the second row. Pressed again, it is.
+        load(true);
+        assertTrue(press("s").mustBeEaten());
+        assertTrue(ran(new Command.SwitchMode("window-switch-mode")));
+        assertFalse(ranTag(Command.ActivateWindowByTag.class));
+        release("s");
+        assertFalse(ranTag(Command.ActivateWindowByTag.class));
+        ranCommands.clear();
+        assertTrue(press("s").mustBeEaten());
+        assertTrue(ranTag(Command.ActivateWindowByTag.class));
+        release("s");
+
         load();
         assertTrue(press("b").mustBeEaten());
         int systemMenu = -1;
@@ -384,6 +399,7 @@ class HandMoveComboTest {
         assertTrue(ran(new Command.SelectWindow(-1)));
         assertTrue(press("d").mustBeEaten());
         assertTrue(ran(new Command.SelectWindow(1)));
+        assertFalse(ranTag(Command.ActivateWindowByTag.class));
         ranCommands.clear();
         assertTrue(press("k").mustBeEaten());
         assertTrue(ran(new Command.SelectWindow(-1)));
@@ -423,7 +439,7 @@ class HandMoveComboTest {
     }
 
     private static final List<String> MENU_TAGS =
-            List.of("f", "c", "a", "w", "v", "r", "x", "q", "z", "t", "b");
+            List.of("a", "s", "f", "g", "c", "w", "v", "r", "x", "q", "z", "t", "b");
 
     /** The letters a program menu can run. d and g are also move and confirm. */
     private static final List<String> APP_MENU_TAGS =
@@ -464,14 +480,21 @@ class HandMoveComboTest {
         for (String tag : MENU_TAGS) {
             ranCommands.clear();
             assertTrue(press(tag).mustBeEaten(), tag);
-            assertEquals(1, ranCommands.size(), tag);
             assertTrue(ranTag(Command.ActivateWindowByTag.class), tag);
+            // g also confirms. Both commands are emitted; with a list open, the row wins.
+            // e and d only move the highlight.
+            if (tag.equals("g")) {
+                assertTrue(ran(new Command.ActivateSelectedWindow("center-on-active-window-mode")), tag);
+                assertEquals(2, ranCommands.size(), tag);
+            }
+            else
+                assertEquals(1, ranCommands.size(), tag);
             EatAndRegurgitates releaseTag = release(tag);
             assertTrue(releaseTag.mustBeEaten(), tag);
             assertTrue(releaseTag.regurgitates().isEmpty(), tag);
         }
-        // e, d and g keep moving the highlight and jumping. They are not tags.
-        for (String notTag : List.of("e", "d", "g", "k", "j", "s")) {
+        // e and d move the highlight. k and j do too. None of them is a tag.
+        for (String notTag : List.of("e", "d", "k", "j")) {
             ranCommands.clear();
             press(notTag);
             assertFalse(ranTag(Command.ActivateWindowByTag.class), notTag);
@@ -491,12 +514,14 @@ class HandMoveComboTest {
             comboWatcher.modeChanged(modeMap.get("window-switch-mode"));
             ranCommands.clear();
             assertTrue(press(tag).mustBeEaten(), tag);
-            assertEquals(1, ranCommands.size(), tag);
-            assertTrue(ranCommands.getFirst() instanceof Command.ActivateWindowByTag byTag &&
-                       byTag.modeAfter().equals("window-switch-done-mode"), tag);
+            assertTrue(ranCommands.stream().anyMatch(
+                    command -> command instanceof Command.ActivateWindowByTag byTag &&
+                               byTag.modeAfter().equals("window-switch-done-mode")), tag);
+            int pressed = tag.equals("g") ? 2 : 1;
+            assertEquals(pressed, ranCommands.size(), tag);
             // Auto-repeat while the letter is held does nothing.
             assertTrue(press(tag).mustBeEaten(), tag);
-            assertEquals(1, ranCommands.size(), tag);
+            assertEquals(pressed, ranCommands.size(), tag);
             ranCommands.clear();
             EatAndRegurgitates releaseTag = release(tag);
             assertTrue(releaseTag.mustBeEaten(), tag);

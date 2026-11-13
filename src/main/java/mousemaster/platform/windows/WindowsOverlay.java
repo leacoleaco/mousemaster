@@ -619,6 +619,11 @@ public class WindowsOverlay implements Overlay {
         return hintMeshRenderer.hintBoxRectangle(hint);
     }
 
+    @Override
+    public Map<Hint, Rectangle> hintBoxRectangles(HintMesh hintMesh) {
+        return hintMeshRenderer.hintBoxRectangles(hintMesh, WindowsScreen.findScreens());
+    }
+
     private void setIndicatorCursor(IndicatorConfiguration indicator, boolean animating,
                                     boolean includeOriginalCursor,
                                     WinDef.POINT mousePosition) {

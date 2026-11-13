@@ -231,6 +231,11 @@ public class MacosOverlay implements Overlay {
         return hintMeshRenderer.hintBoxRectangle(hint);
     }
 
+    @Override
+    public Map<Hint, Rectangle> hintBoxRectangles(HintMesh hintMesh) {
+        return hintMeshRenderer.hintBoxRectangles(hintMesh, MacosScreens.screens());
+    }
+
     /**
      * The anchored layers and the copies of a window layer group are drawn in one window: when
      * IndicatorRenderer.anchoredLayers splits the anchored layers into more window images, a

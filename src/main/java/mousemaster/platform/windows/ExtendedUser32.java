@@ -146,6 +146,7 @@ public interface ExtendedUser32 extends User32 {
     int SPI_GETMOUSE = 0x0003;
     int SPI_SETMOUSE = 0x0004;
 
+    HWND HWND_TOP = new HWND(Pointer.NULL);
     HWND HWND_TOPMOST = new HWND(new Pointer(-1));
     HWND HWND_NOTOPMOST = new HWND(new Pointer(-2));
 

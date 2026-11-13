@@ -9,6 +9,7 @@ import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.WinUser;
 import com.sun.jna.ptr.IntByReference;
 import mousemaster.AltTabWindowRules;
+import mousemaster.SnapGroups;
 import mousemaster.WindowEntry;
 import mousemaster.platform.SwitchableWindows;
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Top-level windows in Alt-Tab order. EnumWindows walks the Z-order from front to
  * back, and Windows keeps that order as most-recently-used for the windows Alt-Tab shows.
+ * Windows that together fill one screen are one row, as an Alt-Tab snap group is.
  */
 final class WindowsSwitchableWindows implements SwitchableWindows {
 
@@ -66,7 +69,73 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
             return true;
         }, null);
         logger.debug("Alt-Tab windows: " + windows.size());
-        return new WindowsSwitchableWindows(List.copyOf(windows));
+        return new WindowsSwitchableWindows(List.copyOf(groupSnapped(windows)));
+    }
+
+    /**
+     * Collapses each snap layout into the row of its front-most window. Choosing that
+     * row brings every window of the layout forward.
+     */
+    private static List<ListedWindow> groupSnapped(List<ListedWindow> found) {
+        try {
+            List<SnapGroups.Pane> panes = new ArrayList<>(found.size());
+            for (ListedWindow window : found)
+                panes.add(pane(window.hwnds.get(0)));
+            List<ListedWindow> rows = new ArrayList<>();
+            int layouts = 0;
+            for (List<Integer> row : SnapGroups.group(panes)) {
+                ListedWindow merged = merge(found, row);
+                if (row.size() > 1) {
+                    layouts++;
+                    logger.debug("Snap group: " + merged.title);
+                }
+                rows.add(merged);
+            }
+            if (layouts > 0)
+                logger.debug("Snap groups: " + layouts);
+            return rows;
+        }
+        catch (Throwable failure) {
+            logger.error("Could not group snapped windows", failure);
+            return found;
+        }
+    }
+
+    private static ListedWindow merge(List<ListedWindow> found, List<Integer> row) {
+        if (row.size() == 1)
+            return found.get(row.get(0));
+        List<WinDef.HWND> hwnds = new ArrayList<>(row.size());
+        List<String> titles = new ArrayList<>(row.size());
+        LinkedHashSet<String> processes = new LinkedHashSet<>();
+        for (int index : row) {
+            ListedWindow window = found.get(index);
+            hwnds.add(window.hwnds.get(0));
+            titles.add(window.title);
+            if (!window.processName.isBlank())
+                processes.add(window.processName);
+        }
+        ListedWindow primary = found.get(row.get(0));
+        return new ListedWindow(hwnds, String.join(" | ", titles),
+                String.join(" · ", processes), primary.executablePath);
+    }
+
+    private static SnapGroups.Pane pane(WinDef.HWND hwnd) {
+        boolean iconic = ExtendedUser32.INSTANCE.IsIconic(hwnd);
+        WinDef.RECT bounds = new WinDef.RECT();
+        if (!Dwmapi.INSTANCE.DwmGetWindowAttribute(hwnd, Dwmapi.DWMWA_EXTENDED_FRAME_BOUNDS,
+                bounds, bounds.size()))
+            User32.INSTANCE.GetWindowRect(hwnd, bounds);
+        WinUser.HMONITOR monitor = User32.INSTANCE.MonitorFromWindow(hwnd,
+                WinUser.MONITOR_DEFAULTTONEAREST);
+        WinUser.MONITORINFO info = new WinUser.MONITORINFO();
+        if (monitor == null)
+            return new SnapGroups.Pane(0, 0, 0, 0, 0, 0, 0, 0, true);
+        User32.INSTANCE.GetMonitorInfo(monitor, info);
+        if (info.rcWork.right <= info.rcWork.left || info.rcWork.bottom <= info.rcWork.top)
+            return new SnapGroups.Pane(0, 0, 0, 0, 0, 0, 0, 0, true);
+        return new SnapGroups.Pane(bounds.left, bounds.top, bounds.right, bounds.bottom,
+                info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom,
+                iconic);
     }
 
     private static void consider(WinDef.HWND hwnd, int self, Map<Integer, String> pathByPid,
@@ -187,10 +256,10 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
     public boolean activate(int index) {
         if (index < 0 || index >= windows.size())
             return false;
-        WinDef.HWND hwnd = windows.get(index).hwnd;
-        if (!User32.INSTANCE.IsWindow(hwnd))
+        List<WinDef.HWND> hwnds = windows.get(index).hwnds;
+        if (!User32.INSTANCE.IsWindow(hwnds.get(0)))
             return false;
-        boolean focused = focus(hwnd);
+        boolean focused = focusGroup(hwnds);
         if (!focused)
             logger.debug("Could not focus window " + index + ": " + windows.get(index).title);
         return focused;
@@ -199,34 +268,59 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
     /**
      * A background process is not allowed to take the foreground. Attaching to the
      * foreground thread is what lets SetForegroundWindow succeed after the g key.
+     * The first hwnd takes focus. The others are the rest of its snap layout: they are
+     * raised as well, so a left-right pair comes forward together.
      */
-    private static boolean focus(WinDef.HWND hwnd) {
+    private static boolean focusGroup(List<WinDef.HWND> hwnds) {
+        WinDef.HWND primary = hwnds.get(0);
         ExtendedUser32.INSTANCE.AllowSetForegroundWindow(-1);
-        if (ExtendedUser32.INSTANCE.IsIconic(hwnd))
-            User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_RESTORE);
         WinDef.DWORD current = new WinDef.DWORD(Kernel32.INSTANCE.GetCurrentThreadId());
         WinDef.HWND foreground = User32.INSTANCE.GetForegroundWindow();
         int foregroundThreadId = foreground == null ? 0 :
                 User32.INSTANCE.GetWindowThreadProcessId(foreground, null);
-        int targetThreadId = User32.INSTANCE.GetWindowThreadProcessId(hwnd, null);
-        boolean attachedForeground = false;
-        boolean attachedTarget = false;
-        if (foregroundThreadId != 0 && foregroundThreadId != current.intValue())
-            attachedForeground = User32.INSTANCE.AttachThreadInput(current,
-                    new WinDef.DWORD(foregroundThreadId), true);
-        if (targetThreadId != 0 && targetThreadId != current.intValue() &&
-            targetThreadId != foregroundThreadId)
-            attachedTarget = User32.INSTANCE.AttachThreadInput(current,
-                    new WinDef.DWORD(targetThreadId), true);
-        User32.INSTANCE.BringWindowToTop(hwnd);
-        User32.INSTANCE.SetForegroundWindow(hwnd);
-        ExtendedUser32.INSTANCE.SwitchToThisWindow(hwnd, true);
-        if (attachedTarget)
-            User32.INSTANCE.AttachThreadInput(current, new WinDef.DWORD(targetThreadId), false);
-        if (attachedForeground)
-            User32.INSTANCE.AttachThreadInput(current,
-                    new WinDef.DWORD(foregroundThreadId), false);
-        return same(User32.INSTANCE.GetForegroundWindow(), hwnd);
+        List<Integer> attached = new ArrayList<>();
+        attach(current, foregroundThreadId, attached);
+        for (WinDef.HWND hwnd : hwnds) {
+            if (!User32.INSTANCE.IsWindow(hwnd))
+                continue;
+            attach(current, User32.INSTANCE.GetWindowThreadProcessId(hwnd, null), attached);
+            if (ExtendedUser32.INSTANCE.IsIconic(hwnd))
+                User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_RESTORE);
+        }
+        raise(hwnds);
+        User32.INSTANCE.SetForegroundWindow(primary);
+        ExtendedUser32.INSTANCE.SwitchToThisWindow(primary, true);
+        // SwitchToThisWindow can bury the other panes. Put them back under the primary.
+        if (hwnds.size() > 1) {
+            for (int index = 1; index < hwnds.size(); index++) {
+                WinDef.HWND hwnd = hwnds.get(index);
+                if (User32.INSTANCE.IsWindow(hwnd) && ExtendedUser32.INSTANCE.IsIconic(hwnd))
+                    User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_SHOWNA);
+            }
+            raise(hwnds);
+            User32.INSTANCE.SetForegroundWindow(primary);
+        }
+        for (int index = attached.size() - 1; index >= 0; index--)
+            User32.INSTANCE.AttachThreadInput(current, new WinDef.DWORD(attached.get(index)), false);
+        return same(User32.INSTANCE.GetForegroundWindow(), primary);
+    }
+
+    private static void attach(WinDef.DWORD current, int threadId, List<Integer> attached) {
+        if (threadId == 0 || threadId == current.intValue() || attached.contains(threadId))
+            return;
+        if (User32.INSTANCE.AttachThreadInput(current, new WinDef.DWORD(threadId), true))
+            attached.add(threadId);
+    }
+
+    /** The first hwnd ends up above the others. That hwnd is the one that takes focus. */
+    private static void raise(List<WinDef.HWND> hwnds) {
+        for (int index = hwnds.size() - 1; index >= 0; index--) {
+            WinDef.HWND hwnd = hwnds.get(index);
+            if (!User32.INSTANCE.IsWindow(hwnd))
+                continue;
+            User32.INSTANCE.SetWindowPos(hwnd, ExtendedUser32.HWND_TOP, 0, 0, 0, 0,
+                    WinUser.SWP_NOMOVE | WinUser.SWP_NOSIZE | WinUser.SWP_NOACTIVATE);
+        }
     }
 
     /** The window Alt-Tab would show for this owner chain, which is this hwnd. */
@@ -346,7 +440,8 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
     }
 
     private static final class ListedWindow {
-        private final WinDef.HWND hwnd;
+        /** The first hwnd takes focus. Further ones are the rest of a snap layout. */
+        private final List<WinDef.HWND> hwnds;
         private final String title;
         private final String processName;
         private final String executablePath;
@@ -355,7 +450,12 @@ final class WindowsSwitchableWindows implements SwitchableWindows {
 
         private ListedWindow(WinDef.HWND hwnd, String title, String processName,
                              String executablePath) {
-            this.hwnd = hwnd;
+            this(List.of(hwnd), title, processName, executablePath);
+        }
+
+        private ListedWindow(List<WinDef.HWND> hwnds, String title, String processName,
+                             String executablePath) {
+            this.hwnds = hwnds;
             this.title = title;
             this.processName = processName;
             this.executablePath = executablePath;

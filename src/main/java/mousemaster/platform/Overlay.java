@@ -47,6 +47,12 @@ public interface Overlay {
     /** The rectangle of the box drawn for the hint, in screen pixels, null when none is drawn. */
     Rectangle hintBoxRectangle(Hint hint);
 
+    /**
+     * The rectangle of the box each hint of the mesh would be drawn in with its whole label,
+     * in screen pixels. A hint on no screen has none. Nothing is drawn.
+     */
+    Map<Hint, Rectangle> hintBoxRectangles(HintMesh hintMesh);
+
     /** Captures the desktop inside bounds, excluding mousemaster's own windows. */
     DesktopCapture captureDesktop(Rectangle bounds, int scaledWidth, int scaledHeight);
 

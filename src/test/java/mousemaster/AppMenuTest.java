@@ -423,36 +423,82 @@ class AppMenuTest {
 
         String html = switcher.html();
         assertTrue(html.contains(">当前</td>"));
-        assertEquals(List.of("F", "C", "A", "W"),
-                List.of("F", "C", "A", "W", "V").stream()
+        assertEquals(List.of("A", "S", "F", "G"),
+                List.of("A", "S", "F", "G", "C").stream()
                     .filter(tag -> html.contains(">" + tag + "</td>"))
                     .collect(Collectors.toList()));
 
-        // w is the fourth row. f is the window already in front. No second key is needed.
-        ran.runner.run(byTag, key("w"));
+        // g is the fourth row. a is the window already in front. No second key is needed.
+        ran.runner.run(byTag, key("g"));
         assertEquals(List.of(3), activated);
         assertEquals(List.of("window-switch-done-mode"), ran.modes);
-        ran.runner.run(byTag, key("f"));
+        ran.runner.run(byTag, key("a"));
         assertEquals(List.of(3, 0), activated);
         assertEquals(2, ran.modes.size());
 
-        // v tags a fifth row, which this list does not have. e is not a tag key.
-        ran.runner.run(byTag, key("v"));
+        // c tags a fifth row, which this list does not have. e and d move the highlight.
+        ran.runner.run(byTag, key("c"));
         ran.runner.run(byTag, key("e"));
-        ran.runner.run(byTag, null);
+        ran.runner.run(byTag, key("d"));
         assertEquals(List.of(3, 0), activated);
         assertEquals(2, ran.modes.size());
 
         // Windows refused the focus: the list stays open, with the highlight on that row.
         focusAllowed[0] = false;
-        ran.runner.run(byTag, key("a"));
+        ran.runner.run(byTag, key("f"));
         assertEquals(List.of(3, 0, 2), activated);
         assertEquals(2, ran.modes.size());
-        // e and d step from where the tag left the highlight.
+        // Stepping up leaves the highlight where the tag put it.
         focusAllowed[0] = true;
         switcher.move(-1);
         assertTrue(switcher.activateSelected());
         assertEquals(List.of(3, 0, 2, 1), activated);
+    }
+
+    @Test
+    void aRowLetterWinsOverMovingAndConfirming() throws Exception {
+        Configuration configuration = shipped();
+        Mode listMode = configuration.modeMap().get(WindowSwitcher.MODE);
+        Command.ActivateWindowByTag byTag =
+                command(listMode, Command.ActivateWindowByTag.class);
+        List<Integer> activated = new ArrayList<>();
+        WindowSwitcher switcher = switcher(6, activated, new boolean[]{true});
+        Ran ran = new Ran();
+        ran.runner.setWindowSwitcher(switcher);
+        switcher.modeChanged(listMode);
+        switcher.html();
+
+        // d moves down. It is not a row letter, so it does not jump.
+        ran.runner.run(new Command.SelectWindow(1), key("d"));
+        assertTrue(switcher.activateSelected());
+        assertEquals(List.of(2), activated);
+        assertTrue(ran.modes.isEmpty());
+        activated.clear();
+        ran.runner.run(byTag, key("d"));
+        assertTrue(activated.isEmpty());
+
+        // g is the fourth row, so it does not confirm the highlight.
+        ran.runner.run(new Command.ActivateSelectedWindow("center-on-active-window-mode"), key("g"));
+        assertTrue(activated.isEmpty());
+        assertTrue(ran.modes.isEmpty());
+        ran.runner.run(byTag, key("g"));
+        assertEquals(List.of(3), activated);
+        assertEquals(List.of("window-switch-done-mode"), ran.modes);
+
+        // Two windows: g is not a row, so it confirms. d still only moves.
+        activated.clear();
+        ran.modes.clear();
+        WindowSwitcher two = switcher(2, activated, new boolean[]{true});
+        ran.runner.setWindowSwitcher(two);
+        two.modeChanged(listMode);
+        two.html();
+        ran.runner.run(new Command.SelectWindow(1), key("d"));
+        assertTrue(two.activateSelected());
+        assertEquals(List.of(0), activated);
+        activated.clear();
+        ran.runner.run(new Command.ActivateSelectedWindow("center-on-active-window-mode"), key("g"));
+        assertEquals(List.of(0), activated);
+        assertEquals(List.of("center-on-active-window-mode"), ran.modes);
     }
 
     @Test
@@ -471,14 +517,14 @@ class AppMenuTest {
         for (int step = 0; step < 13; step++)
             switcher.move(1);
         String html = switcher.html();
-        assertFalse(html.contains(">F</td>"));
-        assertTrue(html.contains(">B</td>"));
+        assertFalse(html.contains(">A</td>"));
+        assertTrue(html.contains(">Z</td>"));
 
-        // f tags the first window, which is no longer drawn. b tags the eleventh, which is.
-        ran.runner.run(byTag, key("f"));
+        // a tags the first window, which is no longer drawn. z tags the eleventh, which is.
+        ran.runner.run(byTag, key("a"));
         assertTrue(activated.isEmpty());
         assertTrue(ran.modes.isEmpty());
-        ran.runner.run(byTag, key("b"));
+        ran.runner.run(byTag, key("z"));
         assertEquals(List.of(10), activated);
         assertEquals(List.of("window-switch-done-mode"), ran.modes);
     }

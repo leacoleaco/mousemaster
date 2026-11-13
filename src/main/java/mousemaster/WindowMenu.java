@@ -7,7 +7,7 @@ import java.util.List;
  * Titles stay in Alt-Tab order: the active window first, then the one Alt-Tab would
  * land on, then older windows. The highlight starts on that second window when there
  * is one, so confirming jumps there the way a single Alt-Tab does.
- * e moves up the list and d moves down. Both wrap.
+ * e and k move up the list, d and j move down. Both wrap. e and d are not row letters.
  * Each row is its tag, then the program icon, centered on two lines: the window title,
  * then the process file name. The rows of the first page are tagged, top to bottom, and
  * pressing a tag jumps to the window of its row. The first row is the window already in
@@ -121,7 +121,7 @@ public final class WindowMenu {
         html.append("<tr><td class=hint>");
         if (!tags.isEmpty())
             html.append("字母 直接跳转&nbsp;&nbsp;");
-        html.append("e k 上&nbsp;&nbsp;d j 下&nbsp;&nbsp;g / 空格 / 回车 跳转&nbsp;&nbsp;Esc 返回</td></tr>");
+            html.append("e k 上&nbsp;&nbsp;d j 下&nbsp;&nbsp;空格 / 回车 跳转&nbsp;&nbsp;Esc 返回</td></tr>");
         if (entries.isEmpty()) {
             html.append("<tr><td class=empty>没有可切换的窗口</td></tr></table>");
             return html.toString();
